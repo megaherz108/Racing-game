@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стальная Дуэль</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="loading">Загрузка…</div>
+
+<!-- MAIN MENU -->
+<div id="menu" class="screen hidden">
+  <div class="panel">
+    <div class="logo">СТАЛЬНАЯ<span>ДУЭЛЬ</span></div>
+    <p class="tagline">Двое за одной клавиатурой или один на весь экран. Выберите машины и режим: свободная езда по городу на острове, одиночная езда или гонка по чекпоинтам.</p>
+    <div class="bal-row">
+      <span class="balance"><b class="pl1">P1</b><i class="coin"></i><span class="cv0">0</span></span>
+      <span class="balance"><b class="pl2">P2</b><i class="coin"></i><span class="cv1">0</span></span>
+    </div>
+    <div class="btns">
+      <button class="btn primary" id="mPlay">▶&nbsp; Играть</button>
+      <button class="btn" id="mGarage">🚗&nbsp; Гараж и магазин</button>
+      <button class="btn" id="mHelp">⌨&nbsp; Управление</button>
+      <button class="btn" id="mReset">↺&nbsp; Сбросить прогресс</button>
+    </div>
+    <div class="foot">Этап 3 · большой город · физика Rapier</div>
+  </div>
+</div>
+
+<!-- GARAGE -->
+<div id="garage" class="screen hidden">
+  <div class="topbar">
+    <button class="btn" id="gBack">← Меню</button>
+    <div class="title">ГАРАЖ</div>
+    <div class="bal2">
+      <span class="balance"><b class="pl1">P1</b><i class="coin"></i><span class="cv0">0</span></span>
+      <span class="balance"><b class="pl2">P2</b><i class="coin"></i><span class="cv1">0</span></span>
+    </div>
+  </div>
+  <div class="pcard p1" id="card0"></div>
+  <div class="pcard p2" id="card1"></div>
+  <div class="hint l">Игрок 1: <b>A / D</b> — листать, <b>W</b> — купить</div>
+  <div class="hint r">Игрок 2: <b>← / →</b> — листать, <b>↑</b> — купить</div>
+  <div class="bottombar">
+    <div class="warn" id="gWarn"></div>
+    <div class="row"><button class="btn primary" id="gPlay">ВЫБРАТЬ РЕЖИМ ▶</button></div>
+  </div>
+</div>
+
+<!-- MODE SELECT (выбор карты пока скрыт: играем в городе) -->
+<div id="maps" class="screen hidden">
+  <div class="topbar">
+    <button class="btn" id="mapsBack">← Меню</button>
+    <div class="title">ВЫБОР РЕЖИМА</div>
+    <div class="bal2">
+      <span class="balance"><b class="pl1">P1</b><i class="coin"></i><span class="cv0">0</span></span>
+      <span class="balance"><b class="pl2">P2</b><i class="coin"></i><span class="cv1">0</span></span>
+    </div>
+  </div>
+  <div class="mapgrid" id="mapGrid"></div>
+  <div class="mapsbottom">
+    <div class="modeline" id="modeLine"></div>
+    <div class="trafficline" id="trafficLine"></div>
+    <div class="trafficline" id="timeLine"></div>
+    <button class="btn primary" id="mapsGo">ПОЕХАЛИ ▶</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="divider"></div>
+  <div class="hh" id="hud0">
+    <div class="speedfx"></div>
+    <div class="race hidden"><div class="rcp"><small>ЧЕКПОИНТ</small><span class="rc"></span></div><div class="rd"></div>
+      <div class="rline"><span class="rt"></span><span class="rp"></span></div></div>
+    <div class="top"><span class="tag">P1</span><span class="nm"></span></div>
+    <div class="hp"><div class="hpbar"><div class="hpfill"></div></div><div class="hptxt"></div>
+      <div class="wallet"><i class="coin"></i><span class="cv0">0</span></div></div>
+    <div class="status hidden"></div>
+    <div class="feed"></div>
+    <div class="big hidden"></div>
+    <div class="speedo"><span class="spd">0</span><small>КМ/Ч</small></div>
+    <canvas class="mm" width="170" height="170"></canvas>
+  </div>
+  <div class="hh" id="hud1">
+    <div class="speedfx"></div>
+    <div class="race hidden"><div class="rcp"><small>ЧЕКПОИНТ</small><span class="rc"></span></div><div class="rd"></div>
+      <div class="rline"><span class="rt"></span><span class="rp"></span></div></div>
+    <div class="top"><span class="tag">P2</span><span class="nm"></span></div>
+    <div class="hp"><div class="hpbar"><div class="hpfill"></div></div><div class="hptxt"></div>
+      <div class="wallet"><i class="coin"></i><span class="cv1">0</span></div></div>
+    <div class="status hidden"></div>
+    <div class="feed"></div>
+    <div class="big hidden"></div>
+    <div class="speedo"><span class="spd">0</span><small>КМ/Ч</small></div>
+    <canvas class="mm" width="170" height="170"></canvas>
+  </div>
+  <div id="hudhint">Свободная езда: собирайте монеты · R / Enter — вернуть на дорогу · M — звук · Esc — пауза</div>
+</div>
+
+<!-- PAUSE -->
+<div id="pause" class="modal hidden">
+  <div class="box">
+    <h2>ПАУЗА</h2>
+    <div class="col">
+      <button class="btn primary" id="pResume">Продолжить</button>
+      <button class="btn" id="pRestart">Начать заново</button>
+      <button class="btn" id="pMaps">Сменить режим</button>
+      <button class="btn" id="pGarage">В гараж</button>
+      <button class="btn" id="pMenu">Главное меню</button>
+    </div>
+  </div>
+</div>
+
+<!-- RACE RESULTS -->
+<div id="raceEnd" class="modal hidden">
+  <div class="box">
+    <h2 id="reTitle"></h2>
+    <div id="reRows"></div>
+    <div class="col">
+      <button class="btn primary" id="reAgain">Реванш · новая трасса <kbd>Enter</kbd></button>
+      <button class="btn" id="reModes">Сменить режим</button>
+      <button class="btn" id="reMenu">Главное меню <kbd>Esc</kbd></button>
+    </div>
+  </div>
+</div>
+
+<!-- HELP -->
+<div id="help" class="modal hidden">
+  <div class="box">
+    <h2>УПРАВЛЕНИЕ</h2>
+    <div class="ctrls">
+      <div class="p1"><h3>ИГРОК 1 · левая половина</h3>
+        <p>Газ / тормоз <kbd>W / S</kbd></p><p>Поворот <kbd>A / D</kbd></p>
+        <p>Ручник (занос) <kbd>Пробел</kbd></p><p>Нитро <kbd>Левый Shift</kbd></p><p>Вернуть на дорогу <kbd>R</kbd></p><p>Звук вкл/выкл <kbd>M</kbd></p></div>
+      <div class="p2"><h3>ИГРОК 2 · правая половина</h3>
+        <p>Газ / тормоз <kbd>↑ / ↓</kbd></p><p>Поворот <kbd>← / →</kbd></p>
+        <p>Ручник (занос) <kbd>Правый Shift</kbd></p><p>Нитро <kbd>/</kbd> (рус. <kbd>.</kbd>)</p><p>Вернуть на дорогу <kbd>Enter</kbd></p><p>&nbsp;</p></div>
+    </div>
+    <p class="rules">
+      <b>Скорость</b> — максимальная скорость и разгон. <b>Устойчивость</b> — сцепление шин: чем ниже, тем легче машину срывает в занос.
+      <b>Вес</b> — сила в столкновениях: тяжёлая машина выталкивает лёгкую. <b>Здоровье</b> — запас прочности: при 0 машина дымится
+      и 5 секунд едет на 30% медленнее, затем чинится.<br>
+      У каждого игрока свой кошелёк и свой гараж. Монета на карте: <b>+1</b> тому, кто её подобрал. Вывести соперника из строя тараном: <b>+5</b>.
+      В гонке нужно проехать 10 светящихся арок по порядку — стрелка вверху экрана показывает на следующую. Победителю <b>+10</b>.
+      <b>Одиночная езда</b> — один игрок на весь экран на машине Игрока 1: рулить можно и WASD, и стрелками, ручник — Пробел или правый Shift, нитро — левый Shift или /, R / Enter — вернуть на дорогу.<br>
+      <b>Нитро</b> копится за трюки: занос, полёт с трамплина, проезд впритирку к машинам трафика, разгром уличной мелочи. Трюки подряд дают комбо ×2…×5 — нитро копится быстрее. Удар обрывает занос и комбо.<br>
+      Упали в воду — через 5 секунд машина вернётся на ближайшую дорогу. Фонари и придорожные столбики можно сбить.<br>Ручник срывает заднюю ось в занос — выравнивайте машину контррулём. M — звук, Esc — пауза.
+    </p>
+    <div class="col"><button class="btn primary" id="hClose">Понятно</button></div>
+  </div>
+</div>
+
+<div id="toast" style="opacity:0"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/dist/rapier.mjs"
+} }
+</script>
+<script type="module">
+// Three.js подключается как ES-модуль с CDN и выставляется глобально,
+// а код игры грузится обычными скриптами — так игра работает и при открытии файла двойным кликом.
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+// Rapier: WASM встроен в JS (пакет -compat), поэтому работает и при открытии файла с диска
+import RAPIER from '@dimforge/rapier3d-compat';
+await RAPIER.init();
+Object.assign(window, { THREE, RoomEnvironment, mergeGeometries, RAPIER });
+
+const FILES = [
+  "js/data.js",
+  "js/core.js",
+  "js/car-models.js",
+  "js/showroom.js",
+  "js/world.js",
+  "js/sky.js",
+  "js/maps/arena.js",
+  "js/maps/city.js",
+  "js/maps/city-landmarks.js",
+  "js/maps/forest.js",
+  "js/maps/registry.js",
+  "js/effects.js",
+  "js/audio.js",
+  "js/physics.js",
+  "js/traffic.js",
+  "js/match.js",
+  "js/ui.js",
+  "js/race.js",
+  "js/feel.js",
+  "js/stunts.js",
+  "js/main.js"
+];
+const BUILD = Date.now();
+try {
+  for (const src of FILES) {
+    await new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = src + '?v=' + BUILD; s.async = false;     // метка против кэша: после правок всегда грузятся свежие файлы
+      s.onload = ok; s.onerror = () => fail(new Error('Не удалось загрузить ' + src));
+      document.body.appendChild(s);
+    });
+  }
+} catch (e) {
+  document.getElementById('loading').textContent = e.message;
+}
+</script>
+<script>
+  setTimeout(() => { const l = document.getElementById('loading');
+    if (l && !l.classList.contains('hidden') && l.textContent === 'Загрузка…') l.textContent = 'Не удалось загрузить Three.js — проверьте подключение к интернету'; }, 12000);
+</script>
+</body>
+</html>
