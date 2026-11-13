@@ -107,7 +107,7 @@ function cityBuildWorld(K) {
   };
   return {
     id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, surfaceKind, soundAt, geysers, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
-    sky: 0x9fd3f7, fog: [280, 760], coinCount: 100,
+    sky: 0x9fd3f7, fog: [280, 760], coinCount: 120,
     // монеты на постоянных местах: дуги над трамплинами эстакады и крыши посадки (js/maps/city/overpass.js)
     coinFixed: D.coinFixed,
     // старт на набережной канала у подножия западного пандуса, лицом к эстакаде (на север);

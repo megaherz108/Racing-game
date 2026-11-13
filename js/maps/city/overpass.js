@@ -117,9 +117,9 @@ function cityPlanOverpass(C) {
       descent(x1, xb, rz0, rz1, top);
       const pitch = Math.atan2(g.h, g.L);
       coinArc(g.p1[0], H + g.h, g.p1[1], g.d, pitch, 30, [0.15, 0.35, 0.55, 0.75]);
-      // на крыше: монеты там, куда садятся на 25–40 м/с, и вертолётная «Н» как мишень
+      // на крыше: три монеты там, куда садятся на 25–40 м/с, и вертолётная «Н» как мишень
       const land = t => [g.p1[0] + g.d[0] * t, g.p1[1] + g.d[1] * t];
-      for (const t of [30, 38, 46, 54]) { const [x, z] = land(t); coinFixed.push([x, top, z]); }
+      for (const t of [32, 42, 52]) { const [x, z] = land(t); coinFixed.push([x, top, z]); }
       const [hx, hz] = land(42); helipads.push({ x: hx, y: top, z: hz, r: 6 });
     }
     /* ---------- съезд посередине: пандус вдоль улицы x = ±160 ---------- */

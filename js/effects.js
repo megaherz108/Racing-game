@@ -1,7 +1,7 @@
 // Эффекты: частицы, следы шин, монеты
 // Определяет: softTex, Particles, smoke, sparks, SKID_N, SKID_LIFE, skidGeo, skidAttr, SKID_U, skidMat, skids,
 //   clearSkids, skidIdx, skidDirty, addSkid, updateSkids, SURF, wheelFx, COIN_MAX, coinMat, coinDisc, coinRim, coins,
-//   spawnCoin, resetCoins, updateCoins3D.
+//   spreadCoinSpots, resetCoins, updateCoins3D.
 // Использует: lerp, QUAL, rand (js/core.js); scene, FLAT_QUAD, inst, dummy (js/world.js); Weather (js/weather.js);
 //   world (js/maps/registry.js); Sound (js/audio.js); simTime, cars (js/physics.js); addCoins, notify (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -198,29 +198,41 @@ function wheelFx(car, k, wx, wy, wz, onDeck, skidding, speed, dt) {
 }
 
 // монеты: две InstancedMesh (диск + ободок) на все монеты карты.
-// Случайные (world.coinSpot) после сбора появляются в новом месте, постоянные (world.coinFixed: дуги над трамплинами,
-// крыши) — на своём же месте
-const COIN_MAX = 200;
+// Постоянные (world.coinFixed: дуги над трамплинами, крыши) стоят на своих местах, остальные раскладываются
+// равномерно: из множества случайных мест world.coinSpot() жадно берётся самое далёкое от уже выбранных.
+// Каждую монету можно собрать один раз за заезд — заново они не появляются.
+const COIN_MAX = 256;
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc83a, metalness: 1, roughness: 0.25, emissive: 0x6b4800, emissiveIntensity: 0.7 });
 const coinDisc = inst(new THREE.CylinderGeometry(0.6, 0.6, 0.14, 24).rotateX(Math.PI / 2), coinMat, COIN_MAX);
 const coinRim = inst(new THREE.TorusGeometry(0.6, 0.06, 6, 24), coinMat, COIN_MAX, false);
 scene.add(coinDisc, coinRim);
 let coins = [];
-function spawnCoin(c) {
-  if (c.fixed) { [c.x, c.y, c.z] = c.fixed; c.active = true; return; }
-  const [x, z, y] = world.coinSpot(); c.x = x; c.z = z; c.y = y ?? world.ground(x, z); c.active = true;
+// n мест, равномерно покрывающих всё, куда world.coinSpot() может положить монету; taken — уже занятые места
+// (постоянные монеты), их новые обходят. Высота считается втрое: монета на эстакаде не «занимает» улицу под ней.
+function spreadCoinSpots(n, taken) {
+  const m = Math.max(400, n * 30), cx = new Float32Array(m), cy = new Float32Array(m), cz = new Float32Array(m), d = new Float32Array(m);
+  for (let i = 0; i < m; i++) { const [x, z, y] = world.coinSpot(); cx[i] = x; cz[i] = z; cy[i] = y ?? world.ground(x, z); }
+  const near = (x, y, z) => { for (let i = 0; i < m; i++) d[i] = Math.min(d[i], (cx[i] - x) ** 2 + (cz[i] - z) ** 2 + 9 * (cy[i] - y) ** 2); };
+  d.fill(Infinity);
+  for (const [x, y, z] of taken) near(x, y, z);
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    let b = 0;
+    for (let i = 1; i < m; i++) if (d[i] > d[b]) b = i;
+    if (!(d[b] > 0)) break;
+    out.push([cx[b], cy[b], cz[b]]); near(cx[b], cy[b], cz[b]);
+  }
+  return out;
 }
 function resetCoins(n = world.coinCount) {
-  coins = [];
   const fixed = n > 0 ? (world.coinFixed || []).slice(0, COIN_MAX) : [];   // n = 0 — монет нет совсем
   n = Math.min(n, COIN_MAX - fixed.length);
-  for (let i = 0; i < n; i++) { const c = { phase: Math.random() * 6, timer: 0 }; spawnCoin(c); coins.push(c); }
-  for (const f of fixed) { const c = { phase: Math.random() * 6, timer: 0, fixed: f }; spawnCoin(c); coins.push(c); }
+  const spots = n > 0 ? fixed.concat(spreadCoinSpots(n, fixed)) : fixed;
+  coins = spots.map(([x, y, z]) => ({ x, y, z, phase: Math.random() * 6, active: true }));
   coinDisc.count = coinRim.count = coins.length;
 }
 function updateCoins3D(dt, t) {
   coins.forEach((c, i) => {
-    if (!c.active && (c.timer -= dt) <= 0) spawnCoin(c);
     dummy.position.set(c.x, c.y + 1.1 + Math.sin(t * 3 + c.phase) * 0.15, c.z);
     dummy.rotation.set(0, t * 2.5 + c.phase, 0);
     dummy.scale.setScalar(c.active ? 1 : 0);
@@ -229,7 +241,7 @@ function updateCoins3D(dt, t) {
     if (!c.active) return;
     for (const car of cars) {
       if ((car.x - c.x) ** 2 + (car.z - c.z) ** 2 < 2.4 * 2.4 && Math.abs(car.y - c.y) < 3 && car.drown <= 0) {
-        c.active = false; c.timer = 10;
+        c.active = false;
         addCoins(car.p, 1); notify(car.p, '+1', 'gold', true); Sound.coin(car.p);
         for (let k = 0; k < 10; k++) sparks.spawn(c.x, c.y + 1.1, c.z, rand(-3, 3), rand(1, 4), rand(-3, 3), 0.4, 0.05, 0.5, 0xffd84a, 1, 6);
         break;
