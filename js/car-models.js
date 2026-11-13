@@ -5,11 +5,18 @@
 /* =====================================================================
    CAR MODELS (mid-poly из примитивов)
    ===================================================================== */
-function buildCarModel(def, paintHex) {
+// opts.lacquer — краска с лаковым слоем (clearcoat): резкий блик поверх мягкого металлика, как у настоящей краски.
+//   Дороже обычной (второй слой бликов в каждом пикселе кузова), поэтому только у машин игроков, не у трафика.
+// opts.bumpers — передний и задний бамперы отдельными группами (их может оторвать ударом, js/carfx.js)
+function buildCarModel(def, paintHex, opts = {}) {
   const g = def.geo;
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
-  const paint = new THREE.MeshStandardMaterial({ color: paintHex, metalness: 0.5, roughness: 0.3, envMapIntensity: 1.1 });
+  const paint = opts.lacquer
+    ? new THREE.MeshPhysicalMaterial({ color: paintHex, metalness: 0.45, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.2 })
+    : new THREE.MeshStandardMaterial({ color: paintHex, metalness: 0.5, roughness: 0.3, envMapIntensity: 1.1 });
+  const bump = opts.bumpers ? { f: new THREE.Group(), r: new THREE.Group() } : { f: body, r: body };
+  if (opts.bumpers) body.add(bump.f, bump.r);
   const pillarMat = g.pillar === 'black' ? MAT.black : paint;
 
   // кузов
@@ -44,7 +51,11 @@ function buildCarModel(def, paintHex) {
   }
 
   // стилевые детали
-  STYLE[g.style](g, body, paint);
+  STYLE[g.style](g, body, paint, bump);
+  if (opts.bumpers) for (const k of ['f', 'r']) {
+    mergeByMaterial(bump[k], true);
+    bump[k].traverse(o => { if (o.isMesh) o.userData.keep = true; });   // бамперы не склеиваются с кузовом
+  }
   mergeByMaterial(body, true);           // ~30 деталей кузова → по одному мешу на материал
 
   // колёса
@@ -59,11 +70,11 @@ function buildCarModel(def, paintHex) {
       wheels.push({ pivot, spin, front, r });
     }
   }
-  return { root, body, wheels, paint };
+  return { root, body, wheels, paint, bumpers: opts.bumpers ? bump : null };
 }
 
 const STYLE = {
-  sedan(g, body, paint) {
+  sedan(g, body, paint, bp) {
     const fz = g.L / 2, W = g.W;
     const long = g.L > 4.7;               // Accord
     const fFace = long ? 2.47 : 2.24, rFace = long ? -2.45 : -2.22;
@@ -77,12 +88,12 @@ const STYLE = {
       for (const dz of [0.35, -0.75]) box(0.03, 0.035, 0.18, MAT.chrome, s * (W / 2 + 0.01), 0.86, dz + (long ? 0.05 : 0), body);
     }
     // решётка и бамперы
-    box(long ? 1.0 : 0.72, long ? 0.14 : 0.1, 0.08, MAT.black, 0, long ? 0.53 : 0.55, fFace + 0.04, body);
-    if (long) box(1.0, 0.035, 0.09, MAT.chrome, 0, 0.62, fFace + 0.045, body);
-    box(1.35, 0.08, 0.06, MAT.black, 0, 0.31, fFace - 0.02, body);
-    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.42, fFace + 0.06, body);
-    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.62, rFace - 0.07, body);
-    box(1.6, 0.1, 0.06, MAT.black, 0, 0.36, rFace - 0.05, body);
+    box(long ? 1.0 : 0.72, long ? 0.14 : 0.1, 0.08, MAT.black, 0, long ? 0.53 : 0.55, fFace + 0.04, bp.f);
+    if (long) box(1.0, 0.035, 0.09, MAT.chrome, 0, 0.62, fFace + 0.045, bp.f);
+    box(1.35, 0.08, 0.06, MAT.black, 0, 0.31, fFace - 0.02, bp.f);
+    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.42, fFace + 0.06, bp.f);
+    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.62, rFace - 0.07, bp.r);
+    box(1.6, 0.1, 0.06, MAT.black, 0, 0.36, rFace - 0.05, bp.r);
     if (long) {
       box(0.8, 0.03, 0.08, MAT.chrome, 0, 0.83, rFace - 0.05, body);
       for (const s of [1, -1]) beam([s * (g.ghW / 2 + 0.03), 0.99, 1.0], [s * (g.ghW / 2 + 0.03), 0.99, -1.75], 0.03, MAT.chrome, body);
@@ -91,7 +102,7 @@ const STYLE = {
     const ex = cyl(0.045, 0.045, 0.2, 8, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(-0.55, 0.3, rFace - 0.04);
   },
 
-  suv(g, body, paint) {
+  suv(g, body, paint, bp) {
     const W = g.W, fFace = 2.48, rFace = -2.46;
     // «ноздри» BMW
     for (const s of [1, -1]) {
@@ -108,15 +119,15 @@ const STYLE = {
       for (const lz of [0.15, -1.85]) box(0.06, 0.08, 0.1, MAT.trim, rx, 1.74, lz, body);
       for (const dz of [0.25, -0.85]) box(0.03, 0.04, 0.2, MAT.chrome, s * (W / 2 + 0.01), 1.1, dz, body);
     }
-    box(1.4, 0.13, 0.06, MAT.black, 0, 0.55, fFace + 0.02, body);
-    box(0.48, 0.11, 0.03, MAT.plate, 0, 0.66, fFace + 0.07, body);
-    box(1.8, 0.16, 0.06, MAT.black, 0, 0.55, rFace - 0.05, body);
-    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.82, rFace - 0.08, body);
+    box(1.4, 0.13, 0.06, MAT.black, 0, 0.55, fFace + 0.02, bp.f);
+    box(0.48, 0.11, 0.03, MAT.plate, 0, 0.66, fFace + 0.07, bp.f);
+    box(1.8, 0.16, 0.06, MAT.black, 0, 0.55, rFace - 0.05, bp.r);
+    box(0.5, 0.12, 0.03, MAT.plate, 0, 0.82, rFace - 0.08, bp.r);
     box(1.5, 0.04, 0.3, paint, 0, 1.72, -2.12, body).rotation.x = 0.12;    // спойлер на крыше
     for (const s of [1, -1]) { const ex = cyl(0.05, 0.05, 0.15, 10, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(s * 0.6, 0.47, rFace - 0.04); }
   },
 
-  hummer(g, body, paint) {
+  hummer(g, body, paint, bp) {
     const W = g.W, fFace = 2.35, rFace = -2.35;
     // решётка с вертикальными прорезями
     box(1.75, 0.34, 0.05, MAT.black, 0, 0.88, fFace + 0.02, body);
@@ -139,10 +150,10 @@ const STYLE = {
     // перегородка лобового стекла
     beam([0, g.gh[0][1], g.gh[0][0] + 0.01], [0, g.gh[1][1], g.gh[1][0] + 0.01], 0.07, paint, body);
     // силовые бамперы, лебёдка
-    box(W + 0.12, 0.26, 0.3, MAT.black, 0, 0.62, fFace + 0.1, body);
-    box(0.5, 0.18, 0.2, MAT.trim, 0, 0.62, fFace + 0.32, body);
-    for (const s of [1, -1]) box(0.08, 0.14, 0.12, MAT.amber, s * 0.75, 0.62, fFace + 0.27, body);
-    box(W + 0.12, 0.24, 0.26, MAT.black, 0, 0.62, rFace - 0.08, body);
+    box(W + 0.12, 0.26, 0.3, MAT.black, 0, 0.62, fFace + 0.1, bp.f);
+    box(0.5, 0.18, 0.2, MAT.trim, 0, 0.62, fFace + 0.32, bp.f);
+    for (const s of [1, -1]) box(0.08, 0.14, 0.12, MAT.amber, s * 0.75, 0.62, fFace + 0.27, bp.f);
+    box(W + 0.12, 0.24, 0.26, MAT.black, 0, 0.62, rFace - 0.08, bp.r);
     box(0.5, 0.12, 0.03, MAT.plate, 0, 0.82, rFace - 0.04, body);
     // запаска
     const sp = cyl(0.42, 0.42, 0.3, 18, MAT.tire, body); sp.rotation.x = Math.PI / 2; sp.position.set(-0.45, 1.25, rFace - 0.2);
@@ -153,7 +164,7 @@ const STYLE = {
     box(1.1, 0.12, 1.1, MAT.trim, 0, 2.0, -0.9, body);
   },
 
-  super(g, body, paint) {
+  super(g, body, paint, bp) {
     const W = g.W, fFace = 2.42, rFace = -2.40;
     // моторный отсек с жалюзи
     extrude(polyShape(g.engine), g.ghW + 0.2, paint, 0.03, body);
@@ -176,11 +187,11 @@ const STYLE = {
     }
     // боковые треугольные воздухозаборники (сквозная плоская призма, видна с обеих сторон)
     extrude(polyShape([[-0.2, 0.42], [-0.9, 0.42], [-0.9, 0.84]]), W + 0.025, MAT.black, 0, body);
-    box(1.85, 0.04, 0.32, MAT.black, 0, 0.17, fFace - 0.1, body);            // сплиттер
-    box(0.7, 0.12, 0.05, MAT.black, 0, 0.33, fFace + 0.01, body);
+    box(1.85, 0.04, 0.32, MAT.black, 0, 0.17, fFace - 0.1, bp.f);            // сплиттер
+    box(0.7, 0.12, 0.05, MAT.black, 0, 0.33, fFace + 0.01, bp.f);
     box(1.7, 0.04, 0.36, paint, 0, 1.16, -2.04, body).rotation.x = 0.08;      // антикрыло
-    box(1.7, 0.36, 0.06, MAT.black, 0, 0.6, rFace - 0.03, body);              // задняя решётка
-    box(1.6, 0.12, 0.3, MAT.black, 0, 0.22, rFace + 0.05, body);              // диффузор
+    box(1.7, 0.36, 0.06, MAT.black, 0, 0.6, rFace - 0.03, bp.r);              // задняя решётка
+    box(1.6, 0.12, 0.3, MAT.black, 0, 0.22, rFace + 0.05, bp.r);              // диффузор
     const ex = cyl(0.12, 0.12, 0.16, 6, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(0, 0.42, rFace - 0.04);
   },
 };

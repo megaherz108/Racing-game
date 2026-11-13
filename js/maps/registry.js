@@ -23,6 +23,6 @@ function activateWorld(id) {
   const w = getWorld(id);
   for (const o of Object.values(worlds)) o.group.visible = o === w;
   world = w;
-  Sky.apply(w, save.tod);          // небо, туман, свет и дальность прорисовки по времени суток (js/sky.js)
+  Sky.apply(w, save.tod, save.rain);   // небо, туман, свет, дальность прорисовки и погода (js/sky.js, js/weather.js)
 }
 

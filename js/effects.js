@@ -78,18 +78,52 @@ class Particles {
   clear() { for (const p of this.items) p.life = 0; this.geo.instanceCount = 0; this.mesh.visible = false; }
 }
 // частицы теперь почти ничего не стоят — запас вдвое больше прежнего (320 / 280), чтобы дым и искры не обрывались
-const smoke = new Particles(640, THREE.NormalBlending);
+const smoke = new Particles(900, THREE.NormalBlending);
 const sparks = new Particles(560, THREE.AdditiveBlending);   // искры, пламя нитро и хлопков выхлопа
 
-const SKID_N = 3000;
-const skids = new THREE.InstancedMesh(FLAT_QUAD, new THREE.MeshBasicMaterial({ color: 0x0c0c0c, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }), SKID_N);
+// Следы шин: кольцевой буфер полосок. Каждая полоска помнит, когда и с какой непрозрачностью легла, и цвет покрытия
+// (чёрная резина на асфальте, колея на траве и песке). В шейдере следы постепенно бледнеют — со временем (SKID_LIFE)
+// и по мере того, как буфер подходит к их месту: самые старые растворяются, а не исчезают разом.
+// На видеокарту каждый кадр уходят только новые полоски (addUpdateRange), а не весь буфер.
+const SKID_N = 4000, SKID_LIFE = 50;
+const skidGeo = FLAT_QUAD.clone();
+const skidAttr = new THREE.InstancedBufferAttribute(new Float32Array(SKID_N * 2), 2).setUsage(THREE.DynamicDrawUsage);   // время, непрозрачность
+skidGeo.setAttribute('aSkid', skidAttr);
+const SKID_U = { uNow: { value: 0 }, uHead: { value: 0 } };
+const skidMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+skidMat.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, SKID_U);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', `#include <common>
+      attribute vec2 aSkid; uniform float uNow, uHead; varying float vSkA;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      float skAge = mod(uHead - 1.0 - float(gl_InstanceID) + ${SKID_N}.0, ${SKID_N}.0) / ${SKID_N}.0;
+      vSkA = aSkid.y * (1.0 - smoothstep(${SKID_LIFE * 0.4}.0, ${SKID_LIFE}.0, uNow - aSkid.x)) * (1.0 - smoothstep(0.7, 1.0, skAge));`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+varying float vSkA;`)
+    .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vSkA );');
+};
+const skids = new THREE.InstancedMesh(skidGeo, skidMat, SKID_N);
 skids.frustumCulled = false; skids.renderOrder = 1;
+skids.setColorAt(0, _pc.setHex(0x0c0c0c));
 const _m = new THREE.Matrix4(), _f = new THREE.Vector3(), _up = new THREE.Vector3(), _r = new THREE.Vector3();
-function clearSkids() { _m.makeScale(0, 0, 0); for (let i = 0; i < SKID_N; i++) skids.setMatrixAt(i, _m); skids.instanceMatrix.needsUpdate = true; }
-clearSkids(); scene.add(skids);
+function clearSkids() {
+  _m.makeScale(0, 0, 0); for (let i = 0; i < SKID_N; i++) skids.setMatrixAt(i, _m);
+  skidAttr.array.fill(0); skidIdx = 0; SKID_U.uHead.value = 0;
+  skids.instanceMatrix.needsUpdate = skidAttr.needsUpdate = skids.instanceColor.needsUpdate = true;
+}
 let skidIdx = 0;
-// след ориентируется по наклону поверхности
-function addSkid(x1, y1, z1, x2, y2, z2, w) {
+clearSkids(); scene.add(skids);
+// пометить для отправки на видеокарту только изменённый экземпляр i
+function skidDirty(i) {
+  for (const [a, n] of [[skids.instanceMatrix, 16], [skids.instanceColor, 3], [skidAttr, 2]]) {
+    if (a.addUpdateRange) a.addUpdateRange(i * n, n);
+    a.needsUpdate = true;
+  }
+}
+// след ориентируется по наклону поверхности; color/alpha — цвет и непрозрачность следа на этом покрытии
+function addSkid(x1, y1, z1, x2, y2, z2, w, color = 0x0c0c0c, alpha = 0.55) {
   _f.set(x2 - x1, y2 - y1, z2 - z1);
   const len = _f.length();
   if (len < 0.02 || len > 3) return;
@@ -102,7 +136,59 @@ function addSkid(x1, y1, z1, x2, y2, z2, w) {
   _r.crossVectors(_up, _f).normalize(); _f.crossVectors(_r, _up);
   _m.makeBasis(_r.multiplyScalar(w), _up, _f.multiplyScalar(len + 0.03));
   _m.setPosition((x1 + x2) / 2, (y1 + y2) / 2 + 0.05, (z1 + z2) / 2);
-  skids.setMatrixAt(skidIdx, _m); skidIdx = (skidIdx + 1) % SKID_N; skids.instanceMatrix.needsUpdate = true;
+  const i = skidIdx;
+  skids.setMatrixAt(i, _m); skids.setColorAt(i, _pc.setHex(color));
+  skidAttr.array[i * 2] = simTime; skidAttr.array[i * 2 + 1] = alpha;
+  skidDirty(i);
+  skidIdx = (skidIdx + 1) % SKID_N; SKID_U.uHead.value = skidIdx;
+}
+function updateSkids() { SKID_U.uNow.value = simTime; }
+
+/* ---------- покрытие под колёсами ---------- */
+// smoke — цвет дыма шин при заносе; skid — цвет и непрозрачность следа заноса; track — непрозрачность колеи,
+// которую мягкое покрытие оставляет и без заноса; dust — пыль из-под колёс [цвет, непрозрачность];
+// spray — брызги воды (мокрый песок у кромки моря)
+const SURF = {
+  asphalt: { smoke: 0xd8d8d8, skid: [0x0c0c0c, 0.55] },
+  paving: { smoke: 0xd0ccc4, skid: [0x1a1a1a, 0.45] },
+  grass: { smoke: 0x8f8360, skid: [0x33361c, 0.55], track: 0.3, dust: [0x857a55, 0.22], bits: 0x4f7d2e },
+  dirt: { smoke: 0xc7b28a, skid: [0x8c7652, 0.5], track: 0.3, dust: [0xc8b48c, 0.3] },
+  sand: { smoke: 0xdccb9c, skid: [0xa48c62, 0.5], track: 0.4, dust: [0xd9c79a, 0.34] },
+  wet: { smoke: 0xe8f2ff, skid: [0x6a5a40, 0.55], track: 0.5, spray: true },
+};
+// эффекты одного колеса машины car: (wx, wy, wz) — точка касания, prev — где был прошлый кусок следа
+function wheelFx(car, k, wx, wy, wz, onDeck, skidding, speed, dt) {
+  const kind = !onDeck && world.surfaceKind ? world.surfaceKind(wx, wz) : 'asphalt';
+  const S = SURF[kind] || SURF.asphalt, fx = QUAL.fx;
+  const prev = car.skidPrev[k];
+  // след: занос — на любом покрытии, колея — на мягком и без заноса (реже: по куску на ~0,6 м)
+  const mark = skidding ? S.skid : S.track ? [S.skid[0], S.track] : null;
+  if (mark) {
+    if (!prev) car.skidPrev[k] = [wx, wy, wz];
+    else {
+      const d2 = (wx - prev[0]) ** 2 + (wz - prev[2]) ** 2;
+      if (d2 > (skidding ? 0.09 : 0.36)) {
+        addSkid(prev[0], prev[1], prev[2], wx, wy, wz, car.g.ww * 0.9, mark[0], mark[1]);
+        car.skidPrev[k] = [wx, wy, wz];
+      }
+    }
+  } else car.skidPrev[k] = null;
+  // дым шин при заносе — цвета покрытия
+  if (skidding && Math.random() < dt * 22)
+    smoke.spawn(wx, wy + 0.3, wz, rand(-0.5, 0.5), rand(0.4, 1), rand(-0.5, 0.5), 0.6, 2.4, 1.0, S.smoke, kind === 'asphalt' || kind === 'paving' ? 0.35 : 0.45);
+  // пыль на траве, песке и грунте
+  if (S.dust && speed > 4 && Math.random() < dt * Math.min(18, speed * 0.6) * fx) {
+    smoke.spawn(wx + rand(-0.2, 0.2), wy + 0.2, wz + rand(-0.2, 0.2), car.vx * 0.25 + rand(-0.8, 0.8), rand(0.5, 1.6), car.vz * 0.25 + rand(-0.8, 0.8),
+      0.5, rand(1.8, 2.8), rand(0.9, 1.5), S.dust[0], S.dust[1]);
+    if (S.bits && Math.random() < 0.35) sparks.spawn(wx, wy + 0.1, wz, car.vx * 0.2 + rand(-1.5, 1.5), rand(1.5, 3.5), car.vz * 0.2 + rand(-1.5, 1.5), 0.12, 0.08, 0.6, S.bits, 0.5, 9);
+  }
+  // брызги: мокрый песок у кромки воды, а в дождь — любой асфальт
+  const rainSpray = Weather.raining && !S.dust && !S.spray;
+  if ((S.spray || rainSpray) && speed > 5 && Math.random() < dt * Math.min(24, speed * (rainSpray ? 0.45 : 0.8)) * fx) {
+    const up = S.spray ? rand(1.5, 3.5) : rand(0.6, 1.6);
+    smoke.spawn(wx + rand(-0.15, 0.15), wy + 0.15, wz + rand(-0.15, 0.15), car.vx * 0.35 + rand(-1, 1), up, car.vz * 0.35 + rand(-1, 1),
+      0.35, S.spray ? 1.6 : 2.4, rand(0.45, 0.8), S.spray ? 0xeaf4ff : 0xc4ccd4, S.spray ? 0.5 : 0.2, S.spray ? 7 : 2);
+  }
 }
 
 // монеты: две InstancedMesh (диск + ободок) на все монеты карты

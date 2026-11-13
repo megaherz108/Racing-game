@@ -987,6 +987,40 @@ function flatChunks(group, mat, quads, shadow = false) {
   }
 }
 
+/* ---------- вода ---------- */
+// Море и канал — одна плоскость. Рябь — карта нормалей (js/sky.js, NOISE.normal), которая читается дважды в разных
+// масштабах и плывёт в разные стороны: на воде играют блики солнца и отражение неба. В дождь рябь сильнее.
+// Две выборки текстуры на пиксель воды — почти бесплатно.
+const WATER_U = { uTime: { value: 0 }, uWaterN: { value: NOISE.normal } };
+function waterMaterial(color) {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.86 });
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, WATER_U);
+    sh.uniforms.uWet = Weather.wetUniform;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWPos;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWPos;
+uniform float uTime, uWet;
+uniform sampler2D uWaterN;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec2 wuv = vWPos.xz;
+          vec3 n1 = texture2D(uWaterN, wuv * 0.031 + uTime * vec2(0.011, 0.006)).xyz * 2.0 - 1.0;
+          vec3 n2 = texture2D(uWaterN, wuv * 0.083 - uTime * vec2(0.009, 0.016)).xyz * 2.0 - 1.0;
+          vec2 slope = (n1.xz + n2.xz) * (0.55 + uWet * 0.6);
+          vec3 wn = normalize(vec3(slope.x, 1.0, slope.y));
+          normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+        }`);
+  };
+  m.customProgramCacheKey = () => 'water-ripple';
+  return m;
+}
+
 /* =====================================================================
    КАРТА 1: ГОРОД НА ОСТРОВЕ — ПОСТРОЙКА
    ===================================================================== */
@@ -1026,7 +1060,7 @@ function buildCity(D) {
   const nz = makeNoise(mulberry32(7));
   const cGrass = new THREE.Color(0x6c9a45), cPark = new THREE.Color(0x5f9d3f), cSand = new THREE.Color(0xe6d6a6), cPath = new THREE.Color(0xd2bf8e),
     cPort = new THREE.Color(0x8f918f), cDeep = new THREE.Color(0xb59f72), cQuay = new THREE.Color(0x5a5b58);
-  const landMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  const landMat = Weather.wet(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.35);   // в дождь трава и песок чуть темнеют
   const P = D.PARK;
   for (let cx = -1050; cx < 1050; cx += CHUNK) for (let cz = -1050; cz < 1050; cz += CHUNK) {
     const fine = cx < P.x1 && cx + CHUNK > P.x0 && cz < P.z1 && cz + CHUNK > P.z0;
@@ -1054,7 +1088,7 @@ function buildCity(D) {
     g.computeVertexNormals(); g.computeBoundingSphere();
     const land = new THREE.Mesh(g, landMat); land.receiveShadow = true; group.add(land);
   }
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), stdMat(0x2477b5, { roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.86 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), waterMaterial(0x2477b5));
   water.rotation.x = -Math.PI / 2; water.position.y = D.WATER; water.userData.dynamic = true; group.add(water);
 
   /* ---------- дороги ---------- */
@@ -1101,7 +1135,7 @@ function buildCity(D) {
   for (const L of D.lanes) Q.lane10.push({ cx: (L.x0 + L.x1) / 2, cz: (L.z0 + L.z1) / 2, dir: 'z', len: L.z1 - L.z0, wid: L.x1 - L.x0, y: Y, mode: 'lane' });
   for (const [x0, z0, x1, z1] of D.ovRuns)
     Q.ov.push({ cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, dir: x0 === x1 ? 'z' : 'x', len: Math.hypot(x1 - x0, z1 - z0), wid: D.OV.W, y: D.OV.H + 0.02, mode: 'lane' });
-  for (const k of Object.keys(Q)) flatChunks(group, mats[k], Q[k]);
+  for (const k of Object.keys(Q)) flatChunks(group, Weather.wet(mats[k]), Q[k]);
   // кривые переулки: лента по ломаной поверх тротуара
   for (const al of D.alleys) {
     const P = [], U = [], N = [], I = [], hw = al.w / 2, y = D.CURB + 0.035, pts = al.pts;
@@ -1125,7 +1159,7 @@ function buildCity(D) {
   for (const o of D.medians) grid.addBox(o.x - o.w / 2, o.x + o.w / 2, o.z - o.d / 2, o.z + o.d / 2, 0.35);
 
   /* ---------- тротуары и газоны кварталов ---------- */
-  instChunks(group, box1, stdMat(0xffffff, { roughness: 0.9 }), D.slabs, xzOf, colorBox, false);
+  instChunks(group, box1, Weather.wet(stdMat(0xffffff, { roughness: 0.9 }), 0.8), D.slabs, xzOf, colorBox, false);
   // площадь с фонтаном в центре парка
   {
     const [x, z] = D.PC, y = D.ground(x, z);
@@ -1185,9 +1219,9 @@ function buildCity(D) {
   }
   const haz = hazardTexture(); haz.repeat.set(4, 1);
   decks.build(group, {
-    deck: stdMat(0x45494f, { roughness: 0.9 }), rail: stdMat(0xd8dde3, { metalness: 0.5, roughness: 0.4 }), steel: stdMat(0x5a7184, { metalness: 0.6, roughness: 0.5 }),
+    deck: Weather.wet(stdMat(0x45494f, { roughness: 0.9 })), rail: stdMat(0xd8dde3, { metalness: 0.5, roughness: 0.4 }), steel: stdMat(0x5a7184, { metalness: 0.6, roughness: 0.5 }),
     hazard: stdMat(0xffffff, { map: haz, roughness: 0.6 }), tower: stdMat(0x8d8f93, { roughness: 0.85 }), wedge: stdMat(0xc96a2b, { roughness: 0.7 }),
-    ramp: stdMat(0x9a978f, { roughness: 0.9 }), pier: stdMat(0x9b7b56, { roughness: 0.9 }), ovdeck: stdMat(0xa29f97, { roughness: 0.9, emissive: 0x3a3833 }),   // снизу на настил почти не падает свет — подсвечиваем
+    ramp: Weather.wet(stdMat(0x9a978f, { roughness: 0.9 })), pier: Weather.wet(stdMat(0x9b7b56, { roughness: 0.9 }), 0.7), ovdeck: Weather.wet(stdMat(0xa29f97, { roughness: 0.9, emissive: 0x3a3833 })),   // снизу на настил почти не падает свет — подсвечиваем
   });
 
   /* ---------- светофоры ---------- */
@@ -1396,8 +1430,21 @@ function buildCity(D) {
   const roads = D.roadSegs.filter(s => !s.ramp);        // на пандусах эстакады не респауним
   const total = roads.reduce((s, r) => s + Math.abs(r.x1 - r.x0) + Math.abs(r.z1 - r.z0), 0);
   const surface = (x, z, y = Infinity) => Math.max(D.ground(x, z), decks.surface(x, z, y));
+  // покрытие под колесом (пыль, брызги, цвет дыма и следов — js/effects.js): дороги — асфальт, кварталы — плитка,
+  // газоны и парк — трава, дорожки парка — грунт, берег — песок, у самой воды — мокрый песок
+  const surfaceKind = (x, z) => {
+    const cd = D.coastD(x, z);
+    if (cd < 16 || z < D.BEACH_Z) return cd < 12 ? 'wet' : 'sand';          // вода начинается при cd ≈ 7,5 м
+    const b = D.blockAt(x, z);
+    if (!b) return 'asphalt';
+    if (b.lane && x > b.lane.x0 && x < b.lane.x1) return 'asphalt';
+    if (b.type === 'park') return D.parkPath(x, z) < 3 ? 'dirt' : 'grass';
+    if ((b.type === 'suburb' || b.type === 'resort') && !(b.special && !b.special.fill) &&
+      Math.min(x - b.x0, b.x1 - x, z - b.z0, b.z1 - z) > 3.6) return 'grass';
+    return 'paving';
+  };
   return {
-    id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
+    id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, surfaceKind, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
     sky: 0x9fd3f7, fog: [280, 760], coinCount: 100,
     // старт на набережной канала у подножия западного пандуса, лицом к эстакаде (на север);
     // направо по набережной — разводной мост-трамплин
@@ -1450,7 +1497,7 @@ function buildCity(D) {
     minimap: D.minimap, mmExt: D.mmExt, mmBg: D.mmBg,
     breakables: brks,
     reset() { for (const b of brks) b.reset(); geysers.length = 0; },
-    update(dt, t) { water.position.y = D.WATER + Math.sin(t * 0.8) * 0.03; for (const b of brks) b.update(dt); updateGeysers(dt); marks.update(dt, t); updateLights(); updateLampFx(dt); },
+    update(dt, t) { water.position.y = D.WATER + Math.sin(t * 0.8) * 0.03; WATER_U.uTime.value = t; for (const b of brks) b.update(dt); updateGeysers(dt); marks.update(dt, t); updateLights(); updateLampFx(dt); },
     // вечером и ночью включаются огни фонарей (js/sky.js)
     setNight(k) { nightGroup.visible = k > 0; lampCheck = 0; },
     // перед отрисовкой каждой половины экрана: дальность прорисовки мелочи от камеры (x, z)

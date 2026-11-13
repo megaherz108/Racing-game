@@ -157,11 +157,12 @@ class Car {
     this.L = g.L; this.W = g.W; this.H = g.H; this.wb = g.axF - g.axR; this.g = g;
     this.cr = g.W / 2;
     const span = g.L - g.W; this.cOff = [-span / 2, 0, span / 2];
-    this.model = buildCarModel(def, def.paints[p]);
+    this.model = buildCarModel(def, def.paints[p], { lacquer: true, bumpers: true });   // лак и отрываемые бамперы
     scene.add(this.model.root);
     // свои задние фонари: стоп-сигналы разгораются при торможении (общий MAT.tail — у трафика)
     this.tailMat = MAT.tail.clone(); this.tailMat.userData = {};
     this.model.root.traverse(o => { if (o.material === MAT.tail) o.material = this.tailMat; });
+    this.fx = new CarFx(this);             // фонари заднего хода, ореолы, след фонарей, вмятины (js/carfx.js)
     const mk = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.75, 4), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[p] }));
     mk.rotation.x = Math.PI; mk.layers.set(p + 1); this.model.root.add(mk); this.marker = mk;
 
@@ -339,6 +340,7 @@ class Car {
         sparks.spawn(this.hitX, this.y + rand(0.4, 1.0), this.hitZ, rand(-6, 6), rand(1, 6), rand(-6, 6), 0.35, 0.05, rand(0.25, 0.55), 0xffb040, 1, 14);
       this.shake = Math.min(1, this.shake + strength / 18);
       Feel.impact(this, strength, this.lastHitBy && simTime - this.lastHitTime < 0.1);
+      if (this.drown <= 0) this.fx.hit(strength, this.hitX, this.hitZ);
       Stunts.crash(this.p);
       if (this.broken <= 0 && this.drown <= 0) {
         this.hp -= (strength - 2.5) * 2.1;
@@ -353,7 +355,7 @@ class Car {
     this.hitDv = 0;
     if (this.broken > 0) {
       this.broken -= dt;
-      if (this.broken <= 0) { this.broken = 0; this.hp = this.maxHp; notify(this.p, 'Машина починена', 'good'); }
+      if (this.broken <= 0) { this.broken = 0; this.hp = this.maxHp; this.fx.repair(); notify(this.p, 'Машина починена', 'good'); }
     }
     // вода: машина тонет, через 5 с возвращается на дорогу
     if (world.water !== null && this.drown <= 0 && this.grounded && world.ground(this.x, this.z) < world.water - 0.35 && this.y < world.water) {
@@ -379,9 +381,9 @@ class Car {
     this.roll = lerp(this.roll || 0, this.grounded ? clamp(this.vf * this.w * 0.004, -0.06, 0.06) : 0, Math.min(1, dt * 6));
     this.pitch = lerp(this.pitch || 0, this.grounded ? clamp(-acc * 0.003, -0.04, 0.04) : 0, Math.min(1, dt * 6));
     m.body.rotation.set(this.pitch, 0, this.roll);
-    // стоп-сигналы: торможение, ручник или задний ход
+    // стоп-сигналы: торможение или ручник; фонари заднего хода — едем назад (js/carfx.js)
     const braking = this.hb || (this.thr < 0 && this.vf > 0.5) || (this.thr > 0 && this.vf < -0.5);
-    this.tailMat.emissiveIntensity = braking ? 5 : 1.6 + NIGHT_U.value * 0.8;
+    this.fx.update(dt, braking, this.thr < 0 && this.vf <= 0.5);
     for (let i = 0; i < 4; i++) {
       const wh = m.wheels[i], wl = this.wheels[i];
       const len = this.drown > 0 ? this.rest : this.veh.wheelSuspensionLength(i) ?? this.rest;
@@ -393,34 +395,34 @@ class Car {
     this.marker.quaternion.copy(_q.copy(m.root.quaternion).invert());     // маркер всегда вертикален
     this.marker.rotateY(performance.now() / 500); this.marker.rotateX(Math.PI);
 
-    // дым от повреждений
+    // дым из-под капота: чем меньше прочность, тем гуще и темнее (лёгкий пар → серый дым → чёрный с искрами при поломке)
     const hpFrac = this.hp / this.maxHp;
-    const rate = this.drown > 0 ? 0 : this.broken > 0 ? 16 : hpFrac < 0.35 ? 5 : 0;
+    const rate = this.drown > 0 ? 0 : this.broken > 0 ? 16 : hpFrac < 0.3 ? 7 : hpFrac < 0.55 ? 2.5 : 0;
     this.smokeAcc += rate * dt;
     const engZ = this.g.style === 'super' ? -1.4 : this.L * 0.32;
     while (this.smokeAcc >= 1) {
       this.smokeAcc -= 1;
       const [sx, sz] = this.local(rand(-0.3, 0.3), engZ);
-      const dark = this.broken > 0;
+      const dark = this.broken > 0, light = !dark && hpFrac >= 0.3;
       smoke.spawn(sx, this.y + this.H * 0.75, sz, this.vx * 0.3 + rand(-0.4, 0.4), rand(1.2, 2.2), this.vz * 0.3 + rand(-0.4, 0.4),
-        dark ? 0.7 : 0.5, dark ? 2.8 : 2.0, dark ? 1.6 : 1.2, dark ? 0x3a3a3a : 0xa0a0a0, dark ? 0.5 : 0.35);
+        dark ? 0.7 : 0.5, dark ? 2.8 : light ? 1.5 : 2.0, dark ? 1.6 : 1.2, dark ? 0x3a3a3a : light ? 0xdedede : 0x8a8a8a, dark ? 0.5 : light ? 0.22 : 0.38);
       if (dark && Math.random() < 0.25) sparks.spawn(sx, this.y + this.H * 0.7, sz, rand(-1, 1), rand(1, 3), rand(-1, 1), 0.5, 0.1, 0.4, 0xff6a1a, 0.9, 2);
     }
-    // следы шин — только у задних колёс, касающихся земли
+    // задние колёса: следы шин (занос — на любом покрытии, колея — на траве и песке), дым шин цвета покрытия,
+    // пыль, брызги (js/effects.js → wheelFx)
     const speed = Math.hypot(this.vx, this.vz);
-    const skidding = this.drown <= 0 && speed > 3 && (Math.abs(this.vl) > 2.2 || (this.hb && Math.abs(this.vf) > 3));
+    const skidding = speed > 3 && (Math.abs(this.vl) > 2.2 || (this.hb && Math.abs(this.vf) > 3));
     for (let k2 = 0; k2 < 2; k2++) {
       const wl = this.wheels[2 + k2];
-      if (skidding && wl.contact) {
+      if (this.drown <= 0 && wl.contact) {
         const [wx, wz] = this.local(wl.side * this.g.track, this.g.axR), wy = surfaceAt(wx, wz, this.y + 0.8);
-        if (this.skidPrev[k2]) addSkid(this.skidPrev[k2][0], this.skidPrev[k2][1], this.skidPrev[k2][2], wx, wy, wz, this.g.ww * 0.9);
-        this.skidPrev[k2] = [wx, wy, wz];
-        if (Math.random() < dt * 22) smoke.spawn(wx, wy + 0.3, wz, rand(-0.5, 0.5), rand(0.4, 1), rand(-0.5, 0.5), 0.6, 2.4, 1.0, 0xd8d8d8, 0.35);
+        wheelFx(this, k2, wx, wy, wz, wy - world.ground(wx, wz) > 0.3, skidding, speed, dt);
       } else this.skidPrev[k2] = null;
     }
     this.shake = Math.max(0, this.shake - dt * 2.5);
   }
   dispose() {
+    this.fx.dispose();
     scene.remove(this.model.root); disposeTree(this.model.root);
     if (PH.rw && PH.rw.getRigidBody(this.body.handle)) {
       PH.info.delete(this.collider.handle);

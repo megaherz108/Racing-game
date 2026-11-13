@@ -210,7 +210,7 @@ function renderMaps() {
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
   $('modeLine').innerHTML = `Карта: <b>${MAP_INFO[PLAY_MAP].name}</b> · ← / → — режим, Enter — старт`;
-  renderTraffic(); renderTime(); renderQuality();
+  renderTraffic(); renderTime(); renderWeather(); renderQuality();
 }
 // качество графики (QUALITY в js/data.js): сглаживание задаётся при создании WebGL, поэтому смена — с перезагрузкой
 // страницы; после неё игра сразу возвращается на этот экран
@@ -235,6 +235,13 @@ function renderTime() {
 }
 function setTime(id) { save.tod = id; persist(); renderTime(); }
 function stepTime() { const i = TIMES.findIndex(l => l[0] === save.tod); setTime(TIMES[(i + 1) % TIMES.length][0]); }
+// погода: дождь (js/weather.js)
+function renderWeather() {
+  $('weatherLine').innerHTML = `Погода: ${[[false, 'Ясно'], [true, 'Дождь']].map(([v, label]) =>
+    `<button class="tsel ${v === save.rain ? 'on' : ''}" data-rain="${v}">${label}</button>`).join('')}
+    <span class="thint">R</span>`;
+}
+function setWeather(v) { save.rain = !!v; persist(); renderWeather(); }
 // интенсивность городского трафика
 function renderTraffic() {
   $('trafficLine').innerHTML = `Трафик в городе: ${TRAFFIC_LEVELS.map(([id, label]) =>
@@ -270,6 +277,7 @@ $('gPlay').onclick = () => { if (!$('gPlay').disabled) openMaps(); };
 $('mapsBack').onclick = () => setState('menu');
 $('trafficLine').addEventListener('click', e => { const b = e.target.closest('[data-traffic]'); if (b) setTraffic(b.dataset.traffic); });
 $('timeLine').addEventListener('click', e => { const b = e.target.closest('[data-tod]'); if (b) setTime(b.dataset.tod); });
+$('weatherLine').addEventListener('click', e => { const b = e.target.closest('[data-rain]'); if (b) setWeather(b.dataset.rain === 'true'); });
 $('qualityLine').addEventListener('click', e => { const b = e.target.closest('[data-quality]'); if (b) setQuality(b.dataset.quality); });
 $('mapsGo').onclick = () => startMatch();
 function setPaused(v) { paused = v; $('pause').classList.toggle('hidden', !v); keys.clear(); }
@@ -322,6 +330,7 @@ addEventListener('keydown', e => {
     else if (e.code === 'ArrowUp' || e.code === 'KeyW') stepTraffic(1);
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') stepTraffic(-1);
     else if (e.code === 'KeyN') stepTime();
+    else if (e.code === 'KeyR') setWeather(!save.rain);
     else if (e.code === 'KeyQ') stepQuality();
     else if (e.code === 'Enter') startMatch();
     else if (e.code === 'Escape') setState('menu');

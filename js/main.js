@@ -71,11 +71,11 @@ function frameBody(now) {
       updateCoins3D(gdt, t);
       Race.update(gdt, t);
       Stunts.update(gdt);
-      smoke.update(gdt); sparks.update(gdt);
-      Sky.update();
+      smoke.update(gdt); sparks.update(gdt); updateSkids(); Wrecks.update(gdt);
+      Sky.update(t);
       for (let p = 0; p < 2; p++) {
         if (p >= N) { Sound.update(p, null, false); continue; }
-        placeCam(p, dt, false); updateStreaks(p); drawMinimap(p); Sound.update(p, cars[p], countdown < 3);
+        placeCam(p, dt, false); updateStreaks(p); Weather.update(p, t); drawMinimap(p); Sound.update(p, cars[p], countdown < 3);
       }
       updateHUD();
     }

@@ -39,7 +39,7 @@ function updatePodium(p) {
   const def = CARS[browse[p]], pod = podiums[p];
   if (pod.carId === def.id) return;
   if (pod.car) { pod.turn.remove(pod.car.root); disposeTree(pod.car.root); }
-  pod.car = buildCarModel(def, def.paints[p]);
+  pod.car = buildCarModel(def, def.paints[p], { lacquer: true });
   pod.car.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   pod.turn.add(pod.car.root);
   pod.carId = def.id;
