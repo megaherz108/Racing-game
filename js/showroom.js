@@ -1,7 +1,7 @@
 // Шоурум — 3D-фон меню и гаража
 // Определяет: show, showKey, showCam, podiums, PODIUM_X, PODIUM_SPAN, viewShift, updatePodium.
-// Использует: PLAYER_COLORS, CARS, browse (js/data.js); envTex (js/core.js); disposeTree, buildCarModel
-//   (js/car-models.js).
+// Использует: PLAYER_COLORS, CARS, browse (js/data.js); envTex, QUAL (js/core.js); EnvProbe (js/envprobe.js);
+//   disposeTree, buildCarModel (js/car-models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -12,9 +12,10 @@ const show = new THREE.Scene();
 show.background = new THREE.Color(0x0c1018);
 show.fog = new THREE.Fog(0x0c1018, 18, 40);
 show.environment = envTex;
+EnvProbe.attach(show);
 show.add(new THREE.HemisphereLight(0xb8c8e0, 0x101418, 0.6));
 const showKey = new THREE.DirectionalLight(0xffffff, 2.0);
-showKey.position.set(4, 10, 7); showKey.castShadow = true;
+showKey.position.set(4, 10, 7); showKey.castShadow = QUAL.shadows;   // рендерер общий с игрой: на «Минимуме» карта теней выключена и здесь
 showKey.shadow.mapSize.set(1024, 1024);
 Object.assign(showKey.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 30 });
 show.add(showKey);

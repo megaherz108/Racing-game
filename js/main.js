@@ -1,12 +1,12 @@
 // Главный цикл и старт игры
-// Определяет: showLook, resize, Perf, last, gameT, frame, frameBody, cheatCoins.
+// Определяет: showLook, resize, Perf, SHADOW_SHARE, shadowShared, last, gameT, frame, frameBody, cheatCoins.
 // Использует: save, CARS, browse (js/data.js); renderer, clamp, lerp (js/core.js); showCam, PODIUM_SPAN, viewShift,
 //   podiums, show, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky (js/sky.js); Weather
 //   (js/weather.js); world, getData (js/maps/registry.js); updateCoins3D, smoke, sparks, updateSkids (js/effects.js);
 //   Wrecks (js/carfx.js); Sound (js/audio.js); cars, accum, FIXED, stepWorld (js/physics.js); Traffic
-//   (js/traffic/traffic.js); cams, state, paused, countdown, placeCam, updateStreaks, startMatch (js/match.js);
-//   drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins, keys, renderGarage (js/ui.js); Race
-//   (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js).
+//   (js/traffic/traffic.js); Blobs (js/blobs.js); cams, state, paused, countdown, placeCam, updateStreaks, startMatch
+//   (js/match.js); drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins, keys, renderGarage
+//   (js/ui.js); Race (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -51,6 +51,8 @@ const Perf = (() => {
   };
 })();
 
+const SHADOW_SHARE = 26;                 // м между игроками: ближе — одна карта теней на обе половины экрана
+let shadowShared = false;
 let last = performance.now(), gameT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -88,12 +90,21 @@ function frameBody(now) {
       updateHUD();
     }
     renderer.setScissorTest(true);
+    // Тени: карта 140 × 140 м вокруг машины, своя для каждой половины экрана. Когда игроки едут рядом, обе половины
+    // видят одно и то же место — карта рисуется один раз, вокруг точки между машинами (≈ 0,45 мс видеокарты и сотня
+    // вызовов отрисовки). Пороги разнесены, чтобы режим не мигал на границе.
+    if (N === 2) {
+      const d = Math.hypot(cars[0].x - cars[1].x, cars[0].z - cars[1].z, cars[0].y - cars[1].y);
+      shadowShared = d < (shadowShared ? SHADOW_SHARE + 8 : SHADOW_SHARE);
+    } else shadowShared = false;
     for (let p = 0; p < N; p++) {
       const c = cars[p];
-      aimSun(c.x, c.y, c.z);
+      if (!shadowShared) aimSun(c.x, c.y, c.z);
+      else if (p === 0) aimSun((c.x + cars[1].x) / 2, (c.y + cars[1].y) / 2, (c.z + cars[1].z) / 2);
       Traffic.cullView(cams[p], c.x, c.z);
+      Blobs.view(c.x, c.z);                // пятна под машинами вместо теней (только «Минимум», js/blobs.js)
       if (world.cullView) world.cullView(cams[p].position.x, cams[p].position.z);
-      renderer.shadowMap.needsUpdate = true;
+      renderer.shadowMap.needsUpdate = !shadowShared || p === 0;
       renderer.setViewport(p * VW, 0, VW, H);
       renderer.setScissor(p * VW, 0, VW, H);
       renderer.render(scene, cams[p]);

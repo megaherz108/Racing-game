@@ -2,8 +2,10 @@
 // Определяет: scene, hemi, sun, SUN_OFFSET, aimSun, smooth01, mulberry32, shuffle, makeNoise, noiseTexture, dummy,
 //   UNIT_BOX, FLAT_QUAD, inst, setInst, stdMat, StaticGrid, angLerp, Y_AXIS, BRK_G, BRK_FLY, BRK_HINGE, BRK_REST,
 //   brkGround, Breakables, mmCanvas, FACADE, NIGHT_U, makeBuildingMaterial, CHUNK, chunkKey, chunkBuckets,
-//   CHUNK_MIN_TRIS, geoTris, chunkOrAll, instChunks, optimizeStatic, DistCull, setInstQ, Decks.
-// Использует: envTex, rand, renderer, clamp (js/core.js); world (js/maps/registry.js); surfaceAt (js/physics.js).
+//   CHUNK_MIN_TRIS, geoTris, chunkOrAll, instChunks, optimizeStatic, DistCull, SHADOW_CELL, SHADOW_ONLY,
+//   buildShadowProxies, SHADOW_PROXY_MAT, shadowProxyOf, dropShadowProxy, setInstQ, Decks.
+// Использует: envTex, QUAL, rand, renderer, clamp, shared (js/core.js); EnvProbe (js/envprobe.js); world
+//   (js/maps/registry.js); surfaceAt (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -14,11 +16,12 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x9fcbef);
 scene.fog = new THREE.Fog(0x9fcbef, 110, 300);
 scene.environment = envTex;
+EnvProbe.attach(scene);                                 // свет окружения для матовых поверхностей (js/envprobe.js)
 const hemi = new THREE.HemisphereLight(0xe2f0ff, 0x4d5b3c, 0.7);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
 const SUN_OFFSET = new THREE.Vector3(-30, 90, -45);     // меняется со временем суток (js/sky.js)
-sun.castShadow = true;
+sun.castShadow = QUAL.shadows;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 280 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
@@ -503,6 +506,115 @@ class DistCull {
     }
   }
 }
+
+/* ---------- теневые копии неподвижных объектов ---------- */
+// В проходе теней Three.js рисует каждый отбрасывающий тень меш отдельным вызовом, причём чанк 300 × 300 м — целиком,
+// хотя карта теней покрывает 140 × 140 м: около сотни вызовов и ~100 тыс. треугольников на каждую половину экрана.
+// Для тени же не нужны ни материалы, ни экземпляры — только треугольники. Поэтому после постройки карты геометрия
+// всех неподвижных объектов, отбрасывающих тень, собирается в один меш на клетку SHADOW_CELL × SHADOW_CELL м
+// (только координаты вершин), а у самих объектов castShadow выключается. Копии видны только в проходе теней
+// (SHADOW_ONLY), в кадр они не попадают. Сбиваемые объекты (skip) и всё с userData.dynamic тень отбрасывают сами.
+const SHADOW_CELL = 150;
+const SHADOW_ONLY = [];                     // объекты, которые видны только в проходе теней
+{
+  const sm = renderer.shadowMap, render = sm.render;
+  sm.render = function (lights, scn, cam) {
+    for (const o of SHADOW_ONLY) o.visible = true;
+    try { render.call(this, lights, scn, cam); } finally { for (const o of SHADOW_ONLY) o.visible = false; }
+  };
+}
+const _spM = new THREE.Matrix4(), _spI = new THREE.Matrix4(), _spInv = new THREE.Matrix4(), _spC = new THREE.Vector3();
+function buildShadowProxies(group, skip = () => false) {
+  if (!QUAL.shadows) return null;                 // теней нет (качество «Минимум») — и копии не нужны
+  group.updateMatrixWorld(true);
+  _spInv.copy(group.matrixWorld).invert();
+  const buckets = new Map(), taken = [];
+  // треугольники меша в его собственных координатах: Float32Array по 9 чисел
+  const localTris = g => {
+    const p = g.attributes.position, ix = g.index, n = ix ? ix.count : p.count, out = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) { const v = ix ? ix.getX(k) : k; out[k * 3] = p.getX(v); out[k * 3 + 1] = p.getY(v); out[k * 3 + 2] = p.getZ(v); }
+    return out;
+  };
+  const bucket = (x, z, dbl) => {
+    const key = Math.floor(x / SHADOW_CELL) * 4096 + Math.floor(z / SHADOW_CELL) + (dbl ? 0.5 : 0);
+    let b = buckets.get(key); if (!b) buckets.set(key, b = { dbl, a: [] });
+    return b.a;
+  };
+  // добавить треугольники L[from…to) с матрицей m в массив out (зеркальная матрица — обход вершин наоборот)
+  const put = (out, L, from, to, m) => {
+    const e = m.elements, flip = m.determinant() < 0;
+    for (let t = from; t < to; t += 9) for (let k = 0; k < 3; k++) {
+      const o = t + (flip ? 2 - k : k) * 3, x = L[o], y = L[o + 1], z = L[o + 2];
+      out.push(e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]);
+    }
+  };
+  const walk = o => {
+    if (o.userData.dynamic || !o.visible) return;
+    const mat = o.material;
+    if (o.isMesh && o.castShadow && !skip(o) && mat && !Array.isArray(mat) && !mat.transparent && !(mat.alphaTest > 0)) {
+      const g = o.geometry, L = localTris(g), dbl = mat.side !== THREE.FrontSide;
+      _spM.multiplyMatrices(_spInv, o.matrixWorld);
+      if (o.isInstancedMesh) {
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        for (let i = 0; i < o.count; i++) {
+          o.getMatrixAt(i, _spI); _spI.premultiply(_spM);
+          _spC.copy(g.boundingSphere.center).applyMatrix4(_spI);
+          put(bucket(_spC.x, _spC.z, dbl), L, 0, L.length, _spI);
+        }
+      } else {
+        const e = _spM.elements;                              // склеенный меш чанка — по клеткам раскладываем треугольники
+        for (let t = 0; t < L.length; t += 9) {
+          const cx = (L[t] + L[t + 3] + L[t + 6]) / 3, cy = (L[t + 1] + L[t + 4] + L[t + 7]) / 3, cz = (L[t + 2] + L[t + 5] + L[t + 8]) / 3;
+          put(bucket(e[0] * cx + e[4] * cy + e[8] * cz + e[12], e[2] * cx + e[6] * cy + e[10] * cz + e[14], dbl), L, t, t + 9, _spM);
+        }
+      }
+      taken.push(o);
+    }
+    for (const c of o.children) walk(c);
+  };
+  for (const c of group.children) walk(c);
+  const root = new THREE.Group(); root.visible = false;
+  const mats = [new THREE.MeshBasicMaterial(), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })];
+  let tris = 0;
+  for (const b of buckets.values()) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.a, 3)); geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, mats[b.dbl ? 1 : 0]); m.castShadow = true; m.receiveShadow = false;
+    root.add(m); tris += b.a.length / 9;
+  }
+  for (const o of taken) o.castShadow = false;
+  group.add(root);
+  root.traverse(o => { o.matrixAutoUpdate = false; o.matrixWorldAutoUpdate = false; o.matrixWorld.copy(group.matrixWorld); });
+  root.userData.stats = { from: taken.length, cells: root.children.length, tris };
+  SHADOW_ONLY.push(root);
+  return root;
+}
+// Теневая копия подвижного объекта (машина игрока — полтора десятка мешей): всё, что отбрасывает тень внутри root,
+// одной геометрией в его координатах; копия едет вместе с root. Колёса в ней стоят в исходном положении — в тени
+// их вращение и ход подвески не разглядеть. Убрать: dropShadowProxy().
+const SHADOW_PROXY_MAT = shared(new THREE.MeshBasicMaterial());
+function shadowProxyOf(root) {
+  if (!QUAL.shadows) return null;
+  root.updateMatrixWorld(true);
+  _spInv.copy(root.matrixWorld).invert();
+  const geos = [], taken = [];
+  root.traverse(o => {
+    if (!o.isMesh || !o.castShadow || o.isInstancedMesh || Array.isArray(o.material)) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k);
+    g.morphAttributes = {}; g.clearGroups();
+    g.applyMatrix4(_spM.multiplyMatrices(_spInv, o.matrixWorld));
+    geos.push(g); taken.push(o);
+  });
+  const geo = geos.length ? mergeGeometries(geos) : null;
+  for (const g of geos) g.dispose();
+  if (!geo) return null;
+  for (const o of taken) o.castShadow = false;
+  const m = new THREE.Mesh(geo, SHADOW_PROXY_MAT); m.castShadow = true; m.receiveShadow = false; m.visible = false;
+  root.add(m); SHADOW_ONLY.push(m);
+  return m;
+}
+function dropShadowProxy(m) { const i = SHADOW_ONLY.indexOf(m); if (i >= 0) SHADOW_ONLY.splice(i, 1); }
 
 const _cm = new THREE.Matrix4(), _cq = new THREE.Quaternion(), _cv = new THREE.Vector3(), _cs = new THREE.Vector3();
 function setInstQ(m, i, pos, quat, sx, sy, sz) { _cm.compose(pos, quat, _cs.set(sx, sy, sz)); m.setMatrixAt(i, _cm); }

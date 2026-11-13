@@ -10,9 +10,9 @@
 // Порядок этапов влияет на склейку мешей: проверка — __game.fingerprint('city').worldHash (js/selftest.js).
 // Определяет: buildCity, cityBuildKit, cityBuildWorld.
 // Использует: clamp, rand, lerp (js/core.js); StaticGrid, UNIT_BOX, setInst, DistCull, geoTris, CHUNK_MIN_TRIS,
-//   chunkOrAll, Breakables, optimizeStatic (js/world.js); WATER_U (js/maps/city/textures.js); cityBuildGround
-//   (js/maps/city/ground.js); cityBuildBuildings, cityBuildStructures (js/maps/city/buildings.js); cityBuildLights,
-//   cityBuildProps (js/maps/city/props.js).
+//   chunkOrAll, Breakables, optimizeStatic, buildShadowProxies (js/world.js); WATER_U (js/maps/city/textures.js);
+//   cityBuildGround, LAND_LOD_FAR (js/maps/city/ground.js); cityBuildBuildings, cityBuildStructures
+//   (js/maps/city/buildings.js); cityBuildLights, cityBuildProps (js/maps/city/props.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -66,9 +66,13 @@ function cityBuildKit(K) {
 
 function cityBuildWorld(K) {
   const { D, group, grid, brks, dist, water, decks, updateLights, marks, nightGroup, updateLampFx, resetLampCheck,
-    geysers, updateGeysers } = K;
+    geysers, updateGeysers, landLod } = K;
   // склейка статичных мешей по чанкам и заморозка матриц (js/world.js)
   optimizeStatic(group);
+  // тени неподвижных объектов — одним мешем на клетку карты; сбиваемые объекты отбрасывают тень сами
+  const brkMeshes = new Set();
+  for (const B of brks) for (const E of B.meshes) brkMeshes.add(E.mesh);
+  buildShadowProxies(group, o => brkMeshes.has(o));
 
   /* ---------- интерфейс мира ---------- */
   const roads = D.roadSegs.filter(s => !s.ramp);        // на пандусах эстакады не респауним
@@ -159,7 +163,11 @@ function cityBuildWorld(K) {
     // вечером и ночью включаются огни фонарей (js/sky.js)
     setNight(k) { nightGroup.visible = k > 0; resetLampCheck(); },
     // перед отрисовкой каждой половины экрана: дальность прорисовки мелочи от камеры (x, z)
-    cullView(x, z) { dist.update(x, z); },
+    // и подробность земли парка: дальние чанки — грубой сеткой (LAND_LOD_FAR, js/maps/city/ground.js)
+    cullView(x, z) {
+      dist.update(x, z);
+      for (const L of landLod) { const far = Math.hypot(L.x - x, L.z - z) - L.r > LAND_LOD_FAR; L.hi.visible = !far; L.lo.visible = far; }
+    },
     // дорожный граф для трафика (js/traffic.js)
     trafficData: { nodes: D.nodes, segs: D.segs, rounds: D.landmarks.filter(l => l.kind === 'roundabout'), lit: new Set(D.litNodes.map(n => n.x + ',' + n.z)) },
   };

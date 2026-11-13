@@ -2,13 +2,14 @@
 // cityBuildGround — рельеф по чанкам (цвет вершин по району), вода, дороги с разметкой и «зебрами», брусчатка,
 //   мощёные кромки канала, переулки, разделительные полосы бульваров, тротуары кварталов, фонтан в парке.
 // Порядок этапов — в buildCity() (js/maps/city/build.js).
-// Определяет: cityBuildGround.
+// Определяет: LAND_LOD_STEP, LAND_LOD_FAR, cityBuildGround.
 // Использует: clamp, cyl (js/core.js); makeNoise, mulberry32, CHUNK, smooth01, noiseTexture, instChunks, stdMat,
 //   setInst (js/world.js); Weather (js/weather.js); waterMaterial, laneTexture, zebraTexture, pavingTexture,
 //   flatChunks (js/maps/city/textures.js); cobbleTexture (js/maps/city/landmarks.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
+const LAND_LOD_STEP = 3, LAND_LOD_FAR = 230;   // грубая сетка земли парка: каждая 3-я вершина, если до чанка дальше 230 м
 function cityBuildGround(K) {
   const { D, group, grid, box1, colorBox, xzOf } = K;
   /* ---------- рельеф по чанкам ---------- */
@@ -16,7 +17,7 @@ function cityBuildGround(K) {
   const cGrass = new THREE.Color(0x6c9a45), cPark = new THREE.Color(0x5f9d3f), cSand = new THREE.Color(0xe6d6a6), cPath = new THREE.Color(0xd2bf8e),
     cPort = new THREE.Color(0x8f918f), cDeep = new THREE.Color(0xb59f72), cQuay = new THREE.Color(0x5a5b58);
   const landMat = Weather.wet(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.35);   // в дождь трава и песок чуть темнеют
-  const P = D.PARK;
+  const P = D.PARK, landLod = [];
   for (let cx = -1050; cx < 1050; cx += CHUNK) for (let cz = -1050; cz < 1050; cz += CHUNK) {
     const fine = cx < P.x1 && cx + CHUNK > P.x0 && cz < P.z1 && cz + CHUNK > P.z0;
     const seg = fine ? 150 : 60;
@@ -42,6 +43,22 @@ function cityBuildGround(K) {
     g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     g.computeVertexNormals(); g.computeBoundingSphere();
     const land = new THREE.Mesh(g, landMat); land.receiveShadow = true; group.add(land);
+    if (fine) {
+      // Подробный чанк парка — 45 000 треугольников (сетка 2 м ради холмов и дорожек). Издалека такая сетка не нужна:
+      // второй меш на тех же вершинах берёт каждую третью (6 м, 5 000 треугольников); какой из двух рисовать,
+      // решает cullView() мира по расстоянию до камеры (js/maps/city/build.js). keep — чтобы optimizeStatic их не склеил.
+      const S = LAND_LOD_STEP, n = seg + 1, idx = [];
+      for (let iz = 0; iz < seg; iz += S) for (let ix = 0; ix < seg; ix += S) {
+        const a = ix + n * iz, b = ix + n * (iz + S), c = ix + S + n * (iz + S), d = ix + S + n * iz;
+        idx.push(a, b, d, b, c, d);
+      }
+      const lg = new THREE.BufferGeometry();
+      for (const k of Object.keys(g.attributes)) lg.setAttribute(k, g.attributes[k]);
+      lg.setIndex(idx); lg.boundingSphere = g.boundingSphere.clone();
+      const lo = new THREE.Mesh(lg, landMat); lo.receiveShadow = true; lo.visible = false; group.add(lo);
+      land.userData.keep = lo.userData.keep = true;
+      landLod.push({ hi: land, lo, x: g.boundingSphere.center.x, z: g.boundingSphere.center.z, r: g.boundingSphere.radius });
+    }
   }
   const water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), waterMaterial(0x2477b5));
   water.rotation.x = -Math.PI / 2; water.position.y = D.WATER; water.userData.dynamic = true; group.add(water);
@@ -127,5 +144,5 @@ function cityBuildGround(K) {
     group.add(f);
     grid.addCircle(x, z, 7.3, 1.4);
   }
-  Object.assign(K, { water });
+  Object.assign(K, { water, landLod });
 }

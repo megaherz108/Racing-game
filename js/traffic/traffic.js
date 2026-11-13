@@ -10,7 +10,7 @@
 // Этот файл — объект Traffic: запуск, появление и исчезновение машин, удары, отрисовка (InstancedMesh по типам).
 // Вождение ботов (полосы, уступить дорогу, светофоры, дистанция, preStep) — js/traffic/driver.js.
 // Определяет: TRAFFIC_FAR, TRAFFIC_NEAR, TRAFFIC_SHADOW_R, shadowBefore, shadowAfter, Traffic.
-// Использует: CARS (js/data.js); clamp (js/core.js); buildCarModel (js/car-models.js); scene (js/world.js); PH,
+// Использует: CARS (js/data.js); clamp, QUAL (js/core.js); buildCarModel (js/car-models.js); scene (js/world.js); PH,
 //   FIXED, cars, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, flipKick (js/physics.js); buildTrafficGraph, lanePoint
 //   (js/traffic/graph.js); buildTaxiModel, buildBusModel, buildTruckModel, mergeBakedParts, bakeModel, TRAFFIC_TYPES
 //   (js/traffic/models.js).
@@ -266,11 +266,12 @@ const Traffic = {
 
   // перед отрисовкой экрана игрока (камера cam, игрок в x, z): в буферы экземпляров попадают только машины,
   // которые видит эта камера, плюс ближние (их тени могут упасть в кадр). Дальше R не рисуем: это трафик вокруг
-  // другого игрока, почти растворённый в тумане.
-  cullView(cam, x, z, R = 520) {
+  // другого игрока, почти растворённый в тумане. R — из настройки качества (на «Минимуме» ближе). Без теней
+  // (качество «Минимум») теневые меши пусты.
+  cullView(cam, x, z, R = QUAL.trafficR) {
     cam.updateMatrixWorld();
     _tfr.setFromProjectionMatrix(_tpm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
-    const R2 = R * R, S2 = TRAFFIC_SHADOW_R * TRAFFIC_SHADOW_R;
+    const R2 = R * R, S2 = QUAL.shadows ? TRAFFIC_SHADOW_R * TRAFFIC_SHADOW_R : -1;
     for (const B of this.batches) {
       const M = B.matrix.array, C = B.color && B.color.array, SM = B.shadow.instanceMatrix.array;
       let k = 0, ks = 0;

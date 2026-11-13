@@ -12,7 +12,7 @@ const QUAL = QUALITY[save.quality];                 // настройка кач
 const renderer = new THREE.WebGLRenderer({ antialias: QUAL.aa });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * QUAL.scale);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = QUAL.shadows;           // на «Минимуме» выключено: шейдеры собираются без выборки тени
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;

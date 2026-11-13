@@ -116,8 +116,13 @@ const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';
 // Низкое — для слабых видеокарт: на встроенной Radeon 680M при 1920×1200 кадр почти вдвое дешевле для видеокарты.
 // rain — сколько капель дождя вокруг каждой камеры; fx — доля пыли и брызг из-под колёс (крупные полупрозрачные
 // частицы перед камерой — главная нагрузка на заполнение пикселей); trails — светящиеся следы задних фонарей.
-const QUALITY = { high: { label: 'Высокое', aa: true, scale: 1, rain: 3200, fx: 1, trails: true },
-  low: { label: 'Низкое', aa: false, scale: 0.8, rain: 1600, fx: 0.5, trails: true } };
+// shadows — тени от солнца (карта теней, теневые копии; выключение задаётся до первой отрисовки), blobs — вместо
+// них тёмные пятна под машинами (js/blobs.js); lacquer — лаковый слой на кузовах игроков; trafficR — дальше скольких
+// метров от игрока не рисуется трафик (Traffic.cullView). Минимум — самое дешёвое для видеокарты, ценой картинки.
+const QUALITY = {
+  high: { label: 'Высокое', aa: true, scale: 1, rain: 3200, fx: 1, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520 },
+  low: { label: 'Низкое', aa: false, scale: 0.8, rain: 1600, fx: 0.5, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520 },
+  min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350 } };
 const cleanQuality = q => QUALITY[q] ? q : 'high';
 const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla' });
 const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high' });

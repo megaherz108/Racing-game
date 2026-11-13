@@ -2,9 +2,9 @@
 // enterEdge/enterTurn — маршрут по полосам и выбор поворота; blocked, conflicts, oncoming, exitBlocked — кто кому
 //   уступает; scanAhead — дистанция до машин и игроков впереди; preStep(dt) — скорость и поворот перед шагом физики.
 // Определяет: Traffic.enterEdge, Traffic.enterTurn, Traffic.blocked, Traffic.conflicts, Traffic.oncoming,
-//   Traffic.exitBlocked, Traffic.scanAhead, Traffic.preStep.
+//   Traffic.exitBlocked, Traffic.scanAhead, Traffic.checkFlat, Traffic.preStep.
 // Использует: clamp (js/core.js); angLerp (js/world.js); cars, simTime (js/physics.js); tPiece, lanePoint, turnPiece,
-//   tPieceProject, trafficLight, tPieceAt (js/traffic/graph.js); Traffic, TRAFFIC_NEAR, TRAFFIC_FAR
+//   tPieceAt, tPieceProject, trafficLight (js/traffic/graph.js); Traffic, TRAFFIC_NEAR, TRAFFIC_FAR
 //   (js/traffic/traffic.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -112,6 +112,23 @@ Object.assign(Traffic, {
     return best;
   },
 
+  // Ровный ли участок маршрута бота: высота поверхности через каждые 3 м вдоль участка (на уровне, где бот сейчас).
+  // Ровный — tc.flatY = высота, иначе null (мосты, пандусы эстакады, холмы). Проверяется раз на участок.
+  checkFlat(tc) {
+    const p = tc.piece, w = this.world;
+    tc.flatOf = p; tc.flatY = null;
+    if (tc.kind === 'lane' && tc.e.bridge) return;
+    let lo = Infinity, hi = -Infinity;
+    for (let s = 0; ; s += 3) {
+      tPieceAt(p, Math.min(s, p.len), _tp);
+      const y = w.surface(_tp[0], _tp[1], tc.y + 1.5);
+      if (y < lo) lo = y; if (y > hi) hi = y;
+      if (hi - lo > 0.03) return;
+      if (s >= p.len) break;
+    }
+    tc.flatY = (lo + hi) / 2;
+  },
+
   preStep(dt) {
     if (!this.list.length) return;
     const w = this.world;
@@ -170,16 +187,22 @@ Object.assign(Traffic, {
       const dl = Math.hypot(dx, dz);
       if (dl > 0.3) { dx /= dl; dz /= dl; tc.h = angLerp(tc.h, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       else { dx = Math.sin(tc.h); dz = Math.cos(tc.h); }
-      // наклон по рельефу (горбатые мосты)
-      const fx = Math.sin(tc.h), fz = Math.cos(tc.h), hl = tc.L * 0.4;
-      const yF = w.surface(tc.x + fx * hl, tc.z + fz * hl, tc.y + 1.5), yB = w.surface(tc.x - fx * hl, tc.z - fz * hl, tc.y + 1.5);
-      const slope = (yF - yB) / (hl * 2);
+      // наклон по рельефу (горбатые мосты). На ровном участке (обычная улица) высота одна на весь участок —
+      // рельеф не опрашиваем: три вызова surface() на бота были третью всей работы водителей
+      if (tc.flatOf !== tc.piece) this.checkFlat(tc);
+      const flat = tc.flatY !== null;
+      let slope = 0;
+      if (!flat) {
+        const fx = Math.sin(tc.h), fz = Math.cos(tc.h), hl = tc.L * 0.4;
+        const yF = w.surface(tc.x + fx * hl, tc.z + fz * hl, tc.y + 1.5), yB = w.surface(tc.x - fx * hl, tc.z - fz * hl, tc.y + 1.5);
+        slope = (yF - yB) / (hl * 2);
+      }
       _tq.setFromEuler(_te.set(-Math.atan(slope), tc.h, 0));
       // физический LOD: вдали от обоих игроков бот едет без тела Rapier — просто по маршруту
       // (столкнуться там не с кем, а 180 живых тел заметно нагружают физику)
       let dmin = Infinity; for (const c of cars) dmin = Math.min(dmin, (c.x - tc.x) ** 2 + (c.z - tc.z) ** 2);
       if (far) {
-        tc.x += dx * tc.v * dt; tc.z += dz * tc.v * dt; tc.y = w.surface(tc.x, tc.z, tc.y + 1.5);
+        tc.x += dx * tc.v * dt; tc.z += dz * tc.v * dt; tc.y = flat ? tc.flatY : w.surface(tc.x, tc.z, tc.y + 1.5);
         tc.q.copy(_tq);
         if (dmin < TRAFFIC_NEAR * TRAFFIC_NEAR) {
           tc.far = false; b.setEnabled(true);
@@ -191,7 +214,7 @@ Object.assign(Traffic, {
       }
       if (dmin > TRAFFIC_FAR * TRAFFIC_FAR) { tc.far = true; tc.q.copy(_tq); b.setEnabled(false); continue; }
       // высота: тянемся к поверхности дороги (рельеф или настил моста) — с рельефом тело не сталкивается
-      const gy = w.surface(tc.x, tc.z, tc.y + 1.5);
+      const gy = flat ? tc.flatY : w.surface(tc.x, tc.z, tc.y + 1.5);
       b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
       b.setLinvel({ x: dx * tc.v, y: slope * tc.v + clamp((gy - tc.y) * 8, -12, 6), z: dz * tc.v }, true);
     }

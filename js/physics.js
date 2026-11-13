@@ -2,12 +2,12 @@
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
 // Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
-//   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, stepWorld.
-// Использует: derive, PLAYER_COLORS, NITRO, HANDLING, KO_REWARD (js/data.js); MAT, lerp, clamp, rand (js/core.js);
-//   buildCarModel, disposeTree (js/car-models.js); scene, smooth01 (js/world.js); world (js/maps/registry.js);
-//   sparks, smoke, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic
-//   (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins, keys (js/ui.js); Feel (js/feel.js); Stunts
-//   (js/stunts.js).
+//   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
+// Использует: derive, PLAYER_COLORS, NITRO, HANDLING, KO_REWARD (js/data.js); QUAL, MAT, lerp, clamp, rand
+//   (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01, dropShadowProxy
+//   (js/world.js); world (js/maps/registry.js); sparks, smoke, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound
+//   (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins, keys (js/ui.js); Feel
+//   (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -165,7 +165,7 @@ class Car {
     this.L = g.L; this.W = g.W; this.H = g.H; this.wb = g.axF - g.axR; this.g = g;
     this.cr = g.W / 2;
     const span = g.L - g.W; this.cOff = [-span / 2, 0, span / 2];
-    this.model = buildCarModel(def, def.paints[p], { lacquer: true, bumpers: true });   // лак и отрываемые бамперы
+    this.model = buildCarModel(def, def.paints[p], { lacquer: QUAL.lacquer, bumpers: true });   // лак (кроме «Минимума») и отрываемые бамперы
     scene.add(this.model.root);
     // свои задние фонари: стоп-сигналы разгораются при торможении (общий MAT.tail — у трафика)
     this.tailMat = MAT.tail.clone(); this.tailMat.userData = {};
@@ -173,6 +173,7 @@ class Car {
     this.fx = new CarFx(this);             // фонари заднего хода, ореолы, след фонарей, вмятины (js/carfx.js)
     const mk = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.75, 4), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[p] }));
     mk.rotation.x = Math.PI; mk.layers.set(p + 1); this.model.root.add(mk); this.marker = mk;
+    this.shadowProxy = shadowProxyOf(this.model.root);   // тень машины — одним мешем вместо полутора десятков (js/world.js)
 
     // кузов: начало координат тела совпадает с началом модели (уровень земли под колёсами)
     this.body = rw.createRigidBody(R.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.3).setLinearDamping(0.02).setCanSleep(false));
@@ -431,6 +432,7 @@ class Car {
   }
   dispose() {
     this.fx.dispose();
+    dropShadowProxy(this.shadowProxy);
     scene.remove(this.model.root); disposeTree(this.model.root);
     if (PH.rw && PH.rw.getRigidBody(this.body.handle)) {
       PH.info.delete(this.collider.handle);
@@ -582,14 +584,16 @@ function readInput(p) {
 }
 
 const FIXED = 1 / 120;
-let accum = 0;
+let accum = 0, brkTick = 0;
 function stepWorld(dt) {
   ensurePhysics();
   simTime += dt;
   const live = countdown <= 0;
   for (const c of cars) c.control(dt, live ? readInput(c.p) : NO_INPUT);
   Traffic.preStep(dt);
-  knockBreakables(dt);
+  // сбиваемые объекты — через шаг (60 Гц): за 1/60 с машина проезжает не больше 1,5 м, а запас «дотягивания» в
+  // knockBreakables растёт вместе с dt, так что ничего не проскакивает
+  if ((brkTick ^= 1)) knockBreakables(dt * 2);
   PH.rw.step(PH.events);
   handleContacts();
   Traffic.postStep(dt);
