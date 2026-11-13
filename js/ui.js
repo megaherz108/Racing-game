@@ -4,8 +4,8 @@
 //   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
 //   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, openMaps, setPaused, raceEndOpen,
 //   closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, carIndex, RACE_REWARD, RACE_CPS, PLAY_MAP, MODES,
-//   QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, carIndex, RACE_REWARD, RACE_CP_REWARD, RACE_CPS,
+//   PLAY_MAP, MODES, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
 //   (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins
 //   (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused,
 //   countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf (js/main.js).
@@ -84,7 +84,7 @@ function updateHUD() {
 }
 
 // мини-карта, повёрнутая по направлению машины
-const MM_R = 120;
+const MM_R = 173;                        // радиус обзора, м (больше — мельче масштаб)
 const PCSS = ['#38c8ff', '#ff8a2a'];
 function drawMinimap(p) {
   const { mm, mmx: ctx } = HUD[p], S = mm.width, c = cars[p], o = cars[1 - p];
@@ -168,8 +168,8 @@ const MODE_INFO = {
     desc: 'Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал.' },
   solo: { name: 'Одиночная езда', tag: '1 игрок · монеты +1',
     desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками.' },
-  race: { name: 'Гонка · чекпоинты', tag: `Победителю +${RACE_REWARD} · монеты +1`,
-    desc: `По городу расставлены ${RACE_CPS} больших светящихся арок. Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. По дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.` },
+  race: { name: 'Гонка · чекпоинты', tag: `Победителю +${RACE_REWARD} · чекпоинт +${RACE_CP_REWARD}`,
+    desc: `По городу расставлены ${RACE_CPS} больших светящихся арок. Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. За каждую арку +${RACE_CP_REWARD}, по дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.` },
 };
 function drawModePreview(cv, mode) {
   const ctx = cv.getContext('2d'), D = getData(PLAY_MAP), S = cv.width, sc = S / (2 * D.mmExt);

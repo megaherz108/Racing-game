@@ -1,10 +1,11 @@
 // Режим «Гонка»: по городу расставлены RACE_CPS больших светящихся арок-чекпоинтов. Их нужно проехать по порядку
-// быстрее соперника (путь между ними — любой); победитель получает RACE_REWARD монет.
+// быстрее соперника (путь между ними — любой); за каждую арку — RACE_CP_REWARD монет, победителю — ещё RACE_REWARD.
+// Видна только следующая арка (и в 3D, и на мини-карте).
 // 3D-стрелка вверху половины экрана показывает на следующий чекпоинт.
 // Определяет: CP_R, CP_COL, CP_FIN, CP_LAYER, Race.
-// Использует: RACE_CPS, RACE_REWARD (js/data.js); clamp, renderer, rand (js/core.js); scene (js/world.js); world
-//   (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars (js/physics.js); cams, countdown, paused
-//   (js/match.js); $, HUD, notify, addCoins, keys (js/ui.js).
+// Использует: RACE_CPS, RACE_CP_REWARD, RACE_REWARD (js/data.js); clamp, renderer, rand (js/core.js); scene
+//   (js/world.js); world (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars (js/physics.js);
+//   cams, countdown, paused (js/match.js); $, HUD, addCoins, notify, keys (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -82,21 +83,20 @@ const Race = (() => {
     film: new THREE.CircleGeometry(CP_R, 48, 0, Math.PI),
     ring: new THREE.RingGeometry(CP_R - 0.8, CP_R, 72).rotateX(-Math.PI / 2).translate(0, 0.25, 0),
   };
-  // faint — следующая за текущей арка: видна бледно, чтобы было понятно, куда ехать дальше
-  function makeGate(p, faint) {
+  function makeGate(p) {
     const g = new THREE.Group(), mats = [];
     const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.layers.set(CP_LAYER(p)); m.frustumCulled = false; m.renderOrder = 2; g.add(m); mats.push(mat); return m; };
-    add(GEO.pillar, glow(faint ? 0.12 : 0.45, { map: fadeTex }));
-    add(GEO.arch, faint ? glow(0.35) : new THREE.MeshBasicMaterial({ fog: false }));
-    const film = add(GEO.film, glow(faint ? 0.04 : 0.13));
-    const ring = add(GEO.ring, glow(faint ? 0.3 : 0.85));
-    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex('1'), transparent: true, depthWrite: false, fog: false, opacity: faint ? 0.55 : 1 }));
-    label.scale.set(faint ? 7 : 10, faint ? 2.6 : 3.75, 1); label.position.y = CP_R + 4.5; label.layers.set(CP_LAYER(p)); label.renderOrder = 3;
+    add(GEO.pillar, glow(0.45, { map: fadeTex }));
+    add(GEO.arch, new THREE.MeshBasicMaterial({ fog: false }));
+    const film = add(GEO.film, glow(0.13));
+    const ring = add(GEO.ring, glow(0.85));
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex('1'), transparent: true, depthWrite: false, fog: false }));
+    label.scale.set(10, 3.75, 1); label.position.y = CP_R + 4.5; label.layers.set(CP_LAYER(p)); label.renderOrder = 3;
     g.add(label);
     g.visible = false; scene.add(g);
-    return { g, mats, film, ring, label, faint, base: [faint ? 0.04 : 0.13, faint ? 0.3 : 0.85] };
+    return { g, mats, film, ring, label, base: [0.13, 0.85] };
   }
-  const gates = [0, 1].map(p => ({ cur: makeGate(p, false), next: makeGate(p, true) }));
+  const gates = [0, 1].map(p => ({ cur: makeGate(p) }));
   function showGate(G, i, cam, t) {
     if (i >= st.cps.length) { G.g.visible = false; return; }
     const cp = st.cps[i], fin = i === st.cps.length - 1;
@@ -158,7 +158,7 @@ const Race = (() => {
   function start(on) {
     st.on = on; st.prog = [0, 0]; st.fin = [null, null]; st.time = 0; st.winner = -1; st.endT = 0; st.done = false;
     st.cps = on ? makeRoute() : [];
-    for (const G of gates) { G.cur.g.visible = false; G.next.g.visible = false; }
+    for (const G of gates) G.cur.g.visible = false;
     $('raceEnd').classList.add('hidden');
     for (let p = 0; p < 2; p++) HUD[p].race.classList.toggle('hidden', !on);
     $('hud').classList.toggle('racing', on);
@@ -167,10 +167,11 @@ const Race = (() => {
   function pass(p) {
     const c = cars[p];
     st.prog[p]++;
+    addCoins(p, RACE_CP_REWARD);
     for (let k = 0; k < 18; k++) sparks.spawn(c.x, c.y + 1.2, c.z, rand(-5, 5), rand(2, 7), rand(-5, 5), 0.5, 0.05, 0.6, st.prog[p] === RACE_CPS ? 0xffd84a : 0x6dffb8, 1, 8);
     if (st.prog[p] < RACE_CPS) {
       Sound.coin(p);
-      notify(p, `Чекпоинт ${st.prog[p]} / ${RACE_CPS} · ${fmt(st.time)}`, 'good');
+      notify(p, `Чекпоинт ${st.prog[p]} / ${RACE_CPS} · ${fmt(st.time)} · +${RACE_CP_REWARD}`, 'good');
       return;
     }
     st.fin[p] = st.time;
@@ -200,7 +201,6 @@ const Race = (() => {
       }
       const G = gates[p];
       showGate(G.cur, st.fin[p] === null ? st.prog[p] : RACE_CPS, cams[p], t);
-      showGate(G.next, st.fin[p] === null ? st.prog[p] + 1 : RACE_CPS, cams[p], t);
     }
     // после финиша победителя у соперника ещё несколько секунд, затем итоги
     if (st.winner >= 0 && !st.done && (st.time - st.endT > 4 || st.fin[1 - st.winner] !== null && st.time - st.endT > 1.5)) showResults();
@@ -233,27 +233,20 @@ const Race = (() => {
     if (!st.on || st.winner < 0) return '';
     return st.winner === p ? 'ПОБЕДА!' : st.fin[p] !== null ? 'ФИНИШ' : '';
   }
-  // мини-карта: следующая арка (на краю круга, если далеко) и бледно — та, что после неё
+  // мини-карта: только следующая арка (на краю круга, если далеко)
   function minimap(ctx, p, R, k) {
     if (!st.on || st.fin[p] !== null) return;
     const c = cars[p], cs = Math.cos(c.h), sn = Math.sin(c.h);
-    for (const j of [1, 0]) {
-      const i = st.prog[p] + j, cp = st.cps[i];
-      if (!cp) continue;
-      const dx = (c.x - cp.x) * k, dz = (c.z - cp.z) * k;
-      let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
-      const d = Math.hypot(x, y), lim = R - 9;
-      if (d > lim) { if (j) continue; x *= lim / d; y *= lim / d; }
-      const col = i === RACE_CPS - 1 ? '#ffd23a' : '#35ffa0';
-      ctx.globalAlpha = j ? 0.45 : 1;
-      ctx.fillStyle = col; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, j ? 5 : 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      if (!j) {
-        ctx.fillStyle = '#0b1a12'; ctx.font = "bold 10px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(i === RACE_CPS - 1 ? 'F' : String(i + 1), x, y + 0.5);
-      }
-    }
-    ctx.globalAlpha = 1;
+    const i = st.prog[p], cp = st.cps[i];
+    if (!cp) return;
+    const dx = (c.x - cp.x) * k, dz = (c.z - cp.z) * k;
+    let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
+    const d = Math.hypot(x, y), lim = R - 9;
+    if (d > lim) { x *= lim / d; y *= lim / d; }
+    ctx.fillStyle = i === RACE_CPS - 1 ? '#ffd23a' : '#35ffa0'; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0b1a12'; ctx.font = "bold 10px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(i === RACE_CPS - 1 ? 'F' : String(i + 1), x, y + 0.5);
   }
   return { start, stop, update, drawArrow, hud, big, minimap, get on() { return st.on; }, get done() { return st.done; }, st };
 })();
