@@ -1,11 +1,11 @@
 // Камеры и запуск заезда
 // Определяет: cams, camYaw, camDist, camOff, camFov, camRoll, speedFrac, placeCam, STREAK_N, streaks, updateStreaks,
 //   state, paused, countdown, startMatch, endMatch.
-// Использует: save, PLAY_MAP, CARS, browse, TRAFFIC_LEVELS (js/data.js); lerp, rand, clamp (js/core.js); smooth01,
-//   angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld (js/maps/registry.js);
-//   clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car, simTime, accum
-//   (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState (js/ui.js); Race
-//   (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js); resize (js/main.js).
+// Использует: save, PLAY_MAP, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp (js/core.js);
+//   smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld
+//   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
+//   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
+//   (js/ui.js); Race (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js); resize (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -117,7 +117,7 @@ function startMatch(mode = save.mode, mapId = PLAY_MAP) {
     Traffic.start(world, (TRAFFIC_LEVELS.find(l => l[0] === save.traffic) || TRAFFIC_LEVELS[2])[2]);
     if (world.reset) world.reset();
     clearSkids(); smoke.clear(); sparks.clear();
-    resetCoins(mode === 'race' ? 0 : world.coinCount);     // в гонке монет на дорогах нет — награда за победу
+    resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));
     Race.start(mode === 'race');
     Stunts.reset(); Feel.reset();
     simTime = 0; accum = 0; countdown = 3.2;

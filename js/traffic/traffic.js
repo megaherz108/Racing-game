@@ -184,7 +184,7 @@ const Traffic = {
       if (dmin < minD) continue;
       if (this.list.some(o => o !== tc && !o.dead && (o.x - x) ** 2 + (o.z - z) ** 2 < 13 * 13)) continue;
       this.enterEdge(tc, e, l, s - e.s0);
-      const y = this.world.surface ? this.world.surface(x, z, e.bridge ? Infinity : 1) : this.world.ground(x, z);
+      const y = this.world.surface ? this.world.surface(x, z, e.bridge || e.ov ? Infinity : 1) : this.world.ground(x, z);
       tc.h = Math.atan2(e.fx, e.fz); tc.x = x; tc.z = z; tc.y = y;
       const b = tc.body;
       b.setEnabled(true);

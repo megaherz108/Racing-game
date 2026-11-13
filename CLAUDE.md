@@ -20,7 +20,7 @@
 | `js/world.js` | сцена, шум, `StaticGrid` (коллизии), `Breakables`, мини-карта, инстансы, чанки, `optimizeStatic`, `Decks` (мосты), шейдер фасадов |
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |
 | `js/maps/registry.js` | список карт, `getData()` / `getWorld()` / `activateWorld()`, текущий `world` |
-| `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`; постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
+| `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |

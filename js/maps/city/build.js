@@ -108,6 +108,8 @@ function cityBuildWorld(K) {
   return {
     id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, surfaceKind, soundAt, geysers, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
     sky: 0x9fd3f7, fog: [280, 760], coinCount: 100,
+    // монеты на постоянных местах: дуги над трамплинами эстакады и крыши посадки (js/maps/city/overpass.js)
+    coinFixed: D.coinFixed,
     // старт на набережной канала у подножия западного пандуса, лицом к эстакаде (на север);
     // направо по набережной — разводной мост-трамплин
     spawns: [[-316.5, 38, 0], [-323.5, 38, 0]],
@@ -169,6 +171,7 @@ function cityBuildWorld(K) {
       for (const L of landLod) { const far = Math.hypot(L.x - x, L.z - z) - L.r > LAND_LOD_FAR; L.hi.visible = !far; L.lo.visible = far; }
     },
     // дорожный граф для трафика (js/traffic.js)
-    trafficData: { nodes: D.nodes, segs: D.segs, rounds: D.landmarks.filter(l => l.kind === 'roundabout'), lit: new Set(D.litNodes.map(n => n.x + ',' + n.z)) },
+    trafficData: { nodes: D.nodes, segs: D.segs, rounds: D.landmarks.filter(l => l.kind === 'roundabout'), lit: new Set(D.litNodes.map(n => n.x + ',' + n.z)),
+      ov: D.ovTraffic },
   };
 }

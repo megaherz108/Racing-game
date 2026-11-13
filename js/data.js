@@ -1,7 +1,7 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, derive, HANDLING, KMH, NITRO, TIMES, cleanTime, PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY,
-//   MAP_IDS, KO_REWARD, MODES, PLAY_MAP, RACE_CPS, RACE_REWARD, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality,
-//   defaultPlayer, defaultSave, cleanPlayer, loadSave, save, persist, carIndex, browse.
+//   MAP_IDS, KO_REWARD, MODES, PLAY_MAP, RACE_CPS, RACE_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY,
+//   cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -107,7 +107,9 @@ const KO_REWARD = 5;
 // solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1)
 const MODES = ['free', 'solo', 'race'];
 const PLAY_MAP = 'city';
-const RACE_CPS = 10, RACE_REWARD = 10;   // чекпоинтов в гонке и награда победителю
+const RACE_CPS = 10, RACE_REWARD = 25;   // чекпоинтов в гонке и награда победителю
+// сколько монет на дорогах в каждом режиме: множитель к world.coinCount карты
+const COIN_MUL = { free: 1.5, solo: 1.5, race: 1 };
 // интенсивность городского трафика: id, подпись, число машин вокруг игроков
 const TRAFFIC_LEVELS = [['off', 'Выкл', 0], ['low', 'Мало', 40], ['mid', 'Средне', 90], ['high', 'Много', 180]];
 const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';

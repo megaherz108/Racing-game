@@ -197,17 +197,25 @@ function wheelFx(car, k, wx, wy, wz, onDeck, skidding, speed, dt) {
   }
 }
 
-// монеты: две InstancedMesh (диск + ободок) на все монеты карты
-const COIN_MAX = 100;
+// монеты: две InstancedMesh (диск + ободок) на все монеты карты.
+// Случайные (world.coinSpot) после сбора появляются в новом месте, постоянные (world.coinFixed: дуги над трамплинами,
+// крыши) — на своём же месте
+const COIN_MAX = 200;
 const coinMat = new THREE.MeshStandardMaterial({ color: 0xffc83a, metalness: 1, roughness: 0.25, emissive: 0x6b4800, emissiveIntensity: 0.7 });
 const coinDisc = inst(new THREE.CylinderGeometry(0.6, 0.6, 0.14, 24).rotateX(Math.PI / 2), coinMat, COIN_MAX);
 const coinRim = inst(new THREE.TorusGeometry(0.6, 0.06, 6, 24), coinMat, COIN_MAX, false);
 scene.add(coinDisc, coinRim);
 let coins = [];
-function spawnCoin(c) { const [x, z, y] = world.coinSpot(); c.x = x; c.z = z; c.y = y ?? world.ground(x, z); c.active = true; }
+function spawnCoin(c) {
+  if (c.fixed) { [c.x, c.y, c.z] = c.fixed; c.active = true; return; }
+  const [x, z, y] = world.coinSpot(); c.x = x; c.z = z; c.y = y ?? world.ground(x, z); c.active = true;
+}
 function resetCoins(n = world.coinCount) {
   coins = [];
+  const fixed = n > 0 ? (world.coinFixed || []).slice(0, COIN_MAX) : [];   // n = 0 — монет нет совсем
+  n = Math.min(n, COIN_MAX - fixed.length);
   for (let i = 0; i < n; i++) { const c = { phase: Math.random() * 6, timer: 0 }; spawnCoin(c); coins.push(c); }
+  for (const f of fixed) { const c = { phase: Math.random() * 6, timer: 0, fixed: f }; spawnCoin(c); coins.push(c); }
   coinDisc.count = coinRim.count = coins.length;
 }
 function updateCoins3D(dt, t) {

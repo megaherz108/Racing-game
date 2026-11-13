@@ -26,16 +26,23 @@ function buildTrafficGraph(td) {
   const nodes = new Map(), edges = [];
   for (const n of td.nodes) if (n.deg > 0) nodes.set(n.x + ',' + n.z, { x: n.x, z: n.z, wx: n.wx, wz: n.wz, out: [], occ: new Set(), lit: td.lit.has(n.x + ',' + n.z), round: 0 });
   for (const r of td.rounds) { const n = nodes.get(r.x + ',' + r.z); if (n) n.round = r.r + 2.4; }
-  for (const s of td.segs) {
-    if (s.kind === 'draw' || s.ramp) continue;               // разводной мост и пандусы эстакады — не для трафика
-    const a = nodes.get(s.x0 + ',' + s.z0), b = nodes.get(s.x1 + ',' + s.z1);
-    if (!a || !b) continue;
+  const addSeg = (s, a, b, ov = false) => {
+    if (!a || !b) return;
     for (const [A, B] of [[a, b], [b, a]]) {
       const dx = B.x - A.x, dz = B.z - A.z, len = Math.hypot(dx, dz);
       const lanes = s.w >= 22 ? [3.2, 7.6] : s.w >= 20 ? [2.9, 6.9] : [3.5];
-      const e = { A, B, fx: dx / len, fz: dz / len, len, axis: s.dir, lanes, bridge: s.kind === 'bridge' };
+      const e = { A, B, fx: dx / len, fz: dz / len, len, axis: s.dir, lanes, bridge: s.kind === 'bridge', ov };
       A.out.push(e); edges.push(e);
     }
+  };
+  for (const s of td.segs) {
+    if (s.kind === 'draw' || s.ramp) continue;               // разводной мост и пандусы эстакады — отдельно (ниже) или без трафика
+    addSeg(s, nodes.get(s.x0 + ',' + s.z0), nodes.get(s.x1 + ',' + s.z1));
+  }
+  // эстакада: свои узлы над наземными перекрёстками (ключи 'ov:x,z'), без светофоров; рёбра — пандусы и настил
+  if (td.ov) {
+    for (const n of td.ov.nodes) nodes.set(n.key, { x: n.x, z: n.z, wx: n.wx, wz: n.wz, out: [], occ: new Set(), lit: false, round: 0 });
+    for (const s of td.ov.segs) addSeg(s, nodes.get(s.a), nodes.get(s.b), true);
   }
   // начало и конец полосы — у краёв перекрёстков (за «зеброй»)
   const off = (n, e) => (e.axis === 'z' ? n.wz : n.wx) / 2 + (n.out.length >= 3 ? 4.6 : 1.2);

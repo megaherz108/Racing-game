@@ -281,7 +281,7 @@ function cityPlanKit(C) {
   }
   Object.assign(C, { towers, caps, units, slants, spires, plain, roofs, neon, pools, containers, solids, trees,
     palms, slabs, lamps, umbrellas, domes, pyramids, rtanks, helipads, medians, alleys, landmarks, mmShapes, keepOut,
-    avoid, deckPlan, lanes, hits, blocked, PAL, fillDowntown, fillCity, fillOld, arch, specialData, fillPort,
+    avoid, deckPlan, lanes, hits, blocked, PAL, tower, fillDowntown, fillCity, fillOld, arch, specialData, fillPort,
     fillResort, fillSuburb });
 }
 

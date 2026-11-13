@@ -88,6 +88,7 @@ Object.assign(Traffic, {
     let ex = 0, ez = 0, efx = 0, efz = 0;
     if (P) { const a = P.pts[P.pts.length - 2], b = P.pts[P.pts.length - 1]; ex = b[0]; ez = b[1]; efx = tc.ne.fx; efz = tc.ne.fz; }
     const test = (o, ox, oz, ohw, ohl) => {
+      if (Math.abs(o.y - tc.y) > 3) return;           // на другом уровне: под эстакадой или на ней
       const dx = ox - tc.x, dz = oz - tc.z;
       let fwd = dx * fx + dz * fz, lat;
       if (P ? dx * dx + dz * dz > 45 * 45 : fwd <= 0 || fwd > 40) return;

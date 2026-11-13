@@ -105,7 +105,7 @@ function cityBuildGround(K) {
   }
   // проезды-срезки сквозь кварталы и разметка на эстакаде
   for (const L of D.lanes) Q.lane10.push({ cx: (L.x0 + L.x1) / 2, cz: (L.z0 + L.z1) / 2, dir: 'z', len: L.z1 - L.z0, wid: L.x1 - L.x0, y: Y, mode: 'lane' });
-  for (const [x0, z0, x1, z1] of D.ovRuns)
+  for (const [x0, z0, x1, z1] of D.ovMarks)
     Q.ov.push({ cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, dir: x0 === x1 ? 'z' : 'x', len: Math.hypot(x1 - x0, z1 - z0), wid: D.OV.W, y: D.OV.H + 0.02, mode: 'lane' });
   for (const k of Object.keys(Q)) flatChunks(group, Weather.wet(mats[k]), Q[k]);
   // кривые переулки: лента по ломаной поверх тротуара

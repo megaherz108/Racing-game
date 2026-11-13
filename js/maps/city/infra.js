@@ -7,7 +7,7 @@
 //   Проверка: __game.fingerprint('city').dataHash до и после правки (js/selftest.js).
 // Порядок этапов — в cityData() (js/maps/city/plan.js).
 // Определяет: cityPlanInfra, cityPlanPort.
-// Использует: lerp (js/core.js); shuffle (js/world.js).
+// Использует: lerp (js/core.js); shuffle (js/world.js); ovStuntCuts, ovSpans (js/maps/city/overpass.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -20,16 +20,22 @@ function cityPlanInfra(C) {
   const OV = { H: 9, W: 16, R: 28, X: 320, Z: 520, Z0: 47, Z1: 113 };
   const ovRuns = [[-OV.X, OV.Z1, -OV.X, OV.Z - OV.R], [-OV.X + OV.R, OV.Z, OV.X - OV.R, OV.Z], [OV.X, OV.Z - OV.R, OV.X, OV.Z1]];
   const ovPillars = [], ovArcs = [];
+  // трюки (js/maps/city/overpass.js): где ограждение вырезано под трамплины и съезды (cuts) и где нет настила (holes)
+  const ST = ovStuntCuts(OV);
+  const rail = (ax, az, bx, bz, y0, y1, ext) => {               // плита ограждения без вырезанных кусков
+    for (const [t0, t1] of ovSpans(ax, az, bx, bz, ST.cuts)) deckPlan.push({ kind: 'slab', p0: [lerp(ax, bx, t0), lerp(y0, y1, t0) + 1.05, lerp(az, bz, t0)],
+      p1: [lerp(ax, bx, t1), lerp(y0, y1, t1) + 1.05, lerp(az, bz, t1)], w: 0.4, t: 1.4, walk: false, mat: 'rail', ext });
+  };
   const ovRails = (x0, z0, x1, z1, y0, y1, ext = 0) => {      // ограждения по обеим сторонам настила
     const L = Math.hypot(x1 - x0, z1 - z0), dx = (x1 - x0) / L, dz = (z1 - z0) / L, nx = dz, nz = -dx, o = OV.W / 2 + 0.2;
-    for (const sd of [1, -1]) deckPlan.push({ kind: 'slab', p0: [x0 + nx * o * sd, y0 + 1.05, z0 + nz * o * sd], p1: [x1 + nx * o * sd, y1 + 1.05, z1 + nz * o * sd],
-      w: 0.4, t: 1.4, walk: false, mat: 'rail', ext });
+    for (const sd of [1, -1]) rail(x0 + nx * o * sd, z0 + nz * o * sd, x1 + nx * o * sd, z1 + nz * o * sd, y0, y1, ext);
   };
   for (const [x0, z0, x1, z1] of ovRuns) {
     const L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 40);
     for (let k = 0; k < n; k++) {
       const ax = lerp(x0, x1, k / n), az = lerp(z0, z1, k / n), bx = lerp(x0, x1, (k + 1) / n), bz = lerp(z0, z1, (k + 1) / n);
-      deckPlan.push({ kind: 'slab', p0: [ax, OV.H, az], p1: [bx, OV.H, bz], w: OV.W, t: 1.2, mat: 'ovdeck' });
+      for (const [t0, t1] of ovSpans(ax, az, bx, bz, ST.holes))
+        deckPlan.push({ kind: 'slab', p0: [lerp(ax, bx, t0), OV.H, lerp(az, bz, t0)], p1: [lerp(ax, bx, t1), OV.H, lerp(az, bz, t1)], w: OV.W, t: 1.2, mat: 'ovdeck' });
       ovRails(ax, az, bx, bz, OV.H, OV.H, 0.1);
     }
     // опоры по оси улицы; перекрёстки под эстакадой остаются свободными
@@ -48,7 +54,7 @@ function cityPlanInfra(C) {
       deckPlan.push({ kind: 'slab', p0: [p[0], OV.H, p[1]], p1: [q[0], OV.H, q[1]], w: OV.W, t: 1.2, mat: 'ovdeck', ext: 1.6 });
       for (const r of [OV.R + OV.W / 2 + 0.2, OV.R - OV.W / 2 - 0.2]) {
         const u = P(ka, r), v = P(kb, r);
-        deckPlan.push({ kind: 'slab', p0: [u[0], OV.H + 1.05, u[1]], p1: [v[0], OV.H + 1.05, v[1]], w: 0.4, t: 1.4, walk: false, mat: 'rail', ext: 0.15 });
+        rail(u[0], u[1], v[0], v[1], OV.H, OV.H, 0.15);
       }
       pts.push(p);
     }
