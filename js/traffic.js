@@ -115,6 +115,55 @@ function bakeModel(root, paint) {
   });
 }
 
+// Все детали без текстуры (стекло, хром, шины, фары…) сливаются в одну геометрию: цвет, шероховатость,
+// металличность и свечение каждого материала переносятся в атрибуты вершин, а общий материал читает их в шейдере.
+// Внешний вид тот же, а машина трафика рисуется за 2 вызова (кузов + остальное) вместо ~11.
+let _bakedMat = null;
+function bakedPartsMaterial() {
+  if (_bakedMat) return _bakedMat;
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true });
+  m.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec2 aRM; attribute vec3 aEm; varying vec2 vRM; varying vec3 vEm;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vRM = aRM; vEm = aEm;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vRM; varying vec3 vEm;`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = vRM.x;`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+        metalnessFactor = vRM.y;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance = vEm;`);
+  };
+  return _bakedMat = m;
+}
+function mergeBakedParts(parts) {
+  const ok = p => !p.paint && p.mat.isMeshStandardMaterial && !p.mat.map && !p.mat.transparent && !p.mat.flatShading &&
+    p.mat.side === THREE.FrontSide && (p.mat.envMapIntensity ?? 1) === 1;
+  const plain = parts.filter(ok);
+  if (plain.length < 2) return parts;
+  const geos = plain.map(p => {
+    const g = p.geo.clone(), n = g.attributes.position.count, M = p.mat;
+    const col = new Float32Array(n * 3), rm = new Float32Array(n * 2), em = new Float32Array(n * 3);
+    const e = M.emissive.clone().multiplyScalar(M.emissiveIntensity);
+    for (let i = 0; i < n; i++) {
+      col[i * 3] = M.color.r; col[i * 3 + 1] = M.color.g; col[i * 3 + 2] = M.color.b;
+      rm[i * 2] = M.roughness; rm[i * 2 + 1] = M.metalness;
+      em[i * 3] = e.r; em[i * 3 + 1] = e.g; em[i * 3 + 2] = e.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aRM', new THREE.BufferAttribute(rm, 2));
+    g.setAttribute('aEm', new THREE.BufferAttribute(em, 3));
+    return g;
+  });
+  const geo = mergeGeometries(geos); geo.computeBoundingSphere();
+  for (const g of geos) g.dispose();
+  return [...parts.filter(p => !ok(p)), { geo, mat: bakedPartsMaterial(), paint: false }];
+}
+
 /* =====================================================================
    ТИПЫ МАШИН
    ===================================================================== */
@@ -208,9 +257,18 @@ function turnPiece(e, l, ne, nl) {
    ТРАФИК
    ===================================================================== */
 const TRAFFIC_FAR = 170, TRAFFIC_NEAR = 140;              // дальше FAR от обоих игроков — без физики, ближе NEAR — снова с физикой
+const TRAFFIC_SHADOW_R = 105;                              // в карту теней попадают машины ближе этого к игроку (она 140 × 140 м вокруг него)
+// меш «только для теней»: в обычном проходе у него 0 экземпляров, в проходе теней — машины вокруг игрока
+const _shadowOnlyMat = new THREE.MeshBasicMaterial();
+function shadowBefore() { this.count = this.userData.n; }
+function shadowAfter() { this.count = 0; }
 const _tq = new THREE.Quaternion(), _te = new THREE.Euler(0, 0, 0, 'YXZ'), _tp = [0, 0, 0, 0];
+const _tv = new THREE.Vector3(), _tone = new THREE.Vector3(1, 1, 1), _tfr = new THREE.Frustum(), _tpm = new THREE.Matrix4(), _tsph = new THREE.Sphere();
 const Traffic = {
   list: [], graph: null, templates: {}, world: null, timer: 0, count: 0, target: 0, _cand: [], _cw: [], hash: new Map(), _near: [],
+  // отрисовка: на каждый тип машины — InstancedMesh кузова и остального (2 вызова отрисовки на тип вместо ≈11 на машину)
+  // с общим буфером матриц, цвет кузова — цвет экземпляра; плюс отдельный меш для карты теней (см. cullView)
+  batches: [],
 
   template(id) {
     if (this.templates[id]) return this.templates[id];
@@ -219,7 +277,9 @@ const Traffic = {
     else if (id === 'bus') m = buildBusModel(0xffffff);
     else if (id === 'truck') m = buildTruckModel(0xffffff);
     else { const def = CARS.find(c => c.id === id); const cm = buildCarModel(def, 0xffffff); m = { root: cm.root, paint: cm.paint, dims: { L: def.geo.L, W: def.geo.W, H: def.geo.H } }; }
-    const t = { parts: bakeModel(m.root, m.paint), dims: m.dims, paintBase: m.paint };
+    const t = { parts: mergeBakedParts(bakeModel(m.root, m.paint)), dims: m.dims, paintBase: m.paint };
+    // для карты теней материалы не важны: вся машина — одна геометрия (только позиции)
+    t.shadowGeo = mergeGeometries(t.parts.map(p => { const g = new THREE.BufferGeometry(); g.setAttribute('position', p.geo.attributes.position); return g; }));
     m.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });   // материалы остаются — ими пользуются запечённые части
     return this.templates[id] = t;
   },
@@ -242,20 +302,46 @@ const Traffic = {
       if (i >= count) this.kill(tc);
       else if (!this.respawn(tc, 30, 380)) this.respawn(tc, 30, 1e9);
     }
+    this.buildBatches();
+  },
+
+  // InstancedMesh для всех машин каждого типа (вместимость — число машин этого типа в запасе)
+  buildBatches() {
+    const byType = new Map();
+    for (const tc of this.list) { let a = byType.get(tc.type.id); if (!a) byType.set(tc.type.id, a = []); a.push(tc); }
+    for (const [id, list] of byType) {
+      const T = this.template(id), n = list.length;
+      const paint = T.paintBase.clone(); paint.color.setHex(0xffffff);      // цвет кузова — instanceColor
+      let matrix = null;
+      const meshes = T.parts.map(p => {
+        const m = new THREE.InstancedMesh(p.geo, p.paint ? paint : p.mat, n);
+        if (matrix) m.instanceMatrix = matrix; else matrix = m.instanceMatrix;
+        if (p.paint) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+        // в обычном проходе — только машины в кадре; тени отбрасывает отдельный меш shadow (ниже)
+        m.castShadow = false; m.receiveShadow = true; m.frustumCulled = false;   // отсечение — своё, в cullView()
+        m.count = 0; m.visible = false; m.matrixAutoUpdate = false;
+        scene.add(m);
+        return m;
+      });
+      const shadow = new THREE.InstancedMesh(T.shadowGeo, _shadowOnlyMat, n);
+      shadow.castShadow = true; shadow.receiveShadow = false; shadow.frustumCulled = false; shadow.matrixAutoUpdate = false;
+      shadow.count = 0; shadow.userData.n = 0; shadow.onBeforeShadow = shadowBefore; shadow.onAfterShadow = shadowAfter;
+      scene.add(shadow);
+      const colorMesh = meshes.find(m => m.instanceColor);
+      this.batches.push({ list, meshes, shadow, paint, matrix, color: colorMesh ? colorMesh.instanceColor : null, R: Math.hypot(T.dims.L, T.dims.H) / 2 + 0.5 });
+    }
   },
 
   create(type) {
     const T = this.template(type.id), R = RAPIER, rw = PH.rw, { L, W, H } = T.dims;
-    const paint = T.paintBase.clone(); paint.color.setHex(type.paints[Math.floor(Math.random() * type.paints.length)]);
-    const group = new THREE.Group();
-    for (const p of T.parts) { const m = new THREE.Mesh(p.geo, p.paint ? paint : p.mat); m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; group.add(m); }
-    scene.add(group);
+    const color = new THREE.Color(type.paints[Math.floor(Math.random() * type.paints.length)]);
+    const mat = new THREE.Matrix4();
     const body = rw.createRigidBody(R.RigidBodyDesc.dynamic().lockRotations().setCanSleep(false).setTranslation(0, -200, 0));
     const r = Math.min(0.3, W * 0.12), hh = (H - 0.2) / 2;
     const collider = rw.createCollider(R.ColliderDesc.roundCuboid(W / 2 - r, hh - r, L / 2 - r, r).setTranslation(0, hh + 0.03, 0)
       .setMass(type.mass).setFriction(0).setRestitution(0.1)
       .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(type.mass * 1.2 / FIXED), body);
-    const tc = { type, group, paint, body, collider, L, W, H, mass: type.mass, vmax: type.vmax * (0.9 + Math.random() * 0.2), accel: type.accel,
+    const tc = { type, color, mat, body, collider, L, W, H, mass: type.mass, vmax: type.vmax * (0.9 + Math.random() * 0.2), accel: type.accel,
       v: 0, h: 0, x: 0, z: 0, y: 0, dead: true, tick: Math.random() < 0.5 ? 1 : 0, wreck: false, wreckT: 0, flipCd: 0, stuckT: 0, ghostT: 0, obs: Infinity, scan: Math.floor(Math.random() * 3), far: false, q: new THREE.Quaternion(), waitT: 0 };
     PH.info.set(collider.handle, { kind: 'traffic', tc });
     this.list.push(tc);
@@ -263,8 +349,12 @@ const Traffic = {
   },
 
   clear() {
+    for (const B of this.batches) {
+      for (const m of [...B.meshes, B.shadow]) { scene.remove(m); m.dispose(); }
+      B.paint.dispose();
+    }
+    this.batches = [];
     for (const tc of this.list) {
-      scene.remove(tc.group); tc.paint.dispose();
       if (PH.rw && PH.rw.getRigidBody(tc.body.handle) === tc.body) { PH.info.delete(tc.collider.handle); PH.rw.removeRigidBody(tc.body); }
     }
     this.list = []; this.graph = null; this.world = null;
@@ -335,12 +425,14 @@ const Traffic = {
       const b = tc.body;
       b.setEnabled(true);
       b.lockRotations(true, true); tc.collider.setFriction(0); b.setLinearDamping(0); b.setAngularDamping(0);
+      // пока машиной управляет бот: без гравитации и без контакта с рельефом — высоту задаёт preStep()
+      tc.collider.setCollisionGroups(TRAFFIC_DRIVEN_GROUPS); b.setGravityScale(0, true);
       b.setTranslation({ x, y: y + 0.05, z }, true);
       _tq.setFromEuler(_te.set(0, tc.h, 0)); b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
       Object.assign(tc, { dead: false, wreck: false, wreckT: 0, v: tc.vmax * 0.6, stuckT: 0, ghostT: 0, waitT: 0, obs: Infinity, far: dmin > TRAFFIC_FAR });
       if (tc.far) { tc.q.copy(_tq); b.setEnabled(false); }
-      tc.group.visible = true;
+      tc.mat.compose(_tv.set(x, y + 0.05, z), _tq, _tone);
       return true;
     }
     this.kill(tc);
@@ -350,7 +442,7 @@ const Traffic = {
   // убрать бота в запас (невидим, тело выключено)
   kill(tc) {
     if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
-    tc.dead = true; tc.far = false; tc.group.visible = false; tc.body.setEnabled(false);
+    tc.dead = true; tc.far = false; tc.body.setEnabled(false);
   },
 
   // въезд на полосу: строим участок и сразу выбираем, куда повернём на следующем перекрёстке
@@ -532,9 +624,10 @@ const Traffic = {
         continue;
       }
       if (dmin > TRAFFIC_FAR * TRAFFIC_FAR) { tc.far = true; tc.q.copy(_tq); b.setEnabled(false); continue; }
-      const onGround = tc.y - w.surface(tc.x, tc.z, tc.y + 1.5) < 0.3;
+      // высота: тянемся к поверхности дороги (рельеф или настил моста) — с рельефом тело не сталкивается
+      const gy = w.surface(tc.x, tc.z, tc.y + 1.5);
       b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
-      b.setLinvel({ x: dx * tc.v, y: onGround ? slope * tc.v : b.linvel().y, z: dz * tc.v }, true);
+      b.setLinvel({ x: dx * tc.v, y: slope * tc.v + clamp((gy - tc.y) * 8, -12, 6), z: dz * tc.v }, true);
     }
   },
 
@@ -543,6 +636,7 @@ const Traffic = {
     tc.wreck = true; tc.wreckT = 0;
     if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
     tc.body.lockRotations(false, true);
+    tc.collider.setCollisionGroups(ALL_GROUPS); tc.body.setGravityScale(1, true);   // обычное тело: падает и лежит на земле
     tc.collider.setFriction(0.7);
     tc.body.setLinearDamping(0.3); tc.body.setAngularDamping(0.5);
   },
@@ -592,18 +686,40 @@ const Traffic = {
     }
   },
 
-  // перед отрисовкой экрана игрока: машины дальше R от него не рисуем (это трафик вокруг другого игрока,
-  // почти растворённый в тумане, — а перебор сотен лишних объектов дорого стоит на каждом из двух экранов)
-  cullView(x, z, R = 520) {
-    for (const tc of this.list) if (!tc.dead) tc.group.visible = (tc.x - x) ** 2 + (tc.z - z) ** 2 < R * R;
+  // перед отрисовкой экрана игрока (камера cam, игрок в x, z): в буферы экземпляров попадают только машины,
+  // которые видит эта камера, плюс ближние (их тени могут упасть в кадр). Дальше R не рисуем: это трафик вокруг
+  // другого игрока, почти растворённый в тумане.
+  cullView(cam, x, z, R = 520) {
+    cam.updateMatrixWorld();
+    _tfr.setFromProjectionMatrix(_tpm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const R2 = R * R, S2 = TRAFFIC_SHADOW_R * TRAFFIC_SHADOW_R;
+    for (const B of this.batches) {
+      const M = B.matrix.array, C = B.color && B.color.array, SM = B.shadow.instanceMatrix.array;
+      let k = 0, ks = 0;
+      for (const tc of B.list) {
+        if (tc.dead) continue;
+        const d2 = (tc.x - x) ** 2 + (tc.z - z) ** 2;
+        if (d2 < S2) tc.mat.toArray(SM, ks++ * 16);                 // тень
+        if (d2 > R2) continue;
+        _tsph.center.set(tc.x, tc.y + tc.H / 2, tc.z); _tsph.radius = B.R;
+        if (!_tfr.intersectsSphere(_tsph)) continue;
+        tc.mat.toArray(M, k * 16);                                  // в кадре
+        if (C) tc.color.toArray(C, k * 3);
+        k++;
+      }
+      for (const m of B.meshes) { m.count = k; m.visible = k > 0; }
+      if (k) { B.matrix.needsUpdate = true; if (B.color) B.color.needsUpdate = true; }
+      B.shadow.userData.n = ks; B.shadow.count = 0; B.shadow.visible = ks > 0;
+      if (ks) B.shadow.instanceMatrix.needsUpdate = true;
+    }
   },
 
   visual() {
     for (const tc of this.list) {
       if (tc.dead) continue;
-      if (tc.far) { tc.group.position.set(tc.x, tc.y, tc.z); tc.group.quaternion.copy(tc.q); continue; }
+      if (tc.far) { tc.mat.compose(_tv.set(tc.x, tc.y, tc.z), tc.q, _tone); continue; }
       const t = tc.body.translation(), q = tc.body.rotation();
-      tc.group.position.set(t.x, t.y, t.z); tc.group.quaternion.set(q.x, q.y, q.z, q.w);
+      tc.mat.compose(_tv.set(t.x, t.y, t.z), _tq.set(q.x, q.y, q.z, q.w), _tone);
     }
   },
 };

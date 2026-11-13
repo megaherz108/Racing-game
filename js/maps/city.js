@@ -997,9 +997,12 @@ function buildCity(D) {
   const xzOf = o => [o.x, o.z];
   // Разрушаемые объекты по чанкам: на каждый чанк — свои InstancedMesh и свой Breakables.
   // parts: [{ geo, mat, shadow, per, loc, attr: [имя, item => число] }], place(B, item, i) добавляет объект в B.
-  const brks = [];
+  const brks = [], dist = new DistCull();
+  // opts.far — дальность прорисовки мелких объектов (м), см. DistCull в js/world.js
   function brkChunks(items, parts, opts, place, pad = 8) {
-    for (const arr of chunkBuckets(items, xzOf)) {
+    const tris = parts.reduce((s, pt) => s + geoTris(pt.geo) * (pt.per || 1), 0);
+    const whole = tris * items.length <= CHUNK_MIN_TRIS;      // одна InstancedMesh на весь город — дальность не нужна
+    for (const arr of chunkOrAll(items, xzOf, tris)) {
       const meshes = parts.map(pt => {
         let g = pt.geo;
         if (pt.attr) { g = g.clone(); g.setAttribute(pt.attr[0], new THREE.InstancedBufferAttribute(new Float32Array(arr.map(pt.attr[1])), 1)); }
@@ -1013,6 +1016,7 @@ function buildCity(D) {
         const m = E.mesh; E.pad = pad;
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
         m.computeBoundingSphere(); m.boundingSphere.radius += pad; group.add(m);
+        if (opts.far && !whole) dist.add(m, opts.far);
       }
       brks.push(B);
     }
@@ -1051,7 +1055,7 @@ function buildCity(D) {
     const land = new THREE.Mesh(g, landMat); land.receiveShadow = true; group.add(land);
   }
   const water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), stdMat(0x2477b5, { roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.86 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = D.WATER; group.add(water);
+  water.rotation.x = -Math.PI / 2; water.position.y = D.WATER; water.userData.dynamic = true; group.add(water);
 
   /* ---------- дороги ---------- */
   const mats = {
@@ -1200,7 +1204,7 @@ function buildCity(D) {
     { geo: new THREE.CylinderGeometry(0.09, 0.11, 4.6, 6).translate(0, 2.3, 0), mat: stdMat(0x3a3e44, { metalness: 0.5, roughness: 0.5 }) },
     { geo: new THREE.BoxGeometry(0.42, 1.3, 0.3).translate(0, 3.9, 0), mat: stdMat(0x23262b, { roughness: 0.6 }) },
     { geo: new THREE.SphereGeometry(0.13, 10, 8), mat: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false, per: 3, loc: bulbLoc },
-  ], { mass: 240, anchor: 2.5, minSpeed: 3, dmg: 0.4, cy: 2.5, lie: 1.52, kind: 'metal' }, (B, h, i) => {
+  ], { mass: 240, anchor: 2.5, minSpeed: 3, dmg: 0.4, cy: 2.5, lie: 1.52, kind: 'metal', far: 320 }, (B, h, i) => {
     h.y = D.ground(h.x, h.z);
     h.brk = B.add(grid, h.x, h.y, h.z, Math.atan2(h.fx, h.fz), 0.2, 4.6);
     h.bulbs = B.meshes[2].mesh; h.bi = i * 3;
@@ -1273,7 +1277,7 @@ function buildCity(D) {
     { geo: new THREE.CylinderGeometry(0.1, 0.15, 7, 6).translate(0, 3.5, 0), mat: stdMat(0x50555c, { metalness: 0.6, roughness: 0.4 }) },
     { geo: new THREE.BoxGeometry(2.2, 0.16, 0.4).translate(1.0, 7, 0), mat: stdMat(0x6a7078, { metalness: 0.5, roughness: 0.4 }) },
     { geo: new THREE.BoxGeometry(0.62, 0.06, 0.3).translate(1.75, 6.9, 0), mat: Sky.mats.bulb, shadow: false },      // плафон: ночью светится
-  ], { mass: 200, anchor: 2, minSpeed: 2.5, dmg: 0.4, cy: 3.5, lie: 1.5, kind: 'metal' }, (B, o) => { o.brk = B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.22, 7); }, 10);
+  ], { mass: 200, anchor: 2, minSpeed: 2.5, dmg: 0.4, cy: 3.5, lie: 1.5, kind: 'metal', far: 320 }, (B, o) => { o.brk = B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.22, 7); }, 10);
   // ночные огни фонарей: ореол у плафона (Points — всегда лицом к камере) и световое пятно на асфальте.
   // Видны только вечером и ночью; у сбитого фонаря гаснут (проверка раз в 0,4 с).
   const nightGroup = new THREE.Group(); nightGroup.visible = false; group.add(nightGroup);
@@ -1314,7 +1318,7 @@ function buildCity(D) {
   brkChunks(umbrellas, [
     { geo: new THREE.CylinderGeometry(0.05, 0.05, 2.4, 5).translate(0, 1.2, 0), mat: stdMat(0xe8e8e8) },
     { geo: new THREE.ConeGeometry(1.5, 0.6, 10).translate(0, 2.5, 0), mat: stdMat(0xffffff, { roughness: 0.8 }) },
-  ], { mass: 8, light: true, cy: 1.6, lie: 1.35, kind: 'plastic' }, (B, o, i) => {
+  ], { mass: 8, light: true, cy: 1.6, lie: 1.35, kind: 'plastic', far: 240 }, (B, o, i) => {
     B.add(grid, o.x, D.ground(o.x, o.z) - 0.2, o.z, 0, 0.3, 2.6);
     B.meshes[1].mesh.setColorAt(i, _col.setHex(UMB[o.c]));
   });
@@ -1327,7 +1331,7 @@ function buildCity(D) {
       new THREE.SphereGeometry(0.14, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.57, 0),
       new THREE.CylinderGeometry(0.05, 0.05, 0.42, 6).rotateZ(Math.PI / 2).translate(0, 0.4, 0), new THREE.CylinderGeometry(0.06, 0.06, 0.2, 6).rotateX(Math.PI / 2).translate(0, 0.4, 0.12)]),
     mat: stdMat(0xc8281e, { roughness: 0.5, metalness: 0.3 }), shadow: false,
-  }], { mass: 110, anchor: 1.2, minSpeed: 2, dmg: 0.25, cy: 0.3, lie: 1.5, light: true, kind: 'metal',
+  }], { mass: 110, anchor: 1.2, minSpeed: 2, dmg: 0.25, cy: 0.3, lie: 1.5, light: true, kind: 'metal', far: 170,
     onBreak: it => { geysers.push({ x: it.x, y: it.y, z: it.z, t: 7, acc: 0 }); if (geysers.length > 3) geysers.shift(); },
   }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, 0, 0.2, 0.8));
   const updateGeysers = dt => {
@@ -1345,14 +1349,14 @@ function buildCity(D) {
     { geo: new THREE.CylinderGeometry(0.035, 0.035, 2.6, 6).translate(0, 1.3, -0.04), mat: stdMat(0x8c9198, { metalness: 0.6, roughness: 0.4 }), shadow: false },
     { geo: new THREE.PlaneGeometry(0.72, 0.72).translate(0, 2.25, 0), mat: signMaterial(signTex, false), attr: ['aSign', o => o.t], shadow: false },
     { geo: new THREE.PlaneGeometry(0.72, 0.72).rotateY(Math.PI).translate(0, 2.25, -0.012), mat: signMaterial(signTex, true), attr: ['aSign', o => o.t], shadow: false },
-  ], { mass: 25, anchor: 0.5, cy: 1.4, lie: 1.52, light: true, kind: 'metal' }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.1, 2.7));
+  ], { mass: 25, anchor: 0.5, cy: 1.4, lie: 1.52, light: true, kind: 'metal', far: 240 }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.1, 2.7));
   // летние кафе: столики и стулья (цвета — свои у каждого кафе)
   const tables = D.tables.map(([x, z, c]) => ({ x, z, c })), chairs = D.chairs.map(([x, z, ry, c]) => ({ x, z, ry, c }));
   brkChunks(tables, [{
     geo: mergeGeometries([new THREE.CylinderGeometry(0.45, 0.45, 0.04, 16).translate(0, 0.74, 0), new THREE.CylinderGeometry(0.03, 0.03, 0.72, 6).translate(0, 0.37, 0),
       new THREE.CylinderGeometry(0.24, 0.26, 0.03, 12).translate(0, 0.015, 0)]),
     mat: stdMat(0xffffff, { roughness: 0.5, metalness: 0.2 }),
-  }], { mass: 18, cy: 0.45, lie: 1.25, light: true, kind: 'plastic' }, (B, o, i) => {
+  }], { mass: 18, cy: 0.45, lie: 1.25, light: true, kind: 'plastic', far: 170 }, (B, o, i) => {
     B.add(grid, o.x, D.ground(o.x, o.z), o.z, 0, 0.45, 0.8);
     B.meshes[0].mesh.setColorAt(i, _col.setHex(D.cafeColors[o.c][0]));
   });
@@ -1360,7 +1364,7 @@ function buildCity(D) {
     geo: mergeGeometries([new THREE.BoxGeometry(0.42, 0.04, 0.42).translate(0, 0.45, 0), new THREE.BoxGeometry(0.42, 0.4, 0.04).translate(0, 0.67, -0.19),
       ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => new THREE.BoxGeometry(0.035, 0.45, 0.035).translate(a * 0.18, 0.225, b * 0.18))]),
     mat: stdMat(0xffffff, { roughness: 0.6 }), shadow: false,
-  }], { mass: 6, cy: 0.45, lie: 1.2, light: true, kind: 'plastic' }, (B, o, i) => {
+  }], { mass: 6, cy: 0.45, lie: 1.2, light: true, kind: 'plastic', far: 170 }, (B, o, i) => {
     B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.28, 0.9);
     B.meshes[0].mesh.setColorAt(i, _col.setHex(D.cafeColors[o.c][1]));
   });
@@ -1370,9 +1374,9 @@ function buildCity(D) {
     geo: mergeGeometries([new THREE.BoxGeometry(1.7, 0.06, 0.44).translate(0, 0.44, 0), new THREE.BoxGeometry(1.7, 0.36, 0.05).translate(0, 0.72, -0.21),
       ...[-0.7, 0.7].map(a => new THREE.BoxGeometry(0.07, 0.44, 0.44).translate(a, 0.22, 0))]),
     mat: stdMat(0x8a5a33, { roughness: 0.85 }),
-  }], { mass: 70, anchor: 0.6, cy: 0.45, lie: 1.3, light: true, kind: 'wood' }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.6, 0.9));
+  }], { mass: 70, anchor: 0.6, cy: 0.45, lie: 1.3, light: true, kind: 'wood', far: 170 }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.6, 0.9));
   brkChunks(bins, [{ geo: new THREE.CylinderGeometry(0.26, 0.22, 0.85, 10).translate(0, 0.425, 0), mat: stdMat(0x2f4f3a, { roughness: 0.6, metalness: 0.3 }), shadow: false }],
-    { mass: 20, cy: 0.42, lie: 1.57, light: true, kind: 'plastic' }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, 0, 0.28, 0.9));
+    { mass: 20, cy: 0.42, lie: 1.57, light: true, kind: 'plastic', far: 170 }, (B, o) => B.add(grid, o.x, D.ground(o.x, o.z), o.z, 0, 0.28, 0.9));
 
   /* ---------- маяк ---------- */
   {
@@ -1384,6 +1388,9 @@ function buildCity(D) {
     group.add(g);
     grid.addCircle(x, z, 3, 22);
   }
+
+  // склейка статичных мешей по чанкам и заморозка матриц (js/world.js)
+  optimizeStatic(group);
 
   /* ---------- интерфейс мира ---------- */
   const roads = D.roadSegs.filter(s => !s.ramp);        // на пандусах эстакады не респауним
@@ -1446,6 +1453,8 @@ function buildCity(D) {
     update(dt, t) { water.position.y = D.WATER + Math.sin(t * 0.8) * 0.03; for (const b of brks) b.update(dt); updateGeysers(dt); marks.update(dt, t); updateLights(); updateLampFx(dt); },
     // вечером и ночью включаются огни фонарей (js/sky.js)
     setNight(k) { nightGroup.visible = k > 0; lampCheck = 0; },
+    // перед отрисовкой каждой половины экрана: дальность прорисовки мелочи от камеры (x, z)
+    cullView(x, z) { dist.update(x, z); },
     // дорожный граф для трафика (js/traffic.js)
     trafficData: { nodes: D.nodes, segs: D.segs, rounds: D.landmarks.filter(l => l.kind === 'roundabout'), lit: new Set(D.litNodes.map(n => n.x + ',' + n.z)) },
   };

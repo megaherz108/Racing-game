@@ -12,37 +12,74 @@ const softTex = (() => {
   x.fillStyle = g; x.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c);
 })();
+// Все частицы одного вида — один вызов отрисовки: квадрат-«спрайт» размножается по экземплярам
+// (InstancedBufferGeometry), а в вершинном шейдере разворачивается лицом к камере и поворачивается.
+// В буферы каждый кадр пишутся только живые частицы.
+const _pc = new THREE.Color();
 class Particles {
   constructor(n, blending) {
     this.items = []; this.i = 0;
-    for (let k = 0; k < n; k++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, transparent: true, depthWrite: false, blending, fog: true }));
-      s.visible = false; scene.add(s);
-      this.items.push({ s, life: 0, max: 1, vx: 0, vy: 0, vz: 0, s0: 1, s1: 1, a: 1, g: 0 });
-    }
+    for (let k = 0; k < n; k++) this.items.push({ x: 0, y: 0, z: 0, rot: 0, r: 1, gc: 1, b: 1, life: 0, max: 1, vx: 0, vy: 0, vz: 0, s0: 1, s1: 1, a: 1, g: 0 });
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    const attr = (size) => new THREE.InstancedBufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage);
+    this.aPos = attr(3); this.aCol = attr(4); this.aSR = attr(2);      // центр; цвет + прозрачность; размер + поворот
+    geo.setAttribute('aPos', this.aPos); geo.setAttribute('aCol', this.aCol); geo.setAttribute('aSR', this.aSR);
+    geo.instanceCount = 0;
+    const mat = new THREE.MeshBasicMaterial({ map: softTex, transparent: true, depthWrite: false, blending, fog: true });
+    mat.onBeforeCompile = sh => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+          attribute vec3 aPos; attribute vec4 aCol; attribute vec2 aSR; varying vec4 vPCol;`)
+        .replace('#include <project_vertex>', `
+          vec4 mvPosition = modelViewMatrix * vec4(aPos, 1.0);
+          float pc = cos(aSR.y), ps = sin(aSR.y);
+          mvPosition.xy += vec2(pc * position.x - ps * position.y, ps * position.x + pc * position.y) * aSR.x;
+          gl_Position = projectionMatrix * mvPosition;
+          vPCol = aCol;`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          varying vec4 vPCol;`)
+        .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse * vPCol.rgb, opacity * vPCol.a );');
+    };
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.frustumCulled = false; this.mesh.visible = false;
+    this.mesh.renderOrder = 3;                        // поверх следов шин и световых пятен (у них renderOrder 1–2)
+    this.geo = geo;
+    scene.add(this.mesh);
   }
   spawn(x, y, z, vx, vy, vz, s0, s1, life, color, alpha, grav = 0) {
     const p = this.items[this.i]; this.i = (this.i + 1) % this.items.length;
-    p.s.position.set(x, y, z); p.vx = vx; p.vy = vy; p.vz = vz; p.s0 = s0; p.s1 = s1; p.life = p.max = life; p.a = alpha; p.g = grav;
-    p.s.material.color.setHex(color); p.s.visible = true; p.s.material.rotation = Math.random() * 6;
+    p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.s0 = s0; p.s1 = s1; p.life = p.max = life; p.a = alpha; p.g = grav;
+    _pc.setHex(color); p.r = _pc.r; p.gc = _pc.g; p.b = _pc.b; p.rot = Math.random() * 6;
   }
   update(dt) {
+    const P = this.aPos.array, C = this.aCol.array, S = this.aSR.array;
+    let k = 0;
     for (const p of this.items) {
       if (p.life <= 0) continue;
       p.life -= dt;
-      if (p.life <= 0) { p.s.visible = false; continue; }
+      if (p.life <= 0) continue;
       const t = 1 - p.life / p.max;
       p.vy -= p.g * dt;
-      p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       p.vx *= 0.98; p.vz *= 0.98;
-      p.s.scale.setScalar(lerp(p.s0, p.s1, t));
-      p.s.material.opacity = p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85);
+      P[k * 3] = p.x; P[k * 3 + 1] = p.y; P[k * 3 + 2] = p.z;
+      C[k * 4] = p.r; C[k * 4 + 1] = p.gc; C[k * 4 + 2] = p.b;
+      C[k * 4 + 3] = p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85);
+      S[k * 2] = lerp(p.s0, p.s1, t); S[k * 2 + 1] = p.rot;
+      k++;
     }
+    this.geo.instanceCount = k; this.mesh.visible = k > 0;
+    if (k) { this.aPos.needsUpdate = this.aCol.needsUpdate = this.aSR.needsUpdate = true; }
   }
-  clear() { for (const p of this.items) { p.life = 0; p.s.visible = false; } }
+  clear() { for (const p of this.items) p.life = 0; this.geo.instanceCount = 0; this.mesh.visible = false; }
 }
-const smoke = new Particles(320, THREE.NormalBlending);
-const sparks = new Particles(280, THREE.AdditiveBlending);   // искры, пламя нитро и хлопков выхлопа
+// частицы теперь почти ничего не стоят — запас вдвое больше прежнего (320 / 280), чтобы дым и искры не обрывались
+const smoke = new Particles(640, THREE.NormalBlending);
+const sparks = new Particles(560, THREE.AdditiveBlending);   // искры, пламя нитро и хлопков выхлопа
 
 const SKID_N = 3000;
 const skids = new THREE.InstancedMesh(FLAT_QUAD, new THREE.MeshBasicMaterial({ color: 0x0c0c0c, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }), SKID_N);

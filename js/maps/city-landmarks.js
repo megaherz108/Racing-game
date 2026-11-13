@@ -357,7 +357,7 @@ function buildCityLandmarks(list, ctx) {
         for (let k = 0; k < 16; k++) parts.push(new THREE.BoxGeometry(0.18, R, 0.18).translate(0, R / 2, 0).rotateZ(k / 16 * Math.PI * 2).translate(0, 0, dz));
       }
       parts.push(new THREE.CylinderGeometry(1.2, 1.2, 4, 16).rotateX(Math.PI / 2));
-      const wheel = new THREE.Group(); wheel.position.set(L.x, hy, zw); group.add(wheel);
+      const wheel = new THREE.Group(); wheel.position.set(L.x, hy, zw); wheel.userData.dynamic = true; group.add(wheel);
       mesh(mergeGeometries(parts), stdMat(0xf4f4f4, { metalness: 0.4, roughness: 0.4 }), 0, 0, 0, 0, wheel);
       const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 32);
       const NEON = [0xff3fa4, 0x2ff0ff, 0xffe14a, 0x6aff6a];
@@ -383,7 +383,7 @@ function buildCityLandmarks(list, ctx) {
         mesh(Cy(0.45, 0.7, 5.6, 12), M.stone, x, 1.7, z);
         mesh(new THREE.SphereGeometry(2.4, 24, 16), M.bronze, x, 9.7, z);
         const ring = mesh(new THREE.TorusGeometry(3.3, 0.13, 8, 48), M.gold, x, 9.7, z);
-        ring.rotation.x = 1.15;
+        ring.rotation.x = 1.15; ring.userData.dynamic = true;
         ups.push(dt => { ring.rotation.z += dt * 0.5; });
         grid.addCircle(x, z, 2.2, 13);
       } else {

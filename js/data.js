@@ -108,8 +108,13 @@ const RACE_CPS = 10, RACE_REWARD = 10;   // чекпоинтов в гонке �
 // интенсивность городского трафика: id, подпись, число машин вокруг игроков
 const TRAFFIC_LEVELS = [['off', 'Выкл', 0], ['low', 'Мало', 40], ['mid', 'Средне', 90], ['high', 'Много', 180]];
 const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';
+// качество графики: aa — сглаживание (MSAA, задаётся при создании WebGL — смена требует перезагрузки страницы),
+// scale — доля разрешения экрана, в которой рисуется кадр (дальше браузер растягивает его на весь экран).
+// Низкое — для слабых видеокарт: на встроенной Radeon 680M при 1920×1200 кадр почти вдвое дешевле для видеокарты.
+const QUALITY = { high: { label: 'Высокое', aa: true, scale: 1 }, low: { label: 'Низкое', aa: false, scale: 0.8 } };
+const cleanQuality = q => QUALITY[q] ? q : 'high';
 const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla' });
-const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day' });
+const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', quality: 'high' });
 function cleanPlayer(p) {
   if (!p || typeof p !== 'object') return defaultPlayer();
   const owned = Array.isArray(p.owned) ? p.owned.filter(id => CARS.some(c => c.id === id)) : [];
@@ -121,14 +126,14 @@ function loadSave() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && Array.isArray(s.players) && s.players.length === 2)
       return { players: s.players.map(cleanPlayer), map: MAP_IDS.includes(s.map) ? s.map : 'city', traffic: cleanTraffic(s.traffic),
-        mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod) };
+        mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod), quality: cleanQuality(s.quality) };
   } catch (e) { /* повреждённое сохранение — начинаем заново */ }
   // перенос со старого формата с общим балансом: монеты делятся пополам, купленные машины есть у обоих
   try {
     const o = JSON.parse(localStorage.getItem(OLD_SAVE_KEY));
     if (o && typeof o.coins === 'number') {
       const c = Math.max(0, Math.floor(o.coins)), sel = Array.isArray(o.sel) ? o.sel : [];
-      return { players: [0, 1].map(i => cleanPlayer({ coins: i === 0 ? Math.ceil(c / 2) : Math.floor(c / 2), owned: o.owned, sel: sel[i] })), map: 'city', traffic: 'mid', mode: 'free', tod: 'day' };
+      return { players: [0, 1].map(i => cleanPlayer({ coins: i === 0 ? Math.ceil(c / 2) : Math.floor(c / 2), owned: o.owned, sel: sel[i] })), map: 'city', traffic: 'mid', mode: 'free', tod: 'day', quality: 'high' };
     }
   } catch (e) { }
   return defaultSave();

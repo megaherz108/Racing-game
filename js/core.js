@@ -5,8 +5,9 @@
 /* =====================================================================
    RENDERER
    ===================================================================== */
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+const QUAL = QUALITY[save.quality];                 // настройка качества (js/data.js) — читается при загрузке страницы
+const renderer = new THREE.WebGLRenderer({ antialias: QUAL.aa });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * QUAL.scale);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -86,6 +87,47 @@ function lowerShape(L, bottomY, arches, top) {
   return s;
 }
 
+// Склеить все меши внутри group в один меш на материал (координаты — в системе group).
+// Внешний вид не меняется, а вызовов отрисовки — в разы меньше. disposeOld — освободить исходные геометрии
+// (только если они больше никем не используются). Меши с зеркальной матрицей и мультиматериалом не трогаем.
+const _mbInv = new THREE.Matrix4(), _mbM = new THREE.Matrix4();
+function mergeByMaterial(group, disposeOld = false) {
+  group.updateMatrixWorld(true);
+  _mbInv.copy(group.matrixWorld).invert();
+  const old = [];
+  group.traverse(o => {
+    if (o === group || !o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || o.userData.keep) return;
+    if (o.matrixWorld.determinant() <= 0) return;
+    old.push(o);
+  });
+  if (old.length < 2) return group;
+  const buckets = new Map();
+  for (const o of old) {
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    g.morphAttributes = {};
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    g.clearGroups();
+    g.applyMatrix4(_mbM.multiplyMatrices(_mbInv, o.matrixWorld));
+    const key = o.material.uuid + (o.castShadow ? 's' : '') + (o.receiveShadow ? 'r' : '') + (o.layers.mask);
+    let b = buckets.get(key);
+    if (!b) buckets.set(key, b = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, layers: o.layers.mask, geos: [] });
+    b.geos.push(g);
+    o.removeFromParent();
+    if (disposeOld) o.geometry.dispose();
+  }
+  for (const b of buckets.values()) {
+    const geo = b.geos.length === 1 ? b.geos[0] : mergeGeometries(b.geos);
+    if (b.geos.length > 1) for (const g of b.geos) g.dispose();
+    geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, b.mat);
+    m.castShadow = b.cast; m.receiveShadow = b.recv; m.layers.mask = b.layers;
+    group.add(m);
+  }
+  return group;
+}
+
 function makeWheel(r, w, side, rimColor) {
   const spin = new THREE.Group();
   const rimMat = new THREE.MeshStandardMaterial({ color: rimColor, metalness: 0.85, roughness: 0.3 });
@@ -96,6 +138,6 @@ function makeWheel(r, w, side, rimColor) {
     const sp = box(0.03, r * 1.22, r * 0.14, rimMat, side * (w / 2 + 0.008), 0, 0, spin);
     sp.rotation.x = k * Math.PI / 3;
   }
-  return spin;
+  return mergeByMaterial(spin, true);            // шина, диск со спицами, ступица — 3 меша вместо 6
 }
 

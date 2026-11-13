@@ -16,9 +16,40 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+/* ---------- счётчик производительности: клавиша ` (Ё) или ?fps в адресе ---------- */
+// FPS — сколько кадров реально показано (браузер не даёт больше частоты экрана: на 60 Гц — максимум 60);
+// «JS» — сколько миллисекунд занимает работа игры за кадр (физика + подготовка отрисовки): 1000 / JS — запас по FPS;
+// «вызовы» — draw calls за кадр (включая тени и обе половины экрана).
+const Perf = (() => {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:50;padding:3px 9px;border-radius:6px;' +
+    'background:rgba(0,0,0,.6);color:#9f9;font:12px/1.35 monospace;white-space:pre;pointer-events:none;display:none';
+  document.body.appendChild(el);
+  let on = /[?&]fps\b/.test(location.search), n = 0, acc = 0, jsAcc = 0, jsMax = 0, t0 = performance.now(), calls = 0, tris = 0;
+  el.style.display = on ? 'block' : 'none';
+  renderer.info.autoReset = false;                  // считаем вызовы за весь кадр, а не за последний render()
+  return {
+    toggle() { on = !on; el.style.display = on ? 'block' : 'none'; },
+    begin() { renderer.info.reset(); return performance.now(); },
+    end(start, now) {
+      const js = performance.now() - start;
+      n++; jsAcc += js; jsMax = Math.max(jsMax, js);
+      calls += renderer.info.render.calls; tris += renderer.info.render.triangles;
+      if (now - t0 < 500) return;
+      if (on) el.textContent = `FPS ${Math.round(n * 1000 / (now - t0))}   JS ${(jsAcc / n).toFixed(1)} мс (макс ${jsMax.toFixed(1)})   ` +
+        `вызовы ${Math.round(calls / n)}   треуг. ${Math.round(tris / n / 1000)}k`;
+      n = jsAcc = jsMax = calls = tris = 0; t0 = now;
+    },
+  };
+})();
+
 let last = performance.now(), gameT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  const perfStart = Perf.begin();
+  try { frameBody(now); } finally { Perf.end(perfStart, now); }
+}
+function frameBody(now) {
   const dt = clamp((now - last) / 1000, 0, 0.05); last = now;
   const W = window.innerWidth, H = window.innerHeight;
 
@@ -52,7 +83,8 @@ function frame(now) {
     for (let p = 0; p < N; p++) {
       const c = cars[p];
       aimSun(c.x, c.y, c.z);
-      Traffic.cullView(c.x, c.z);
+      Traffic.cullView(cams[p], c.x, c.z);
+      if (world.cullView) world.cullView(cams[p].position.x, cams[p].position.z);
       renderer.shadowMap.needsUpdate = true;
       renderer.setViewport(p * VW, 0, VW, H);
       renderer.setScissor(p * VW, 0, VW, H);
@@ -93,6 +125,8 @@ updatePodium(0); updatePodium(1);
 showCam.position.set(0, 5, 16);
 setState('menu');
 hideLoading();
+// после смены качества графики (перезагрузка страницы) — обратно на экран выбора режима
+try { if (sessionStorage.getItem('steel_duel_reopen') === 'maps') { sessionStorage.removeItem('steel_duel_reopen'); openMaps(); } } catch (e) { }
 requestAnimationFrame(frame);
 
 // чит-код в консоли: __game.addCoins(1000) — обоим игрокам; __game.addCoins(0, 500) — только игроку 1 (0/1)

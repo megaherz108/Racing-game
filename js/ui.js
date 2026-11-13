@@ -210,8 +210,23 @@ function renderMaps() {
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
   $('modeLine').innerHTML = `Карта: <b>${MAP_INFO[PLAY_MAP].name}</b> · ← / → — режим, Enter — старт`;
-  renderTraffic(); renderTime();
+  renderTraffic(); renderTime(); renderQuality();
 }
+// качество графики (QUALITY в js/data.js): сглаживание задаётся при создании WebGL, поэтому смена — с перезагрузкой
+// страницы; после неё игра сразу возвращается на этот экран
+function renderQuality() {
+  $('qualityLine').innerHTML = `Графика: ${Object.entries(QUALITY).map(([id, q]) =>
+    `<button class="tsel ${id === save.quality ? 'on' : ''}" data-quality="${id}">${q.label}</button>`).join('')}
+    <span class="thint">Q</span>`;
+}
+function setQuality(id) {
+  if (id === save.quality || !QUALITY[id]) return;
+  save.quality = id; persist(); renderQuality();
+  try { sessionStorage.setItem('steel_duel_reopen', 'maps'); } catch (e) { }
+  showLoading('Применяю настройки графики…');
+  setTimeout(() => location.reload(), 50);
+}
+function stepQuality() { const ids = Object.keys(QUALITY), i = ids.indexOf(save.quality); setQuality(ids[(i + 1) % ids.length]); }
 // время суток (js/sky.js)
 function renderTime() {
   $('timeLine').innerHTML = `Время суток: ${TIMES.map(([id, label]) =>
@@ -248,13 +263,14 @@ $('mHelp').onclick = () => $('help').classList.remove('hidden');
 $('hClose').onclick = () => $('help').classList.add('hidden');
 $('mReset').onclick = () => {
   if (!confirm('Сбросить монеты и купленные машины обоих игроков?')) return;
-  save = defaultSave(); persist(); browse[0] = browse[1] = 0; updatePodium(0); updatePodium(1); updateCoins(); toast('Прогресс сброшен');
+  save = Object.assign(defaultSave(), { quality: save.quality }); persist();   // графику не сбрасываем — она уже применена browse[0] = browse[1] = 0; updatePodium(0); updatePodium(1); updateCoins(); toast('Прогресс сброшен');
 };
 $('gBack').onclick = () => setState('menu');
 $('gPlay').onclick = () => { if (!$('gPlay').disabled) openMaps(); };
 $('mapsBack').onclick = () => setState('menu');
 $('trafficLine').addEventListener('click', e => { const b = e.target.closest('[data-traffic]'); if (b) setTraffic(b.dataset.traffic); });
 $('timeLine').addEventListener('click', e => { const b = e.target.closest('[data-tod]'); if (b) setTime(b.dataset.tod); });
+$('qualityLine').addEventListener('click', e => { const b = e.target.closest('[data-quality]'); if (b) setQuality(b.dataset.quality); });
 $('mapsGo').onclick = () => startMatch();
 function setPaused(v) { paused = v; $('pause').classList.toggle('hidden', !v); keys.clear(); }
 $('pResume').onclick = () => setPaused(false);
@@ -279,6 +295,7 @@ addEventListener('keydown', e => {
   keys.add(e.code);
   if (e.repeat) return;
   Sound.init();
+  if (e.code === 'Backquote') { Perf.toggle(); return; }
   if (e.code === 'KeyM') { toast(Sound.toggleMute() ? 'Звук выключен (M)' : 'Звук включён (M)'); return; }
   if (!$('help').classList.contains('hidden')) { if (e.code === 'Escape' || e.code === 'Enter') $('help').classList.add('hidden'); return; }
   if (!$('loading').classList.contains('hidden')) return;
@@ -305,6 +322,7 @@ addEventListener('keydown', e => {
     else if (e.code === 'ArrowUp' || e.code === 'KeyW') stepTraffic(1);
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') stepTraffic(-1);
     else if (e.code === 'KeyN') stepTime();
+    else if (e.code === 'KeyQ') stepQuality();
     else if (e.code === 'Enter') startMatch();
     else if (e.code === 'Escape') setState('menu');
   } else if (state === 'menu') {

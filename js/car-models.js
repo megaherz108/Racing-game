@@ -45,6 +45,7 @@ function buildCarModel(def, paintHex) {
 
   // стилевые детали
   STYLE[g.style](g, body, paint);
+  mergeByMaterial(body, true);           // ~30 деталей кузова → по одному мешу на материал
 
   // колёса
   const wheels = [];

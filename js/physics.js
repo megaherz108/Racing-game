@@ -42,10 +42,25 @@ function qrot(q, x, y, z) {
   return [x + q.w * tx + (q.y * tz - q.z * ty), y + q.w * ty + (q.z * tx - q.x * tz), z + q.w * tz + (q.x * ty - q.y * tx)];
 }
 
+// Группы столкновений Rapier: (членство << 16) | фильтр. Рельеф — в группе 2. Машины трафика, пока ими управляет
+// бот, не сталкиваются с рельефом: высоту им задаёт водитель (js/traffic.js). Контакт «кузов — карта высот» —
+// самая дорогая часть физики, а бот на дороге и так едет по поверхности. Разбитая машина снова падает на землю.
+const GROUND_GROUPS = 0x0002ffff, TRAFFIC_DRIVEN_GROUPS = 0x0001fffd, ALL_GROUPS = 0xffffffff;
 function buildPhysics() {
   if (PH.rw) { PH.rw.free(); PH.events.free(); }
   const R = RAPIER, rw = new R.World({ x: 0, y: -GRAV, z: 0 });
   rw.timestep = FIXED;
+  // World.step() этой сборки Rapier после каждого шага вызывает mapNewSoftBodies(): перебор всех ~10 000 коллайдеров
+  // в поисках новых (≈0,8 мс на шаг — втрое дольше самой физики). Тела и коллайдеры у нас появляются и исчезают
+  // только при старте заезда, поэтому перебор нужен, лишь когда их число изменилось.
+  if (typeof rw.mapNewSoftBodies === 'function') {
+    const mapAll = rw.mapNewSoftBodies.bind(rw);
+    let nb = -1, nc = -1;
+    rw.mapNewSoftBodies = () => {
+      const b = rw.bodies.len(), c = rw.colliders.len();
+      if (b !== nb || c !== nc) { nb = b; nc = c; mapAll(); }
+    };
+  }
   PH.rw = rw; PH.events = new R.EventQueue(true); PH.map = world;
   PH.info = new Map(); PH.brk = []; PH.barrels = [];
   const fixed = rw.createRigidBody(R.RigidBodyDesc.fixed());
@@ -62,6 +77,7 @@ function buildPhysics() {
     hs[zi + xi * N] = world.ground(-size / 2 + xi * st, -size / 2 + zi * st);
   const ground = addStatic(R.ColliderDesc.heightfield(n, n, hs, { x: size, y: 1, z: size }, R.HeightFieldFlags.FIX_INTERNAL_EDGES), 'ground');
   ground.setFriction(0.8);
+  ground.setCollisionGroups(GROUND_GROUPS);
 
   // настилы (мосты, трамплины, эстакады): наклонные плиты и клинья поверх рельефа
   if (world.decks) for (const d of world.decks.list) {

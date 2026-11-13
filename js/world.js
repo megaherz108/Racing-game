@@ -407,11 +407,18 @@ function chunkBuckets(items, xz) {
   }
   return [...m.values()];
 }
+// Лёгкие категории (мало треугольников на весь город: бордюры, крыши, контейнеры, стулья…) выгоднее рисовать
+// одной InstancedMesh на всю карту: отсечение по чанкам экономит копейки вершин, а стоит десятков вызовов отрисовки.
+const CHUNK_MIN_TRIS = 4000;          // выше — лишние вершины обходятся видеокарте дороже сэкономленных вызовов (замерено)
+const geoTris = g => (g.index ? g.index.count : g.attributes.position.count) / 3;
+function chunkOrAll(items, xz, trisPerItem) {
+  return trisPerItem * items.length <= CHUNK_MIN_TRIS ? (items.length ? [items] : []) : chunkBuckets(items, xz);
+}
 // fill(mesh, i, item) заполняет матрицу (и цвет) экземпляра
 // attr(item) — необязательный стиль фасада экземпляра (атрибут aStyle, см. makeBuildingMaterial)
 function instChunks(group, geo, mat, items, xz, fill, shadow = true, attr = null) {
   const out = [];
-  for (const arr of chunkBuckets(items, xz)) {
+  for (const arr of chunkOrAll(items, xz, geoTris(geo))) {
     let g = geo;
     if (attr) { g = geo.clone(); g.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array(arr.map(attr)), 1)); }
     const m = new THREE.InstancedMesh(g, mat, arr.length);
@@ -424,6 +431,74 @@ function instChunks(group, geo, mat, items, xz, fill, shadow = true, attr = null
   }
   return out;
 }
+/* ---------- оптимизация статичной части карты ---------- */
+// Вызывается в конце постройки карты. Объекты с userData.dynamic (вода, колесо обозрения…) и всё внутри них не трогаются.
+// 1) Обычные (не instanced) меши склеиваются в один меш на чанк и материал — меньше вызовов отрисовки.
+// 2) Матрицы неподвижных объектов считаются один раз: Three.js больше не обходит тысячи объектов карты
+//    перед каждой отрисовкой (а их две на кадр — по одной на половину экрана).
+const _osInv = new THREE.Matrix4(), _osM = new THREE.Matrix4(), _osV = new THREE.Vector3();
+function optimizeStatic(group) {
+  group.updateMatrixWorld(true);
+  _osInv.copy(group.matrixWorld).invert();
+  const cand = [];
+  const walk = o => {
+    if (o.userData.dynamic) return;
+    if (o.isMesh && !o.isInstancedMesh && !Array.isArray(o.material) && o.matrixWorld.determinant() > 0 && !o.userData.keep) cand.push(o);
+    for (const c of o.children) walk(c);
+  };
+  for (const c of group.children) walk(c);
+  const buckets = new Map();
+  for (const o of cand) {
+    const g = o.geometry;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    _osV.copy(g.boundingSphere.center).applyMatrix4(o.matrixWorld);
+    const sig = Object.keys(g.attributes).sort().map(k => k + g.attributes[k].itemSize).join(',');
+    const key = [chunkKey(_osV.x, _osV.z), o.material.uuid, o.castShadow, o.receiveShadow, o.renderOrder, o.layers.mask, o.visible, sig].join('|');
+    let b = buckets.get(key); if (!b) buckets.set(key, b = []);
+    b.push(o);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map(o => {
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      g.morphAttributes = {}; g.clearGroups();
+      g.applyMatrix4(_osM.multiplyMatrices(_osInv, o.matrixWorld));
+      return g;
+    });
+    const geo = mergeGeometries(geos);
+    for (const g of geos) g.dispose();
+    if (!geo) continue;                                   // несовместимые атрибуты — оставляем как было
+    geo.computeBoundingSphere();
+    const f = list[0], m = new THREE.Mesh(geo, f.material);
+    m.castShadow = f.castShadow; m.receiveShadow = f.receiveShadow; m.renderOrder = f.renderOrder; m.layers.mask = f.layers.mask;
+    for (const o of list) o.removeFromParent();
+    group.add(m);
+  }
+  // пустые после склейки группы больше не нужны
+  for (const c of [...group.children]) if (!c.isMesh && !c.isPoints && !c.isLine && !c.userData.dynamic && c.children.length === 0 && c.type === 'Group') c.removeFromParent();
+  // заморозка матриц: у поддеревьев без динамики
+  group.updateMatrixWorld(true);
+  const hasDynamic = o => o.userData.dynamic || o.children.some(hasDynamic);
+  const freeze = o => { o.matrixAutoUpdate = false; o.matrixWorldAutoUpdate = false; for (const c of o.children) freeze(c); };
+  group.matrixAutoUpdate = false;
+  for (const c of group.children) if (!hasDynamic(c)) freeze(c);
+}
+
+// Дальность прорисовки мелочи (гидранты, стулья, знаки…): чанк такого объекта не рисуется, если ближайшая
+// его точка дальше far от камеры. На таком расстоянии предмет — пара пикселей в тумане, а вызов отрисовки он стоит.
+class DistCull {
+  constructor() { this.list = []; }
+  add(mesh, far) { this.list.push({ mesh, far }); }
+  update(x, z) {
+    for (const { mesh: m, far } of this.list) {
+      const s = m.boundingSphere;
+      if (!s) continue;
+      const d = Math.hypot(s.center.x - x, s.center.z - z) - s.radius;
+      m.visible = d < far;
+    }
+  }
+}
+
 const _cm = new THREE.Matrix4(), _cq = new THREE.Quaternion(), _cv = new THREE.Vector3(), _cs = new THREE.Vector3();
 function setInstQ(m, i, pos, quat, sx, sy, sz) { _cm.compose(pos, quat, _cs.set(sx, sy, sz)); m.setMatrixAt(i, _cm); }
 
