@@ -1,6 +1,10 @@
 // Режим «Гонка»: по городу расставлены RACE_CPS больших светящихся арок-чекпоинтов. Их нужно проехать по порядку
 // быстрее соперника (путь между ними — любой); победитель получает RACE_REWARD монет.
 // 3D-стрелка вверху половины экрана показывает на следующий чекпоинт.
+// Определяет: CP_R, CP_COL, CP_FIN, CP_LAYER, Race.
+// Использует: RACE_CPS, RACE_REWARD (js/data.js); clamp, renderer, rand (js/core.js); scene (js/world.js); world
+//   (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars (js/physics.js); cams, countdown, paused
+//   (js/match.js); $, HUD, notify, addCoins, keys (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================

@@ -1,4 +1,7 @@
 // Карта: тестовая арена
+// Определяет: ARENA, arenaData, buildArena.
+// Использует: rand, cyl, MAT, box (js/core.js); mmCanvas, StaticGrid, noiseTexture, inst, stdMat, setInst
+//   (js/world.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

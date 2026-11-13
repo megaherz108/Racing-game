@@ -1,4 +1,12 @@
 // Главный цикл и старт игры
+// Определяет: showLook, resize, Perf, last, gameT, frame, frameBody, cheatCoins.
+// Использует: save, CARS, browse (js/data.js); renderer, clamp, lerp (js/core.js); showCam, PODIUM_SPAN, viewShift,
+//   podiums, show, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky (js/sky.js); Weather
+//   (js/weather.js); world, getData (js/maps/registry.js); updateCoins3D, smoke, sparks, updateSkids (js/effects.js);
+//   Wrecks (js/carfx.js); Sound (js/audio.js); cars, accum, FIXED, stepWorld (js/physics.js); Traffic
+//   (js/traffic/traffic.js); cams, state, paused, countdown, placeCam, updateStreaks, startMatch (js/match.js);
+//   drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins, keys, renderGarage (js/ui.js); Race
+//   (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

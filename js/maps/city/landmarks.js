@@ -1,7 +1,12 @@
 // Уникальные объекты города: памятники, статуи, телебашня, закрученный небоскрёб, ратуша, стадион,
 // церковь, водонапорная башня, нефтебаза, корабль в гавани, триумфальная арка, пирс с колесом обозрения.
+// Определяет: cobbleTexture, helipadTexture, seatTexture, pitchTexture, waterTankTexture, figureGeometry,
+//   buildCityLandmarks.
+// Использует: CARS (js/data.js); MAT, beam (js/core.js); buildCarModel (js/car-models.js); stdMat,
+//   makeBuildingMaterial, FACADE, UNIT_BOX, setInst (js/world.js); canvasTex (js/maps/city/textures.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
-// Где что стоит, решает cityData() в js/maps/city.js (список landmarks), здесь — только 3D и коллизии.
+// Где что стоит, решает раскладка (список landmarks: js/maps/city/blocks.js, infra.js), здесь — только 3D и коллизии.
+// buildCityLandmarks() вызывает cityBuildStructures() (js/maps/city/buildings.js).
 
 /* =====================================================================
    ТЕКСТУРЫ (Canvas)

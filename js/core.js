@@ -1,4 +1,7 @@
 // Рендерер, общие материалы и хелперы для моделей
+// Определяет: QUAL, renderer, pmrem, envTex, clamp, lerp, rand, shared, MAT, box, cyl, beam, extrude, polyShape,
+//   lowerShape, mergeByMaterial, makeWheel.
+// Использует: QUALITY, save (js/data.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

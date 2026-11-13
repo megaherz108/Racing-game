@@ -1,4 +1,7 @@
 // Карта: горный лес
+// Определяет: forestData, buildForest.
+// Использует: lerp, clamp, box, cyl, MAT, rand (js/core.js); mulberry32, makeNoise, smooth01, mmCanvas, StaticGrid,
+//   stdMat, inst, Breakables, setInst (js/world.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

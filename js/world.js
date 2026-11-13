@@ -1,4 +1,9 @@
 // Общая сцена карт и утилиты мира (шум, сетка коллизий, мини-карта, InstancedMesh)
+// Определяет: scene, hemi, sun, SUN_OFFSET, aimSun, smooth01, mulberry32, shuffle, makeNoise, noiseTexture, dummy,
+//   UNIT_BOX, FLAT_QUAD, inst, setInst, stdMat, StaticGrid, angLerp, Y_AXIS, BRK_G, BRK_FLY, BRK_HINGE, BRK_REST,
+//   brkGround, Breakables, mmCanvas, FACADE, NIGHT_U, makeBuildingMaterial, CHUNK, chunkKey, chunkBuckets,
+//   CHUNK_MIN_TRIS, geoTris, chunkOrAll, instChunks, optimizeStatic, DistCull, setInstQ, Decks.
+// Использует: envTex, rand, renderer, clamp (js/core.js); world (js/maps/registry.js); surfaceAt (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

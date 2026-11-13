@@ -1,4 +1,7 @@
 // Шоурум — 3D-фон меню и гаража
+// Определяет: show, showKey, showCam, podiums, PODIUM_X, PODIUM_SPAN, viewShift, updatePodium.
+// Использует: PLAYER_COLORS, CARS, browse (js/data.js); envTex (js/core.js); disposeTree, buildCarModel
+//   (js/car-models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

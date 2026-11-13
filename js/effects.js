@@ -1,4 +1,9 @@
 // Эффекты: частицы, следы шин, монеты
+// Определяет: softTex, Particles, smoke, sparks, SKID_N, SKID_LIFE, skidGeo, skidAttr, SKID_U, skidMat, skids,
+//   clearSkids, skidIdx, skidDirty, addSkid, updateSkids, SURF, wheelFx, COIN_MAX, coinMat, coinDisc, coinRim, coins,
+//   spawnCoin, resetCoins, updateCoins3D.
+// Использует: lerp, QUAL, rand (js/core.js); scene, FLAT_QUAD, inst, dummy (js/world.js); Weather (js/weather.js);
+//   world (js/maps/registry.js); Sound (js/audio.js); simTime, cars (js/physics.js); addCoins, notify (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

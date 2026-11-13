@@ -1,4 +1,7 @@
 // Данные машин, характеристики → физика, сохранение
+// Определяет: STATS, CARS, derive, HANDLING, KMH, NITRO, TIMES, cleanTime, PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY,
+//   MAP_IDS, KO_REWARD, MODES, PLAY_MAP, RACE_CPS, RACE_REWARD, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality,
+//   defaultPlayer, defaultSave, cleanPlayer, loadSave, save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

@@ -1,4 +1,7 @@
 // Mid-poly модели машин из примитивов
+// Определяет: buildCarModel, STYLE, disposeTree.
+// Использует: MAT, extrude, lowerShape, box, polyShape, beam, lerp, clamp, mergeByMaterial, makeWheel, cyl
+//   (js/core.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

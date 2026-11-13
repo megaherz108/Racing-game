@@ -1,4 +1,7 @@
 // Реестр карт: описание, генерация данных, постройка
+// Определяет: MAP_INFO, DATA_GEN, BUILD, mapData, worlds, getData, getWorld, world, activateWorld.
+// Использует: save (js/data.js); scene (js/world.js); Sky (js/sky.js); arenaData, buildArena (js/maps/arena.js);
+//   cityData (js/maps/city/plan.js); buildCity (js/maps/city/build.js); forestData, buildForest (js/maps/forest.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

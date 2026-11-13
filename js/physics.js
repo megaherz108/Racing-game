@@ -1,5 +1,13 @@
 // Физика на Rapier: класс Car, cars, stepWorld, readInput, FIXED, accum, simTime.
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
+// Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
+//   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
+//   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, stepWorld.
+// Использует: derive, PLAYER_COLORS, NITRO, HANDLING, KO_REWARD (js/data.js); MAT, lerp, clamp, rand (js/core.js);
+//   buildCarModel, disposeTree (js/car-models.js); scene, smooth01 (js/world.js); world (js/maps/registry.js);
+//   sparks, smoke, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic
+//   (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins, keys (js/ui.js); Feel (js/feel.js); Stunts
+//   (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================

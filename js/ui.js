@@ -1,4 +1,14 @@
 // Интерфейс: меню, гараж, выбор карты, HUD, мини-карта, ввод
+// Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
+//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, MODE_INFO,
+//   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
+//   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, openMaps, setPaused, raceEndOpen,
+//   closeRaceEnd, keys, BLOCK.
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, carIndex, RACE_REWARD, RACE_CPS, PLAY_MAP, MODES,
+//   QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
+//   (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins
+//   (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused,
+//   countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
