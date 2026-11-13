@@ -493,7 +493,7 @@ function knockBreakables(dt) {
         c.shake = Math.min(1, c.shake + Math.min(0.6, 0.05 + loss / 14));
         if (O.dmg > 0) c.registerHit(loss * O.dmg, null, o.x, o.z);
         if (BRK_FX[O.kind]) BRK_FX[O.kind](o.x, it.y, o.z, it);
-        Sound.crash(c.p, O.kind, vn);
+        Sound.crash(c.p, O.kind, vn, O.snd);
         Stunts.smash(c.p, it.mass);
       }
       // лёгкие обломки на земле можно пнуть ещё раз

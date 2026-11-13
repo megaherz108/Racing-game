@@ -156,6 +156,7 @@ function updateSkids() { SKID_U.uNow.value = simTime; }
 const SURF = {
   asphalt: { smoke: 0xd8d8d8, skid: [0x0c0c0c, 0.55] },
   paving: { smoke: 0xd0ccc4, skid: [0x1a1a1a, 0.45] },
+  cobble: { smoke: 0xd0ccc4, skid: [0x1a1a1a, 0.45] },
   grass: { smoke: 0x8f8360, skid: [0x33361c, 0.55], track: 0.3, dust: [0x857a55, 0.22], bits: 0x4f7d2e },
   dirt: { smoke: 0xc7b28a, skid: [0x8c7652, 0.5], track: 0.3, dust: [0xc8b48c, 0.3] },
   sand: { smoke: 0xdccb9c, skid: [0xa48c62, 0.5], track: 0.4, dust: [0xd9c79a, 0.34] },

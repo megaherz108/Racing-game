@@ -24,7 +24,8 @@
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |
 | `js/effects.js`, `js/carfx.js` | частицы, следы, монеты; фары, повреждения, обломки |
-| `js/audio.js` | процедурный звук, профили моторов `ENGINE` |
+| `js/audio.js` | процедурный звук: ядро, мотор (профили `ENGINE`), эхо, разовые звуки `Sound` |
+| `js/audio-env.js`, `js/audio-traffic.js` | фоны районов, покрытие, стыки мостов, гидранты; моторы и гудки трафика |
 | `js/match.js` | камеры, `startMatch()` / `endMatch()`, `state`, `countdown` |
 | `js/ui.js` | меню, гараж, экран режима, HUD, мини-карта, клавиатура `keys` |
 | `js/race.js`, `js/stunts.js`, `js/feel.js` | гонка по чекпоинтам; трюки и нитро; стоп-кадр и замедление |

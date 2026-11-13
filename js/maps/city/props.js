@@ -27,7 +27,7 @@ function cityBuildLights(K) {
     { geo: new THREE.CylinderGeometry(0.09, 0.11, 4.6, 6).translate(0, 2.3, 0), mat: stdMat(0x3a3e44, { metalness: 0.5, roughness: 0.5 }) },
     { geo: new THREE.BoxGeometry(0.42, 1.3, 0.3).translate(0, 3.9, 0), mat: stdMat(0x23262b, { roughness: 0.6 }) },
     { geo: new THREE.SphereGeometry(0.13, 10, 8), mat: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false, per: 3, loc: bulbLoc },
-  ], { mass: 240, anchor: 2.5, minSpeed: 3, dmg: 0.4, cy: 2.5, lie: 1.52, kind: 'metal', far: 320 }, (B, h, i) => {
+  ], { mass: 240, anchor: 2.5, minSpeed: 3, dmg: 0.4, cy: 2.5, lie: 1.52, kind: 'metal', snd: 'glass', far: 320 }, (B, h, i) => {
     h.y = D.ground(h.x, h.z);
     h.brk = B.add(grid, h.x, h.y, h.z, Math.atan2(h.fx, h.fz), 0.2, 4.6);
     h.bulbs = B.meshes[2].mesh; h.bi = i * 3;
@@ -79,7 +79,7 @@ function cityBuildProps(K) {
     { geo: new THREE.CylinderGeometry(0.1, 0.15, 7, 6).translate(0, 3.5, 0), mat: stdMat(0x50555c, { metalness: 0.6, roughness: 0.4 }) },
     { geo: new THREE.BoxGeometry(2.2, 0.16, 0.4).translate(1.0, 7, 0), mat: stdMat(0x6a7078, { metalness: 0.5, roughness: 0.4 }) },
     { geo: new THREE.BoxGeometry(0.62, 0.06, 0.3).translate(1.75, 6.9, 0), mat: Sky.mats.bulb, shadow: false },      // плафон: ночью светится
-  ], { mass: 200, anchor: 2, minSpeed: 2.5, dmg: 0.4, cy: 3.5, lie: 1.5, kind: 'metal', far: 320 }, (B, o) => { o.brk = B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.22, 7); }, 10);
+  ], { mass: 200, anchor: 2, minSpeed: 2.5, dmg: 0.4, cy: 3.5, lie: 1.5, kind: 'metal', snd: 'glass', far: 320 }, (B, o) => { o.brk = B.add(grid, o.x, D.ground(o.x, o.z), o.z, o.ry, 0.22, 7); }, 10);
   // ночные огни фонарей: ореол у плафона (Points — всегда лицом к камере) и световое пятно на асфальте.
   // Видны только вечером и ночью; у сбитого фонаря гаснут (проверка раз в 0,4 с).
   const nightGroup = new THREE.Group(); nightGroup.visible = false; group.add(nightGroup);

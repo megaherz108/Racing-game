@@ -216,6 +216,7 @@ function buildForest(D) {
   const allPts = D.allPts;
   return {
     id: 'forest', group, grid, barrels: [], ground: D.ground, water: WATER, bounds: 250,
+    soundAt: (x, z, o) => { o.birds = 1; o.leaves = 0.9; return o; },          // фон: птицы и листва (js/audio-env.js)
     sky: 0xb3d1e8, fog: [100, 460], coinCount: 70, spawns: D.spawns,
     roadPoint(x, z, p) {
       let best = allPts[0], bd = 1e18;

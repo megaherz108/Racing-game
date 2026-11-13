@@ -1,0 +1,10 @@
+{
+  "waves": {"file": "waves.mp3", "loop": true, "gain": 0.86, "maxSec": 30, "author": "SamsterBirdies", "license": "CC0", "url": "https://freesound.org/people/SamsterBirdies/sounds/578524/"},
+  "city": {"file": "city.mp3", "loop": true, "gain": 1.1, "maxSec": 30, "author": "visionear", "license": "CC0", "url": "https://freesound.org/people/visionear/sounds/723607/"},
+  "birds": {"file": "birds.mp3", "loop": true, "gain": 15, "maxSec": 30, "author": "rubindaniel", "license": "CC0", "url": "https://freesound.org/people/rubindaniel/sounds/794578/"},
+  "night": {"file": "night.mp3", "loop": true, "gain": 0.35, "maxSec": 30, "author": "2887679652", "license": "CC0", "url": "https://freesound.org/people/2887679652/sounds/167304/"},
+  "rain": {"file": "rain.mp3", "loop": true, "gain": 15, "maxSec": 30, "author": "unfa", "license": "CC0", "url": "https://freesound.org/people/unfa/sounds/177479/"},
+  "gulls": {"file": "gulls.mp3", "loop": true, "gain": 0.34, "maxSec": 30, "author": "jyka1rock", "license": "CC0", "url": "https://freesound.org/people/jyka1rock/sounds/512099/"},
+  "shiphorn": {"file": "shiphorn.mp3", "gain": 0.46, "author": "phonoflora", "license": "CC0", "url": "https://freesound.org/people/phonoflora/sounds/500146/"},
+  "bell": {"file": "bell.mp3", "gain": 3.31, "maxSec": 20, "author": "Sadiquecat", "license": "CC0", "url": "https://freesound.org/people/Sadiquecat/sounds/852491/"}
+}

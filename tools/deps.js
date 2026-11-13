@@ -75,7 +75,7 @@ function build() {
   for (const f of FILES) {
     const src = read(f), code = strip(src).replace(/\.\.\./g, ' '), local = localDecls(src), own = new Set(map[f].defs);
     const ids = new Set();
-    for (const m of code.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?!\s*:(?!:))/g)) ids.add(m[1]);
+    for (const m of code.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])(?!\s*:(?!:))/g)) ids.add(m[1]);
     // «a ? b : c» — b тоже использование: добавить имена перед « :», если перед ними стоит «?»
     for (const m of code.matchAll(/\?\s*([A-Za-z_$][\w$]*)\s*:/g)) ids.add(m[1]);
     for (const n of ids) {

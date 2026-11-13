@@ -75,20 +75,34 @@ function cityBuildWorld(K) {
   const total = roads.reduce((s, r) => s + Math.abs(r.x1 - r.x0) + Math.abs(r.z1 - r.z0), 0);
   const surface = (x, z, y = Infinity) => Math.max(D.ground(x, z), decks.surface(x, z, y));
   // покрытие под колесом (пыль, брызги, цвет дыма и следов — js/effects.js): дороги — асфальт, кварталы — плитка,
-  // газоны и парк — трава, дорожки парка — грунт, берег — песок, у самой воды — мокрый песок
+  // в Старом городе улицы — брусчатка; газоны и парк — трава, дорожки парка — грунт, берег — песок, у самой воды — мокрый песок
   const surfaceKind = (x, z) => {
     const cd = D.coastD(x, z);
     if (cd < 16 || z < D.BEACH_Z) return cd < 12 ? 'wet' : 'sand';          // вода начинается при cd ≈ 7,5 м
     const b = D.blockAt(x, z);
-    if (!b) return 'asphalt';
+    if (!b) return D.district(x, z) === 'oldtown' ? 'cobble' : 'asphalt';      // улицы Старого города мощёные
     if (b.lane && x > b.lane.x0 && x < b.lane.x1) return 'asphalt';
     if (b.type === 'park') return D.parkPath(x, z) < 3 ? 'dirt' : 'grass';
     if ((b.type === 'suburb' || b.type === 'resort') && !(b.special && !b.special.fill) &&
       Math.min(x - b.x0, b.x1 - x, z - b.z0, b.z1 - z) > 3.6) return 'grass';
     return 'paving';
   };
+  // фоновые звуки района (js/audio-env.js): веса в точке. Район опрашивается в пяти точках вокруг,
+  // поэтому на границах районов звук меняется плавно; волны — по расстоянию до моря и до кромки канала
+  const AMB = {
+    port: { hum: 0.45, gulls: 1, ship: 1, horns: 0.2 }, downtown: { hum: 1, horns: 1, echo: 0.12 }, city: { hum: 0.65, horns: 0.5, birds: 0.15 },
+    oldtown: { hum: 0.35, bells: 1, birds: 0.35, horns: 0.15 }, park: { hum: 0.15, birds: 1, leaves: 1 },
+    resort: { hum: 0.25, birds: 0.4, gulls: 0.5, leaves: 0.3 }, suburb: { hum: 0.25, birds: 0.7, leaves: 0.5 },
+  };
+  const AMB_PTS = [[0, 0], [45, 0], [-45, 0], [0, 45], [0, -45]];
+  const soundAt = (x, z, o) => {
+    for (const [ox, oz] of AMB_PTS) { const a = AMB[D.district(x + ox, z + oz)]; for (const k in a) o[k] += a[k] / AMB_PTS.length; }
+    const sea = clamp(1 - (D.coastD(x, z) - 8) / 110, 0, 1), quay = clamp(1 - (D.quayD(x, z) - 3) / 35, 0, 1);
+    o.sea = Math.max(sea, quay * 0.45); o.gulls = Math.max(o.gulls, sea * 0.8);
+    return o;
+  };
   return {
-    id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, surfaceKind, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
+    id: 'city', group, grid, decks, barrels: [], ground: D.ground, surface, surfaceKind, soundAt, geysers, water: D.WATER, bounds: D.BOUNDS, hfStep: 2,
     sky: 0x9fd3f7, fog: [280, 760], coinCount: 100,
     // старт на набережной канала у подножия западного пандуса, лицом к эстакаде (на север);
     // направо по набережной — разводной мост-трамплин
