@@ -178,7 +178,7 @@ class Car {
     // свои задние фонари: стоп-сигналы разгораются при торможении (общий MAT.tail — у трафика)
     this.tailMat = MAT.tail.clone(); this.tailMat.userData = {};
     this.model.root.traverse(o => { if (o.material === MAT.tail) o.material = this.tailMat; });
-    this.fx = new CarFx(this);             // фонари заднего хода, ореолы, след фонарей, вмятины (js/carfx.js)
+    this.fx = new CarFx(this);             // фонари заднего хода, ореолы, след фонарей, бамперы (js/carfx.js)
     const mk = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.75, 4), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[p] }));
     mk.rotation.x = Math.PI; mk.layers.set(p + 1); this.model.root.add(mk); this.marker = mk;
     this.shadowProxy = shadowProxyOf(this.model.root);   // тень машины — одним мешем вместо полутора десятков (js/world.js)

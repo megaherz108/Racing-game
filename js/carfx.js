@@ -1,15 +1,14 @@
 // Живые фары и видимые повреждения машин игроков: стоп-сигналы и фонари заднего хода с ореолами, светящийся след
-// задних фонарей на скорости, вмятины на кузове, отлетающие бамперы, дым из-под капота (js/physics.js → Car.visual).
-// Определяет: TRAIL_T, TRAIL_N, trailMat, WRECK_MAX, Wrecks, removeWreck, vHash, CarFx.
-// Использует: QUAL, clamp, rand (js/core.js); scene, NIGHT_U, smooth01, Breakables (js/world.js); Sky (js/sky.js);
-//   sparks (js/effects.js).
+// задних фонарей на скорости, отлетающие бамперы, дым из-под капота (js/physics.js → Car.visual).
+// Определяет: TRAIL_T, TRAIL_N, trailMat, WRECK_MAX, Wrecks, removeWreck, CarFx.
+// Использует: QUAL, rand (js/core.js); scene, NIGHT_U, smooth01, Breakables (js/world.js); Sky (js/sky.js); sparks
+//   (js/effects.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
    CAR FX
    ===================================================================== */
-const _fxV = new THREE.Vector3(), _fxA = new THREE.Vector3(), _fxB = new THREE.Vector3(), _fxC = new THREE.Vector3(),
-  _hitP = new THREE.Vector3(), _hitD = new THREE.Vector3();
+const _fxV = new THREE.Vector3();
 
 /* ---------- светящийся след задних фонарей ---------- */
 // Лента из последних положений фонаря за TRAIL_T секунд. Разворот ленты лицом к камере считает вершинный шейдер
@@ -55,9 +54,6 @@ function removeWreck(w) {
   for (const E of w.B.meshes) { scene.remove(E.mesh); E.mesh.geometry.dispose(); E.mesh.dispose(); }
   const i = Wrecks.list.indexOf(w); if (i >= 0) Wrecks.list.splice(i, 1);
 }
-
-// «случайное» число из координат вершины: копии одной вершины в соседних треугольниках сдвигаются одинаково — без дыр
-const vHash = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
 
 class CarFx {
   constructor(car) {
@@ -105,9 +101,6 @@ class CarFx {
         hist: [[], []], pool: [], t: 0, last: -1 };
     }
 
-    // вмятины: все меши кузова и бамперов (геометрия у каждой машины своя — её можно менять)
-    this.dentMeshes = [];
-    m.body.traverse(o => { if (o.isMesh && o.geometry.attributes.normal && o.material !== this.revMat) this.dentMeshes.push(o); });
     this.endDmg = { f: 0, r: 0 };
     this.wrecks = [];
   }
@@ -160,55 +153,15 @@ class CarFx {
     if (any) for (const a of ['position', 'aTan', 'aA']) T.geo.attributes[a].needsUpdate = true;
   }
 
-  // удар силой strength (Δv, м/с) в точке (wx, wz): вмятина вокруг точки удара, при сильных ударах в нос или корму — бампер
+  // удар силой strength (Δv, м/с) в точке (wx, wz): сильные удары в нос или корму копятся и отрывают бампер
   hit(strength, wx, wz) {
     const car = this.car, g = car.g, s = Math.sin(car.h), c = Math.cos(car.h);
+    if (!car.model.bumpers) return;
     const dx = wx - car.x, dz = wz - car.z, lx = c * dx - s * dz, lz = s * dx + c * dz;
-    const hw = g.W / 2, hl = g.L / 2, P = _hitP, dir = _hitD;
-    let end = null;
-    if (Math.abs(lz) / hl > Math.abs(lx) / hw) {                 // удар в нос или корму
-      const sz = Math.sign(lz) || 1;
-      P.set(clamp(lx, -hw + 0.25, hw - 0.25), 0, sz * hl); dir.set(0, 0, -sz); end = sz > 0 ? 'f' : 'r';
-    } else {                                                      // удар в борт
-      const sx = Math.sign(lx) || 1;
-      P.set(sx * hw, 0, clamp(lz, -hl + 0.3, hl - 0.3)); dir.set(-sx, 0, 0);
-    }
-    P.y = g.bottomY + (g.H - g.bottomY) * rand(0.2, 0.42);
-    const R = clamp(0.45 + strength * 0.045, 0.5, 1.15), D = Math.min(0.16, 0.015 + (strength - 2.5) * 0.016);
-    for (const mesh of this.dentMeshes) if (mesh.parent && mesh.parent.visible !== false) this.dent(mesh, P, dir, R, D);
-    if (end && car.model.bumpers) {
-      this.endDmg[end] += strength;
-      if (this.endDmg[end] > 13) this.detach(end, strength);
-    }
-  }
-  dent(mesh, P, dir, R, D) {
-    const geo = mesh.geometry, pos = geo.attributes.position, nrm = geo.attributes.normal, a = pos.array;
-    if (!mesh.userData.orig) mesh.userData.orig = { p: a.slice(), n: nrm.array.slice() };
-    const o = mesh.userData.orig.p, R2 = R * R, MAX = 0.26;
-    let touched = null;
-    for (let i = 0; i < a.length; i += 3) {
-      const ex = a[i] - P.x, ey = (a[i + 1] - P.y) * 1.4, ez = a[i + 2] - P.z, d2 = ex * ex + ey * ey + ez * ez;
-      if (d2 >= R2) continue;
-      const f = 1 - Math.sqrt(d2) / R, push = D * f * f * (0.7 + 0.6 * vHash(o[i], o[i + 1], o[i + 2]));
-      let nx = a[i] + dir.x * push, nz = a[i + 2] + dir.z * push;
-      const tx = nx - o[i], tz = nz - o[i + 2], tl = Math.hypot(tx, tz);
-      if (tl > MAX) { nx = o[i] + tx / tl * MAX; nz = o[i + 2] + tz / tl * MAX; }
-      a[i] = nx; a[i + 1] -= push * 0.15; a[i + 2] = nz;
-      (touched || (touched = new Set())).add((i / 9) | 0);
-    }
-    if (!touched) return;
-    if (geo.index) geo.computeVertexNormals();
-    else {
-      // мятые треугольники — с собственными (плоскими) нормалями: смятый металл ловит свет гранями
-      const n = nrm.array;
-      for (const t of touched) {
-        const b = t * 9;
-        _fxA.set(a[b], a[b + 1], a[b + 2]); _fxB.set(a[b + 3], a[b + 4], a[b + 5]); _fxC.set(a[b + 6], a[b + 7], a[b + 8]);
-        _fxB.sub(_fxA); _fxC.sub(_fxA); _fxB.cross(_fxC).normalize();
-        for (let k = 0; k < 3; k++) { n[b + k * 3] = _fxB.x; n[b + k * 3 + 1] = _fxB.y; n[b + k * 3 + 2] = _fxB.z; }
-      }
-    }
-    pos.needsUpdate = nrm.needsUpdate = true;
+    if (Math.abs(lz) / (g.L / 2) <= Math.abs(lx) / (g.W / 2)) return;    // удар в борт
+    const end = lz > 0 ? 'f' : 'r';
+    this.endDmg[end] += strength;
+    if (this.endDmg[end] > 13) this.detach(end, strength);
   }
 
   // оторвать бампер end ('f' / 'r'): он улетает отдельным обломком, а на машине пропадает
@@ -242,13 +195,8 @@ class CarFx {
     for (let k = 0; k < 10; k++) sparks.spawn(_fxV.x, _fxV.y + 0.3, _fxV.z, car.vx * 0.5 + rand(-3, 3), rand(1, 4), car.vz * 0.5 + rand(-3, 3), 0.3, 0.05, 0.4, 0xffc060, 1, 14);
   }
 
-  // ремонт (машина починилась после поломки): кузов выпрямляется, бамперы на месте; оторванные остаются лежать
+  // ремонт (машина починилась после поломки): бамперы на месте; оторванные остаются лежать
   repair() {
-    for (const mesh of this.dentMeshes) {
-      const o = mesh.userData.orig; if (!o) continue;
-      const g = mesh.geometry; g.attributes.position.array.set(o.p); g.attributes.normal.array.set(o.n);
-      g.attributes.position.needsUpdate = g.attributes.normal.needsUpdate = true;
-    }
     const bp = this.car.model.bumpers;
     if (bp) { bp.f.visible = bp.r.visible = true; }
     this.endDmg.f = this.endDmg.r = 0;
