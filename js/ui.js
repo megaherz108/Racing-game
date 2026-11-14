@@ -2,13 +2,14 @@
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
 //   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, MODE_INFO,
 //   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
-//   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, openMaps, setPaused, raceEndOpen,
-//   closeRaceEnd, keys, BLOCK.
+//   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
+//   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
 // Использует: save, persist, KMH, CARS, browse, derive, STATS, carIndex, RACE_REWARD, RACE_CP_REWARD, RACE_CPS,
-//   PLAY_MAP, MODES, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
-//   (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins
-//   (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused,
-//   countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf (js/main.js).
+//   playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js);
+//   updatePodium (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO
+//   (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic
+//   (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf
+//   (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -162,7 +163,7 @@ function buyCar(p) {
 // откатить просмотр к купленным машинам перед выездом
 function syncBrowse() { for (let p = 0; p < 2; p++) if (!save.players[p].owned.includes(CARS[browse[p]].id)) browse[p] = carIndex(save.players[p].sel); }
 
-// Экран выбора режима. Выбор карты пока скрыт: играем в городе (PLAY_MAP в js/data.js).
+// Экран выбора режима и карты (PLAY_MAPS в js/data.js). Гонка — только в городе: ей нужен дорожный граф.
 const MODE_INFO = {
   free: { name: 'Свободная езда', tag: 'Монеты +1 · нокаут +5',
     desc: 'Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал.' },
@@ -172,7 +173,7 @@ const MODE_INFO = {
     desc: `По городу расставлены ${RACE_CPS} больших светящихся арок. Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. За каждую арку +${RACE_CP_REWARD}, по дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.` },
 };
 function drawModePreview(cv, mode) {
-  const ctx = cv.getContext('2d'), D = getData(PLAY_MAP), S = cv.width, sc = S / (2 * D.mmExt);
+  const ctx = cv.getContext('2d'), D = getData(playMap(mode)), S = cv.width, sc = S / (2 * D.mmExt);
   ctx.fillStyle = D.mmBg; ctx.fillRect(0, 0, S, S);
   ctx.drawImage(D.minimap, 0, 0, S, S);
   ctx.fillStyle = 'rgba(8,12,18,.35)'; ctx.fillRect(0, 0, S, S);
@@ -206,20 +207,22 @@ function drawModePreview(cv, mode) {
   });
 }
 function renderMaps() {
-  const grid = $('mapGrid');
-  if (!grid.dataset.built) {
+  const grid = $('mapGrid'), map = playMap('free');
+  if (grid.dataset.built !== map) {                // превью рисуются заново при смене карты
     grid.innerHTML = MODES.map(id => `
       <button class="mapcard" data-mode="${id}">
         <canvas width="240" height="240"></canvas>
         <div class="mname">${MODE_INFO[id].name}</div>
-        <div class="msize">${MODE_INFO[id].tag}</div>
+        <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ' · только в городе' : ''}</div>
         <div class="mdesc">${MODE_INFO[id].desc}</div>
       </button>`).join('');
     grid.querySelectorAll('.mapcard').forEach(card => drawModePreview(card.querySelector('canvas'), card.dataset.mode));
-    grid.dataset.built = '1';
+    grid.dataset.built = map;
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
-  $('modeLine').innerHTML = `Карта: <b>${MAP_INFO[PLAY_MAP].name}</b> · ← / → — режим, Enter — старт`;
+  $('modeLine').innerHTML = `Карта: ${PLAY_MAPS.map(id =>
+    `<button class="tsel ${id === map ? 'on' : ''}" data-map="${id}">${MAP_INFO[id].name}</button>`).join('')}
+    <span class="thint">C</span> · ← / → — режим, Enter — старт`;
   renderTraffic(); renderTime(); renderWeather(); renderQuality();
 }
 // качество графики (QUALITY в js/data.js): сглаживание задаётся при создании WebGL, поэтому смена — с перезагрузкой
@@ -241,7 +244,7 @@ function stepQuality() { const ids = Object.keys(QUALITY), i = ids.indexOf(save.
 function renderTime() {
   $('timeLine').innerHTML = `Время суток: ${TIMES.map(([id, label]) =>
     `<button class="tsel ${id === save.tod ? 'on' : ''}" data-tod="${id}">${label}</button>`).join('')}
-    <span class="thint">N</span>`;
+    <span class="thint">N${playMap('free') === 'coast' ? ' · на Побережье всегда золотой час' : ''}</span>`;
 }
 function setTime(id) { save.tod = id; persist(); renderTime(); }
 function stepTime() { const i = TIMES.findIndex(l => l[0] === save.tod); setTime(TIMES[(i + 1) % TIMES.length][0]); }
@@ -264,6 +267,8 @@ function stepTraffic(d) {
   setTraffic(TRAFFIC_LEVELS[clamp(i + d, 0, TRAFFIC_LEVELS.length - 1)][0]);
 }
 function selectMode(id) { save.mode = id; persist(); renderMaps(); }
+function selectMap(id) { if (!PLAY_MAPS.includes(id)) return; save.map = id; persist(); renderMaps(); }
+function stepMap() { selectMap(PLAY_MAPS[(PLAY_MAPS.indexOf(playMap('free')) + 1) % PLAY_MAPS.length]); }
 function openMaps() { syncBrowse(); showLoading('Подготовка…'); setTimeout(() => { hideLoading(); setState('maps'); }, 30); }
 
 $('garage').addEventListener('click', e => {
@@ -285,6 +290,7 @@ $('mReset').onclick = () => {
 $('gBack').onclick = () => setState('menu');
 $('gPlay').onclick = () => { if (!$('gPlay').disabled) openMaps(); };
 $('mapsBack').onclick = () => setState('menu');
+$('modeLine').addEventListener('click', e => { const b = e.target.closest('[data-map]'); if (b) selectMap(b.dataset.map); });
 $('trafficLine').addEventListener('click', e => { const b = e.target.closest('[data-traffic]'); if (b) setTraffic(b.dataset.traffic); });
 $('timeLine').addEventListener('click', e => { const b = e.target.closest('[data-tod]'); if (b) setTime(b.dataset.tod); });
 $('weatherLine').addEventListener('click', e => { const b = e.target.closest('[data-rain]'); if (b) setWeather(b.dataset.rain === 'true'); });
@@ -340,6 +346,7 @@ addEventListener('keydown', e => {
     else if (e.code === 'ArrowUp' || e.code === 'KeyW') stepTraffic(1);
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') stepTraffic(-1);
     else if (e.code === 'KeyN') stepTime();
+    else if (e.code === 'KeyC') stepMap();
     else if (e.code === 'KeyR') setWeather(!save.rain);
     else if (e.code === 'KeyQ') stepQuality();
     else if (e.code === 'Enter') startMatch();

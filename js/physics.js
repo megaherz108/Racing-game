@@ -4,10 +4,10 @@
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
 //   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
 // Использует: derive, PLAYER_COLORS, NITRO, HANDLING, KO_REWARD (js/data.js); QUAL, MAT, lerp, clamp, rand
-//   (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01, dropShadowProxy
-//   (js/world.js); world (js/maps/registry.js); sparks, smoke, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound
-//   (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins, keys (js/ui.js); Feel
-//   (js/feel.js); Stunts (js/stunts.js).
+//   (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01, waterLevel,
+//   dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js); CarFx
+//   (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins,
+//   keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -78,12 +78,14 @@ function buildPhysics() {
     return c;
   };
 
-  // рельеф: карта высот, снятая с world.ground() (Rapier: строки — Z, столбцы — X, хранение по столбцам)
-  const L = world.bounds + 12, st = world.hfStep || RT.hfStep, n = Math.ceil(2 * L / st), N = n + 1, size = n * st;
-  const hs = new Float32Array(N * N);
-  for (let xi = 0; xi < N; xi++) for (let zi = 0; zi < N; zi++)
-    hs[zi + xi * N] = world.ground(-size / 2 + xi * st, -size / 2 + zi * st);
-  const ground = addStatic(R.ColliderDesc.heightfield(n, n, hs, { x: size, y: 1, z: size }, R.HeightFieldFlags.FIX_INTERNAL_EDGES), 'ground');
+  // рельеф: карта высот, снятая с world.ground() (Rapier: строки — Z, столбцы — X, хранение по столбцам).
+  // Карта может быть прямоугольной: world.boundsX / world.boundsZ (по умолчанию обе — world.bounds).
+  const BX = world.boundsX ?? world.bounds, BZ = world.boundsZ ?? world.bounds, st = world.hfStep || RT.hfStep;
+  const nx = Math.ceil(2 * (BX + 12) / st), nz = Math.ceil(2 * (BZ + 12) / st), Nx = nx + 1, Nz = nz + 1, sx = nx * st, sz = nz * st;
+  const hs = new Float32Array(Nx * Nz);
+  for (let xi = 0; xi < Nx; xi++) for (let zi = 0; zi < Nz; zi++)
+    hs[zi + xi * Nz] = world.ground(-sx / 2 + xi * st, -sz / 2 + zi * st);
+  const ground = addStatic(R.ColliderDesc.heightfield(nz, nx, hs, { x: sx, y: 1, z: sz }, R.HeightFieldFlags.FIX_INTERNAL_EDGES), 'ground');
   ground.setFriction(0.8);
   ground.setCollisionGroups(GROUND_GROUPS);
 
@@ -96,15 +98,20 @@ function buildPhysics() {
   }
 
   // невидимые стены по краю карты
-  const B = world.bounds;
-  for (const [x, z, hx, hz] of [[B + 2, 0, 2, B + 4], [-B - 2, 0, 2, B + 4], [0, B + 2, B + 4, 2], [0, -B - 2, B + 4, 2]])
+  for (const [x, z, hx, hz] of [[BX + 2, 0, 2, BZ + 4], [-BX - 2, 0, 2, BZ + 4], [0, BZ + 2, BX + 4, 2], [0, -BZ - 2, BX + 4, 2]])
     addStatic(R.ColliderDesc.cuboid(hx, 120, hz).setTranslation(x, 0, z));
 
   // препятствия из сетки коллизий карты: коробки — кубоиды, круги — цилиндры от земли до высоты h
   const seen = new Set();
   for (const cell of world.grid.cells.values()) for (const o of cell) {
     if (seen.has(o)) continue; seen.add(o);
-    if (o.box) {
+    if (o.obb) {
+      // повёрнутый прямоугольник (дома деревни на побережье): кубоид, повёрнутый вокруг вертикали
+      const { x, z, w, d, rot } = o.obb, c = Math.cos(rot), s = Math.sin(rot);
+      const gs = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => world.ground(x + a * w / 2 * c + b * d / 2 * s, z - a * w / 2 * s + b * d / 2 * c));
+      const y0 = Math.min(...gs) - 1.5, y1 = world.ground(x, z) + Math.min(o.h, 300);
+      addStatic(R.ColliderDesc.cuboid(w / 2, (y1 - y0) / 2, d / 2).setTranslation(x, (y0 + y1) / 2, z).setRotation({ x: 0, y: Math.sin(rot / 2), z: 0, w: Math.cos(rot / 2) }));
+    } else if (o.box) {
       const cx = (o.minX + o.maxX) / 2, cz = (o.minZ + o.maxZ) / 2;
       const gs = [world.ground(o.minX, o.minZ), world.ground(o.maxX, o.minZ), world.ground(o.minX, o.maxZ), world.ground(o.maxX, o.maxZ), world.ground(cx, cz)];
       const y0 = Math.min(...gs) - 1.5, y1 = world.ground(cx, cz) + Math.min(o.h, 300);
@@ -236,6 +243,22 @@ class Car {
     if (o && Math.hypot(o.x - x, o.z - z) < 5) { x += Math.sin(h) * 9; z += Math.cos(h) * 9; }
     this.place(x, z, h, this.y + 1.5);       // на своём уровне: под эстакадой — на землю, на ней — на настил
   }
+  // Мелкая вода (брод): глубина d под машиной меньше той, на которой она тонет. Вода тормозит машину (сильнее на
+  // скорости) и разлетается брызгами от передних колёс. Только на картах с уровнем воды по месту (world.waterAt).
+  wade(dt, d) {
+    this.wadeD = d > 0.04 ? d : 0;
+    const spd = Math.hypot(this.vx, this.vz);
+    if (!this.wadeD || spd < 0.5) return;
+    const k = Math.min(1, d / 0.3), dv = Math.min(spd, k * (1.5 + 0.022 * spd * spd) * dt), lv = this.body.linvel();
+    this.body.setLinvel({ x: lv.x - this.vx / spd * dv, y: lv.y, z: lv.z - this.vz / spd * dv }, true);
+    this.sprayAcc = (this.sprayAcc || 0) + dt * Math.min(60, spd * 3) * k * QUAL.fx;
+    for (; this.sprayAcc > 1; this.sprayAcc--) {
+      const side = Math.random() < 0.5 ? -1 : 1, [x, z] = this.local(side * this.W * 0.5, this.L * 0.38), s = Math.sin(this.h), c = Math.cos(this.h);
+      const out = rand(1, 3) + spd * 0.12;               // веер воды в стороны и вперёд
+      smoke.spawn(x, this.y - 0.2, z, this.vx * 0.55 + c * side * out, rand(2, 4) + spd * 0.08, this.vz * 0.55 - s * side * out,
+        0.4, rand(1.6, 2.6), rand(0.5, 0.9), 0xeaf4ff, 0.55, 9);
+    }
+  }
   circle(i) { const o = this.cOff[i]; return [this.x + Math.sin(this.h) * o, this.z + Math.cos(this.h) * o]; }
   local(lx, lz, h = this.h, x = this.x, z = this.z) { const s = Math.sin(h), c = Math.cos(h); return [x + c * lx + s * lz, z - s * lx + c * lz]; }
 
@@ -245,7 +268,7 @@ class Car {
     if (this.drown > 0) {
       // тонущая машина — кинематическое тело, плавно погружается к уровню под водой
       const p = this.body.translation();
-      this.body.setNextKinematicTranslation({ x: p.x, y: p.y + (world.water - 1.1 - p.y) * Math.min(1, dt * 1.2), z: p.z });
+      this.body.setNextKinematicTranslation({ x: p.x, y: p.y + (this.drownW - 1.1 - p.y) * Math.min(1, dt * 1.2), z: p.z });
       return;
     }
     const vf = this.vf, spd = Math.abs(vf), sgn = vf >= 0 ? 1 : -1;
@@ -366,15 +389,18 @@ class Car {
       this.broken -= dt;
       if (this.broken <= 0) { this.broken = 0; this.hp = this.maxHp; this.fx.repair(); notify(this.p, 'Машина починена', 'good'); }
     }
-    // вода: машина тонет, через 5 с возвращается на дорогу
-    if (world.water !== null && this.drown <= 0 && this.grounded && world.ground(this.x, this.z) < world.water - 0.35 && this.y < world.water) {
-      this.drown = 5;
+    // вода: машина тонет, через 5 с возвращается на дорогу. Уровень воды может зависеть от места (река выше моря):
+    // waterLevel() в js/world.js
+    const wl = waterLevel(this.x, this.z);
+    if (wl !== null && this.drown <= 0 && this.grounded && world.ground(this.x, this.z) < wl - 0.35 && this.y < wl) {
+      this.drown = 5; this.drownW = wl;
       const R = RAPIER;
       this.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
       Sound.splash(this.p);
       notify(this.p, 'В ВОДЕ! Возврат через 5 с', 'bad');
-      for (let k = 0; k < 24; k++) smoke.spawn(this.x + rand(-1.5, 1.5), world.water + 0.3, this.z + rand(-1.5, 1.5), rand(-3, 3), rand(2, 6), rand(-3, 3), 0.8, 2.6, 0.9, 0xe8f4ff, 0.8, 6);
-    }
+      for (let k = 0; k < 24; k++) smoke.spawn(this.x + rand(-1.5, 1.5), wl + 0.3, this.z + rand(-1.5, 1.5), rand(-3, 3), rand(2, 6), rand(-3, 3), 0.8, 2.6, 0.9, 0xe8f4ff, 0.8, 6);
+    } else if (world.waterAt && wl !== null && this.drown <= 0 && this.grounded && this.y < wl + 1.2) this.wade(dt, wl - world.ground(this.x, this.z));
+    else this.wadeD = 0;
     if (this.drown > 0) {
       this.drown -= dt;
       if (this.drown <= 0) { this.toRoad(); notify(this.p, 'Машина возвращена на дорогу', 'good'); }

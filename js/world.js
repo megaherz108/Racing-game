@@ -1,9 +1,9 @@
 // Общая сцена карт и утилиты мира (шум, сетка коллизий, мини-карта, InstancedMesh)
 // Определяет: scene, hemi, sun, SUN_OFFSET, aimSun, smooth01, mulberry32, shuffle, makeNoise, noiseTexture, dummy,
 //   UNIT_BOX, FLAT_QUAD, inst, setInst, stdMat, StaticGrid, angLerp, Y_AXIS, BRK_G, BRK_FLY, BRK_HINGE, BRK_REST,
-//   brkGround, Breakables, mmCanvas, FACADE, NIGHT_U, makeBuildingMaterial, CHUNK, chunkKey, chunkBuckets,
-//   CHUNK_MIN_TRIS, geoTris, chunkOrAll, instChunks, optimizeStatic, DistCull, SHADOW_CELL, SHADOW_ONLY,
-//   buildShadowProxies, SHADOW_PROXY_MAT, shadowProxyOf, dropShadowProxy, setInstQ, Decks.
+//   brkGround, waterLevel, Breakables, mmCanvas, FACADE, NIGHT_U, makeBuildingMaterial, CHUNK, chunkKey,
+//   chunkBuckets, CHUNK_MIN_TRIS, geoTris, chunkOrAll, instChunks, optimizeStatic, DistCull, SHADOW_CELL,
+//   SHADOW_ONLY, buildShadowProxies, SHADOW_PROXY_MAT, shadowProxyOf, dropShadowProxy, setInstQ, Decks.
 // Использует: envTex, QUAL, rand, renderer, clamp, shared (js/core.js); EnvProbe (js/envprobe.js); world
 //   (js/maps/registry.js); surfaceAt (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -107,6 +107,12 @@ class StaticGrid {
   }
   addBox(minX, maxX, minZ, maxZ, h = 99) { return this.insert({ box: true, minX, maxX, minZ, maxZ, h, q: 0 }, minX, maxX, minZ, maxZ); }
   addCircle(x, z, r, h = 99) { return this.insert({ box: false, x, z, r, h, q: 0 }, x - r, x + r, z - r, z + r); }
+  // повёрнутый прямоугольник w × d с центром (x, z), поворот rot — как rotation.y у меша. Для поиска и простых
+  // проверок — его габаритный прямоугольник (minX…maxZ), коллайдер Rapier — точный (obb)
+  addOBB(x, z, w, d, rot, h = 99) {
+    const c = Math.cos(rot), s = Math.sin(rot), ex = Math.abs(c) * w / 2 + Math.abs(s) * d / 2, ez = Math.abs(s) * w / 2 + Math.abs(c) * d / 2;
+    return this.insert({ box: true, minX: x - ex, maxX: x + ex, minZ: z - ez, maxZ: z + ez, h, q: 0, obb: { x, z, w, d, rot } }, x - ex, x + ex, z - ez, z + ez);
+  }
   query(minX, maxX, minZ, maxZ) {
     const c = this.cell, out = this.out, q = ++this.qid;
     out.length = 0;
@@ -139,6 +145,9 @@ const BRK_G = 14;                                   // гравитация об
 const BRK_FLY = 1, BRK_HINGE = 2, BRK_REST = 3;     // режимы обломка: полёт, опора на землю, покой
 // высота поверхности под обломком: рельеф или настил (мост) не выше y
 const brkGround = (x, z, y) => typeof surfaceAt === 'function' ? surfaceAt(x, z, y + 0.5) : world.ground(x, z);
+// Уровень воды в точке: одно число на всю карту (world.water; null — воды нет) или по месту (world.waterAt(x, z) —
+// река в холмах выше моря; там, где воды нет, waterAt возвращает -Infinity)
+const waterLevel = (x, z) => world.waterAt ? world.waterAt(x, z) : world.water;
 class Breakables {
   // meshes — InstancedMesh (один экземпляр на объект) или { mesh, per, loc: [Matrix4] } — несколько экземпляров
   //   на объект со своими локальными матрицами (например, три лампы светофора).

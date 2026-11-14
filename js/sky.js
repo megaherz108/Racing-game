@@ -77,6 +77,11 @@ const Sky = (() => {
     sunset: { top: 0x2c3d72, hor: 0xf3a46e, gnd: 0x5a4650, sun: [0xffa257, 2.1], off: [-100, 30, -36], hemi: [0xffc39a, 0x47383c, 0.55],
       night: 0.3, fogK: 0.9, env: 'sky', disc: [0.03, 5], glow: [0.9, 6], glowRGB: [255, 196, 120],
       cloud: { cover: 0.52, lit: 0xffb27a, dark: 0x5b4767, a: 0.95 } },
+    // золотой час: солнце низко, тёплый свет и длинные тени; в отличие от заката фары и огни ещё не горят.
+    // Задаётся картой (world.tod), а не меню; направление солнца — world.sunOff
+    golden: { top: 0x4a74b6, hor: 0xf2d2a6, gnd: 0x6b5a4a, sun: [0xffc27c, 2.55], off: [70, 26, -72], hemi: [0xffd8b0, 0x5b4b3a, 0.6],
+      night: 0, fogK: 1, env: 'sky', disc: [0.028, 5], glow: [0.75, 8], glowRGB: [255, 206, 140],
+      cloud: { cover: 0.58, lit: 0xffd2a2, dark: 0x8d7b8a, a: 0.9 } },
     night: { top: 0x03060f, hor: 0x1a2742, gnd: 0x080b12, sun: [0x9fb6ff, 0.35], off: [45, 80, -55], hemi: [0x4a5c88, 0x101318, 0.2],
       night: 1, fogK: 0.75, env: 'sky', disc: [0.035, 1.6], glow: [0.25, 40], glowRGB: [210, 222, 255], stars: true,
       cloud: { cover: 0.56, lit: 0x2c3650, dark: 0x0b0f19, a: 0.85 } },
@@ -126,7 +131,7 @@ const Sky = (() => {
   }
   function envFor(id, P, horHex) {
     if (P.env !== 'sky') return envTex;
-    const key = id + ':' + horHex + ':' + !!P.rain;
+    const key = id + ':' + horHex + ':' + !!P.rain + ':' + P.off.join(',');    // ореол светила зависит от направления
     if (!cache.has(key)) { const e = envCanvas(P, horHex, id === 'night' ? 1.6 : P.rain ? 1 : 1.2); cache.set(key, pmrem.fromEquirectangular(e).texture); e.dispose(); }
     return cache.get(key);
   }
@@ -221,8 +226,12 @@ const Sky = (() => {
   };
 
   // включить время суток id для мира w (вызывается из activateWorld); rain — дождь (js/weather.js)
+  // w.sunOff — направление на солнце, заданное картой (вместо пресета); w.far — дальность прорисовки карты
+  // (горы-фон за туманом), иначе — до конца тумана
   function apply(w, id = 'day', rain = false) {
-    const P = cur = preset(id, rain);
+    let P = preset(id, rain);
+    if (w.sunOff) P = Object.assign({}, P, { off: w.sunOff });
+    cur = P;
     const horHex = P.hor ?? w.sky;
     scene.background = null; dome.visible = true;
     scene.environment = envFor(id, P, horHex);
@@ -230,7 +239,7 @@ const Sky = (() => {
     scene.fog.color.setHex(horHex);
     scene.fog.near = w.fog[0] * P.fogK; scene.fog.far = w.fog[1] * P.fogK;
     // дальше тумана всё равно ничего не видно — не рисуем
-    for (const c of cams) { c.far = scene.fog.far + 40; c.updateProjectionMatrix(); }
+    for (const c of cams) { c.far = w.far ?? scene.fog.far + 40; c.near = w.near ?? 0.1; c.updateProjectionMatrix(); }
     sun.color.setHex(P.sun[0]); sun.intensity = P.sun[1]; SUN_OFFSET.set(...P.off);
     hemi.color.setHex(P.hemi[0]); hemi.groundColor.setHex(P.hemi[1]); hemi.intensity = P.hemi[2];
     // купол

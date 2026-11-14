@@ -21,6 +21,7 @@
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |
 | `js/maps/registry.js` | список карт, `getData()` / `getWorld()` / `activateWorld()`, текущий `world` |
 | `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
+| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `crossings.js` (мосты, акведук, трамплин), `backdrop.js` (горы-фон) |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |
@@ -40,6 +41,7 @@
 - Город — по этапам: правка района → `blocks.js`, мостов/эстакады → `infra.js`, уличной мелочи → `streets.js` (раскладка) и `props.js` (3D). Порядок этапов — в `cityData()` и `buildCity()`.
 
 ## Подводные камни
+- Уровень воды читать через `waterLevel(x, z)` (`js/world.js`), а не `world.water`: на «Побережье» река выше моря (`world.waterAt`). Границы карты — `world.boundsX/boundsZ` (по умолчанию `world.bounds`).
 - **Город детерминирован** (зерно в `cityPlanBase()`): каждый новый вызов `R()` в середине раскладки меняет весь город после этого места. Если правка не должна менять город — сравни `__game.fingerprint('city')` (`dataHash`, `worldHash`) до и после, на свежей загрузке страницы до заезда.
 - Этапы города обмениваются данными через объект-контекст (`C` в раскладке, `K` в постройке): этап берёт нужное деструктуризацией в начале и отдаёт новое через `Object.assign` в конце.
 - Материалы, общие для многих мешей, помечены `userData.shared` (не уничтожать). Анимированное в статичных группах — `userData.dynamic = true`, иначе `optimizeStatic()` заморозит матрицу.

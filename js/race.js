@@ -3,9 +3,9 @@
 // Видна только следующая арка (и в 3D, и на мини-карте).
 // 3D-стрелка вверху половины экрана показывает на следующий чекпоинт.
 // Определяет: CP_R, CP_COL, CP_FIN, CP_LAYER, Race.
-// Использует: RACE_CPS, RACE_CP_REWARD, RACE_REWARD (js/data.js); clamp, renderer, rand (js/core.js); scene
-//   (js/world.js); world (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars (js/physics.js);
-//   cams, countdown, paused (js/match.js); $, HUD, addCoins, notify, keys (js/ui.js).
+// Использует: RACE_CPS, RACE_CP_REWARD, RACE_REWARD (js/data.js); clamp, renderer, rand (js/core.js); waterLevel,
+//   scene (js/world.js); world (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars
+//   (js/physics.js); cams, countdown, paused (js/match.js); $, HUD, addCoins, notify, keys (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -23,7 +23,8 @@ const Race = (() => {
   function goodNode(n) {
     if (n.deg < 2) return false;
     const x = n.x, z = n.z, g = world.ground(x, z);
-    if (world.water !== null && g < world.water + 0.3) return false;
+    const wl = waterLevel(x, z);
+    if (wl !== null && g < wl + 0.3) return false;
     if (world.surface && world.surface(x, z) > g + 1.5) return false;
     if (world.trafficData.rounds.some(r => Math.hypot(r.x - x, r.z - z) < 40)) return false;
     return !world.grid.query(x - 9, x + 9, z - 9, z + 9).some(o => !o.brk && (o.box

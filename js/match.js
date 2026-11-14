@@ -1,7 +1,7 @@
 // Камеры и запуск заезда
 // Определяет: cams, camYaw, camDist, camOff, camFov, camRoll, speedFrac, placeCam, STREAK_N, streaks, updateStreaks,
 //   state, paused, countdown, startMatch, endMatch.
-// Использует: save, PLAY_MAP, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp (js/core.js);
+// Использует: save, playMap, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp (js/core.js);
 //   smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
@@ -101,8 +101,9 @@ function updateStreaks(p) {
 }
 
 let state = 'menu', paused = false, countdown = 0;
-// mode: 'free' — свободная езда, 'race' — гонка по чекпоинтам (js/race.js). Другие карты пока скрыты, mapId — для отладки.
-function startMatch(mode = save.mode, mapId = PLAY_MAP) {
+// mode: 'free' — свободная езда, 'race' — гонка по чекпоинтам (js/race.js). mapId — карта, выбранная на экране режима
+// (playMap() в js/data.js); скрытые карты — только для отладки.
+function startMatch(mode = save.mode, mapId = playMap(mode)) {
   if (mode === 'race' && !getData(mapId).nodes) mode = 'free';     // для гонки нужен дорожный граф (есть только у города)
   showLoading(mode === 'race' ? 'Подготовка гонки…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
   // даём браузеру отрисовать экран загрузки перед тяжёлой генерацией

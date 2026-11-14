@@ -1,8 +1,8 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, derive, HANDLING, KMH, NITRO, TIMES, cleanTime, PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY,
-//   MAP_IDS, KO_REWARD, MODES, PLAY_MAP, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, COIN_MUL, TRAFFIC_LEVELS,
-//   cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save, persist, carIndex,
-//   browse.
+//   MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, COIN_MUL,
+//   TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save,
+//   persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -102,12 +102,14 @@ const PLAYER_COLORS = [0x38c8ff, 0xff8a2a];
    ===================================================================== */
 // У каждого игрока свой кошелёк и свой гараж
 const SAVE_KEY = 'steel_duel_save_v2', OLD_SAVE_KEY = 'steel_duel_save_v1';
-const MAP_IDS = ['city', 'forest', 'arena'];
+const MAP_IDS = ['city', 'forest', 'arena', 'coast'];
 const KO_REWARD = 5;
-// режимы игры (выбираются вместо карты; другие карты пока скрыты — играем в городе)
-// solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1)
+// режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1)
 const MODES = ['free', 'solo', 'race'];
+// карты, которые можно выбрать на экране режима (остальные — для отладки); гонка нужна дорожному графу — только город
+const PLAY_MAPS = ['city', 'coast'];
 const PLAY_MAP = 'city';
+const playMap = (mode = save.mode) => mode === 'race' || !PLAY_MAPS.includes(save.map) ? PLAY_MAP : save.map;
 const RACE_CPS = 10, RACE_REWARD = 30, RACE_CP_REWARD = 2;   // чекпоинтов в гонке, награда победителю и за каждый чекпоинт
 // сколько монет на дорогах в каждом режиме: множитель к world.coinCount карты
 const COIN_MUL = { free: 1.5, solo: 1.5, race: 1 };

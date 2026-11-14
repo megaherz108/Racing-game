@@ -7,8 +7,8 @@
 //   удары колёс на стыках плит мостов и эстакады;
 // - шипение воды у сбитого гидранта, пока бьёт фонтан (world.geysers).
 // Определяет: SoundEnv.
-// Использует: rand, clamp (js/core.js); Sky (js/sky.js); Weather (js/weather.js); world (js/maps/registry.js); Sound
-//   (js/audio.js); cars (js/physics.js); cams (js/match.js).
+// Использует: rand, clamp (js/core.js); waterLevel (js/world.js); Sky (js/sky.js); Weather (js/weather.js); world
+//   (js/maps/registry.js); Sound (js/audio.js); cars (js/physics.js); cams (js/match.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 const SoundEnv = (() => {
@@ -23,6 +23,7 @@ const SoundEnv = (() => {
     dirt: { roar: 0.55, roarF: 240, am: 0.4, step: 0.45, hiss: 0.55, hissF: 1300, hissQ: 0.9 },
     sand: { roar: 0.45, roarF: 190, am: 0.15, step: 0.6, hiss: 0.5, hissF: 900, hissQ: 0.6 },
     wet: { roar: 0.4, roarF: 300, am: 0.1, step: 0.6, hiss: 1.0, hissF: 3200, hissQ: 0.5 },
+    wood: { roar: 0.75, roarF: 170, am: 0.8, step: 0.24, hiss: 0.05, hissF: 1400, hissQ: 0.6 },   // дощатый настил
   };
   const HARD = { asphalt: 1, deck: 1, paving: 1, cobble: 1 };     // в дождь по ним шипит вода
   const JOINT = 12;                                                // шаг стыков плит моста, м
@@ -204,7 +205,7 @@ const SoundEnv = (() => {
       syn('rain', rainy ? 0.05 : 0, 1);
       // эхо: под крышей — сильное; на мосту над водой и на эстакаде — слабое; уличный «каньон» Даунтауна — чуть-чуть
       const deck = world.decks ? world.decks.surface(x, z, y + 0.3) : -Infinity, onDeck = deck > world.ground(x, z) + 0.5;
-      const over = onDeck ? (world.water != null && world.ground(x, z) < world.water ? 0.3 : 0.15) : 0;
+      const wl = waterLevel(x, z), over = onDeck ? (wl != null && world.ground(x, z) < wl ? 0.3 : 0.15) : 0;
       Sound.reverb(p, e.wet = Math.max(covered(x, z, y) ? 0.9 : 0, over, w.echo));
       e.onDeck = onDeck;
     }
@@ -223,7 +224,9 @@ const SoundEnv = (() => {
       }
     }
     // покрытие под колёсами
-    const kind = e.onDeck ? 'deck' : world.surfaceKind ? world.surfaceKind(x, z) : 'asphalt';
+    // на настиле: деревянный (мат. 'wood') гудит досками, остальные — как бетонные плиты со стыками
+    const dk = e.onDeck ? deckUnder(x, z, y) : null, wood = dk && dk.mat === 'wood';
+    const kind = e.onDeck ? (wood ? 'wood' : 'deck') : world.surfaceKind ? world.surfaceKind(x, z) : 'asphalt';
     e.kind = kind;
     const R = ROAD[kind] || ROAD.asphalt, lvl = car.grounded && !drown ? clamp(sp / 28, 0, 1.2) : 0;
     const wetHiss = rainy && HARD[kind] ? 0.6 : 0;
@@ -235,7 +238,7 @@ const SoundEnv = (() => {
     e.hiss.f.frequency.setTargetAtTime(wetHiss > R.hiss ? 3000 : R.hissF, t, 0.15);
     e.hiss.f.Q.setTargetAtTime(R.hissQ, t, 0.15);
     // стыки плит моста: удар передней оси, через базу — задней
-    if (e.onDeck && lvl > 0.1 && deckUnder(x, z, y)) {
+    if (e.onDeck && lvl > 0.1 && dk && !wood) {
       e.jointD += sp * dt;
       if (e.jointD >= JOINT) {
         e.jointD %= JOINT; e.joints = (e.joints || 0) + 1;
