@@ -32,10 +32,11 @@ function placeCam(p, dt, snap) {
   if (spd > 4 && c.vf > 0 && c.grounded) target = angLerp(c.h, Math.atan2(c.vx, c.vz), 0.4);
   camYaw[p] = snap ? target : angLerp(camYaw[p], target, 1 - Math.exp(-dt * 4.5));
   const fx = Math.sin(camYaw[p]), fz = Math.cos(camYaw[p]);
-  const want = 4.4 + c.L * 0.5 - sf * 0.8;
+  // дистанция и высота камеры: машина занимает меньше половины ширины экрана, дорога видна дальше
+  const want = 6.0 + c.L * 0.55 - sf * 1.0;
   camDist[p] = snap ? want : lerp(camDist[p], want, 1 - Math.exp(-dt * 2));
   const full = camDist[p];
-  let dist = full, hgt = 1.7 + c.H * 0.7 - sf * 0.3;
+  let dist = full, hgt = 2.0 + c.H * 0.75 - sf * 0.3;
   let a = snap ? 1 : 1 - Math.exp(-dt * 10);
   // камера не уходит внутрь зданий и крон: подъезжает ближе и поднимается выше
   if (world.occludes) {
@@ -57,7 +58,7 @@ function placeCam(p, dt, snap) {
   const sh = c.shake * c.shake * 0.35, t = performance.now() / 1000;
   // мелкая дрожь на большой скорости
   const vib = c.grounded ? sf * sf * 0.045 : 0, vx = Math.sin(t * 41) * Math.sin(t * 17) * vib, vy = Math.sin(t * 53) * Math.sin(t * 23) * vib;
-  cam.lookAt(c.x + fx * 3 + rand(-sh, sh) + vx, c.y + 0.9 + c.H * 0.3 + rand(-sh, sh) + vy, c.z + fz * 3);
+  cam.lookAt(c.x + fx * 4 + rand(-sh, sh) + vx, c.y + 0.9 + c.H * 0.3 + rand(-sh, sh) + vy, c.z + fz * 4);
   // лёгкий наклон горизонта в повороте на скорости
   const roll = c.grounded ? clamp(-c.w * sf * 0.03, -0.035, 0.035) : 0;
   camRoll[p] = snap ? roll : lerp(camRoll[p], roll, Math.min(1, dt * 3));
