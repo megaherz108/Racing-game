@@ -5,16 +5,19 @@
 //   coastBuildRoads              полотна дорог: асфальт с обочинами, гравий, грунт (js/maps/coast/roads3d.js)
 //   coastBuildStructures         дома, церковь, пьяцца, порт, маяк, бочки винодельни, амфитеатр (js/maps/coast/structures.js)
 //   coastBuildProps              деревья, шпалеры, тюки сена, ящики (сбиваемые), кусты (js/maps/coast/props.js)
+//   coastBuildMarket             рынок на пьяцце: прилавки, ящики с фруктами, столики кафе (js/maps/coast/market.js)
 //   coastBuildCrossings          мосты, акведук с воротами, трамплин обрыва; все настилы (js/maps/coast/crossings.js)
 //   coastBuildBackdrop           горный хребет за краем карты (js/maps/coast/backdrop.js)
+//   coastBuildLife               чайки и дым из труб (js/maps/coast/life.js)
 //   coastBuildWorld (здесь)      склейка статики, теневые копии и объект мира: ground, surface, waterAt, roadPoint…
 // Определяет: buildCoast, coastBuildKit, coastBuildWorld.
 // Использует: clamp, rand (js/core.js); StaticGrid, DistCull, Decks, geoTris, CHUNK_MIN_TRIS, chunkOrAll, Breakables,
 //   optimizeStatic, buildShadowProxies (js/world.js); WATER_U (js/maps/city/textures.js); ellMetric
 //   (js/maps/coast/terrain.js); coastBuildGround (js/maps/coast/ground.js); coastBuildRoads
 //   (js/maps/coast/roads3d.js); coastBuildStructures (js/maps/coast/structures.js); coastBuildProps
-//   (js/maps/coast/props.js); coastBuildCrossings (js/maps/coast/crossings.js); coastBuildBackdrop
-//   (js/maps/coast/backdrop.js).
+//   (js/maps/coast/props.js); coastBuildMarket (js/maps/coast/market.js); coastBuildCrossings
+//   (js/maps/coast/crossings.js); coastBuildBackdrop (js/maps/coast/backdrop.js); coastBuildLife
+//   (js/maps/coast/life.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -25,8 +28,10 @@ function buildCoast(D) {
   coastBuildRoads(K);
   coastBuildStructures(K);
   coastBuildProps(K);
+  coastBuildMarket(K);
   coastBuildCrossings(K);
   coastBuildBackdrop(K);
+  coastBuildLife(K);
   return coastBuildWorld(K);
 }
 
@@ -58,7 +63,7 @@ function coastBuildKit(K) {
 }
 
 function coastBuildWorld(K) {
-  const { D, group, grid, dist, decks, brks, landLod, sea, worldBarrels, boatG } = K;
+  const { D, group, grid, dist, decks, brks, landLod, sea, worldBarrels, boatG, life } = K;
   const { C } = D;
   optimizeStatic(group);
   const brkMeshes = new Set();
@@ -86,8 +91,19 @@ function coastBuildWorld(K) {
     r.pts.forEach((p, i) => { if (!skip.has(i)) roadPts.push({ p, r }); });
   }
   const mainPts = roadPts.filter(q => q.r.kind !== 'dirt');
-  // фоновые звуки (js/audio-env.js): море и чайки у берега, порт, колокола у церкви, деревня, птицы и листва в лесу
+  // фоновые звуки (js/audio-env.js): море и чайки у берега, порт, колокола у церкви, деревня, птицы и листва в лесу;
+  // цикады в оливах, соснах и виноградниках, журчание реки, собаки у ферм, скрип лодок в порту, ветер на высотах
   const [vx, vz] = C.SITES.piazza, pc = [(C.port.x0 + C.port.x1) / 2, (C.port.z0 + C.port.z1) / 2];
+  // цикады: сколько деревьев и шпалер в клетке 40 × 40 м (с соседними клетками)
+  const CG = 40, CNX = Math.ceil(2 * D.HX / CG) + 1, CNZ = Math.ceil(2 * D.HZ / CG) + 1, cic = new Float32Array(CNX * CNZ);
+  const cgi = (x, z) => clamp(Math.floor((z + D.HZ) / CG), 0, CNZ - 1) * CNX + clamp(Math.floor((x + D.HX) / CG), 0, CNX - 1);
+  for (const [list, k] of [[C.olives, 1], [C.pines, 1], [C.cypress, 0.6], [C.vines, 0.15]]) for (const o of list) cic[cgi(o.x, o.z)] += k;
+  const cicAt = (x, z) => {
+    let n = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) n += cic[cgi(x + a * CG, z + b * CG)] * (a || b ? 0.5 : 1);
+    return clamp(n / 14, 0, 1);
+  };
+  const farms = C.houses.filter(h => !h.fisher && Math.hypot(h.x - vx, h.z - vz) > 230 && Math.hypot(h.x - pc[0], h.z - pc[1]) > 180);
   const soundAt = (x, z, o) => {
     const s = z - C.ZC[C.cellI(x)], sea = clamp(1 - (s - 10) / 190, 0, 1), dv = Math.hypot(x - vx, z - vz), dp = Math.hypot(x - pc[0], z - pc[1]);
     const wood = clamp(C.noise(x / 170 + 3, z / 170 - 5) * 2, 0, 1);
@@ -96,6 +112,13 @@ function coastBuildWorld(K) {
     o.bells = clamp(1 - dv / 320, 0, 1) * 0.9;
     o.hum = 0.04 + clamp(1 - dv / 200, 0, 1) * 0.18 + clamp(1 - dp / 200, 0, 1) * 0.15;
     o.birds = 0.45 + wood * 0.5; o.leaves = 0.25 + wood * 0.6;
+    o.cicadas = Math.max(cicAt(x, z), 0.25 * clamp((dv - 120) / 80, 0, 1)) * (1 - sea * 0.8);
+    const k = C.cellJ(z) * C.NX + C.cellI(x), rd = C.RD[k] < 1e8 ? C.RD[k] - C.riverPts[C.RI[k]].hw : 1e9;
+    o.river = clamp(1 - rd / 90, 0, 1);
+    let df = 1e9; for (const f of farms) df = Math.min(df, Math.hypot(f.x - x, f.z - z));
+    o.dogs = clamp(1 - df / 170, 0, 1) * 0.9;
+    o.creak = clamp(1 - dp / 150, 0, 1);
+    o.wind = (0.1 + clamp((D.ground(x, z) - 30) / 40, 0, 1) * 0.7) * (1 - 0.6 * clamp(1 - dv / 160, 0, 1));   // в деревне дома укрывают
     return o;
   };
   // старт: серпантин у выезда из порта, лицом на север (к холмам)
@@ -107,6 +130,8 @@ function coastBuildWorld(K) {
     // свет и даль: всегда золотой час, солнце низко над морем с юго-запада. Туман длинный — с холмов видна вся карта
     // и горы вокруг, дальние хребты тонут в дымке
     tod: 'golden', sunOff: [70, 26, -72], sky: 0xf2d2a6, fog: [250, 3000], far: 3000, near: 0.3,
+    // ветер с моря на север (кроны, дым, облака) и тени облаков, бегущие по земле (js/breeze.js)
+    wind: [-0.35, 1], clouds: { k: 0.42, size: 190, speed: 6 },
     coinCount: 90, spawns,
     // ближайшая точка асфальта или гравия; направление — вдоль дороги, к пьяцце
     roadPoint(x, z, p) {
@@ -129,12 +154,14 @@ function coastBuildWorld(K) {
     reset() {
       for (const b of brks) b.reset();
       for (const b of worldBarrels) { b.x = b.home[0]; b.z = b.home[1]; b.vx = b.vz = b.w = 0; b.h = 0; }
+      life.reset();
     },
     update(dt, t) {
       sea.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t;
       for (const b of brks) b.update(dt);
       // бочки (тела Rapier двигают b.x, b.z) и лодки, качающиеся на волнах
       for (const b of worldBarrels) { b.h += Math.hypot(b.vx, b.vz) * dt * 0.6; b.mesh.position.set(b.x, D.ground(b.x, b.z) + 0.5, b.z); b.mesh.rotation.y = b.h; }
+      life.update(dt, t);
       for (const { g, b } of boatG) { g.position.y = 0.12 + Math.sin(t * 1.1 + b.ph) * 0.12; g.rotation.z = Math.sin(t * 0.9 + b.ph) * 0.06; g.rotation.x = Math.sin(t * 0.7 + b.ph * 2) * 0.03; }
     },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию и дальность мелочи

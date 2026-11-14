@@ -73,6 +73,8 @@ function coastBuildStructures(K) {
     const o = b.w * 0.28, c = Math.cos(b.rot), s = Math.sin(b.rot);
     setInst(m, i, b.x + c * o, b.base + b.wallH - 0.5, b.z - s * o, 0.7, b.roofK * Math.min(b.w, b.d) + 1.5, 0.7, b.rot);
   });
+  // верх каждой трубы — оттуда идёт дым (js/maps/coast/life.js)
+  const chimneys = chim.map(b => { const o = b.w * 0.28; return { x: b.x + Math.cos(b.rot) * o, y: b.base + b.wallH + b.roofK * Math.min(b.w, b.d) + 1.1, z: b.z - Math.sin(b.rot) * o }; });
   for (const b of blds) grid.addOBB(b.x, b.z, b.w, b.d, b.rot, b.wallH - (ground(b.x, b.z) - b.base) + 2);
 
   /* ---------- церковь и пьяцца ---------- */
@@ -200,5 +202,5 @@ function coastBuildStructures(K) {
   instChunks(group, new THREE.CylinderGeometry(0.55, 0.65, 1, 10).translate(0, 0.5, 0), tierMat, amphi.cols, xzOf, (m, i, c) => setInst(m, i, c.x, ap.h - 0.3, c.z, 1, c.h, 1));
   for (const c of amphi.cols) grid.addCircle(c.x, c.z, 0.65, c.h);
 
-  Object.assign(K, { worldBarrels, boatG, concreteMat: concrete });
+  Object.assign(K, { worldBarrels, boatG, concreteMat: concrete, chimneys });
 }

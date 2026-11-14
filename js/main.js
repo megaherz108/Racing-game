@@ -1,12 +1,12 @@
 // Главный цикл и старт игры
 // Определяет: showLook, resize, Perf, SHADOW_SHARE, shadowShared, last, gameT, frame, frameBody, cheatCoins.
-// Использует: save, CARS, browse (js/data.js); renderer, clamp, lerp (js/core.js); showCam, PODIUM_SPAN, viewShift,
-//   podiums, show, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky (js/sky.js); Weather
-//   (js/weather.js); world, getData (js/maps/registry.js); updateCoins3D, smoke, sparks, updateSkids (js/effects.js);
-//   Wrecks (js/carfx.js); Sound (js/audio.js); cars, accum, FIXED, stepWorld (js/physics.js); Traffic
-//   (js/traffic/traffic.js); Blobs (js/blobs.js); cams, state, paused, countdown, placeCam, updateStreaks, startMatch
-//   (js/match.js); drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins, keys, renderGarage
-//   (js/ui.js); Race (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js).
+// Использует: save, CARS, browse (js/data.js); renderer, clamp, lerp (js/core.js); Breeze (js/breeze.js); showCam,
+//   PODIUM_SPAN, viewShift, podiums, show, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky
+//   (js/sky.js); Weather (js/weather.js); world, getData (js/maps/registry.js); updateCoins3D, smoke, sparks,
+//   updateSkids (js/effects.js); Wrecks (js/carfx.js); Sound (js/audio.js); cars, accum, FIXED, stepWorld
+//   (js/physics.js); Traffic (js/traffic/traffic.js); Blobs (js/blobs.js); cams, state, paused, countdown, placeCam,
+//   updateStreaks, startMatch (js/match.js); drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins,
+//   keys, renderGarage (js/ui.js); Race (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -78,6 +78,7 @@ function frameBody(now) {
       gameT += gdt;
       const t = gameT;
       if (world.update) world.update(gdt, t);
+      Breeze.update(t);                    // ветер в кронах и тени облаков (js/breeze.js)
       updateCoins3D(gdt, t);
       Race.update(gdt, t);
       Stunts.update(gdt);
@@ -113,6 +114,7 @@ function frameBody(now) {
     renderer.setScissorTest(false);
     if (paused) for (let p = 0; p < 2; p++) Sound.update(p, null, false);
   } else {
+    Breeze.off();
     for (let p = 0; p < 2; p++) Sound.update(p, null, false);
     // шоурум: подиумы вписываются в свободную от панелей область экрана
     let freeL = 0, freeR = W;

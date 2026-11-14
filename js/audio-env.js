@@ -1,6 +1,7 @@
 // Звук окружения для каждого игрока (дополняет Sound из js/audio.js; обновляется из Sound.update()):
 // - фон по районам: волны у берега и канала, чайки и пароходный гудок в порту, гул и далёкие гудки в Даунтауне,
-//   колокол в Старом городе, птицы и шелест листвы в парке, ночью вместо птиц сверчки, в дождь — шум дождя.
+//   колокол в Старом городе, птицы и шелест листвы в парке, ночью вместо птиц сверчки, в дождь — шум дождя;
+//   на «Побережье» ещё цикады, журчание реки, ветер на высотах, лай собак у ферм и скрип лодок в порту.
 //   Веса фонов в точке отдаёт карта (world.soundAt), они плавно перетекают при переезде из района в район;
 // - эхо: под настилом (эстакада, мост, перемычка арки) — сильное, на мосту и эстакаде — слабое (Sound.reverb);
 // - покрытие под колёсами: гул асфальта, тарахтение брусчатки и плитки, шорох травы, хруст грунта, шипение воды,
@@ -27,7 +28,7 @@ const SoundEnv = (() => {
   };
   const HARD = { asphalt: 1, deck: 1, paving: 1, cobble: 1 };     // в дождь по ним шипит вода
   const JOINT = 12;                                                // шаг стыков плит моста, м
-  const KEYS = ['sea', 'gulls', 'hum', 'birds', 'leaves', 'bells', 'ship', 'horns', 'echo'];
+  const KEYS = ['sea', 'gulls', 'hum', 'birds', 'leaves', 'bells', 'ship', 'horns', 'echo', 'cicadas', 'river', 'dogs', 'creak', 'wind'];
   const DEF = { hum: 0.15 };                                       // карта без world.soundAt
   // фоны-записи (js/sound-data.js, папка sounds/): громкость от весов района w, ночи n и дождя r. Пока записи нет,
   // звучит синтез; когда есть — синтез из off молчит, а разовые звуки ev (птицы, чайки) не нужны: они уже в записи
@@ -40,7 +41,7 @@ const SoundEnv = (() => {
     gulls: { k: w => w.gulls, gain: 0.3, ev: 'gull' },
   };
   // разовые звуки из записей вместо синтеза: событие → [запись, громкость]
-  const EV_SAMPLE = { gull: ['gull', 0.6], bird: ['bird', 0.5], horn: ['horn', 0.25], ship: ['shiphorn', 0.7], bell: ['bell', 0.5] };
+  const EV_SAMPLE = { gull: ['gull', 0.6], bird: ['bird', 0.5], horn: ['horn', 0.25], ship: ['shiphorn', 0.7], bell: ['bell', 0.5], dog: ['dog', 0.5], creak: ['creak', 0.4] };
   const S = [];
 
   // петля записи name для игрока p: случайное начало (у двух игроков звук не совпадает)
@@ -75,6 +76,23 @@ const SoundEnv = (() => {
     l1.connect(l1g).connect(crA.gain); l2.connect(l2g).connect(crB.gain);
     cr.connect(crA).connect(crB).connect(crG).connect(out);
     cr.start(); l1.start(); l2.start();
+    // цикады: шум в полосе 4–5 кГц, «треск» 170–205 Гц и волны громкости по 9–14 с; два голоса вразнобой
+    const ciG = ctx.createGain(); ciG.gain.value = 0; ciG.connect(out);
+    for (const [f, am, sw, dl] of [[5200, 170, 0.11, 0], [4300, 205, 0.07, 3.1]]) {
+      const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = f; fl.Q.value = 2.5;
+      const a = ctx.createGain(), sg = ctx.createGain(); a.gain.value = 0.5; sg.gain.value = 0.55;
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = am; og.gain.value = 0.5; o.connect(og).connect(a.gain);
+      const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = sw; lg.gain.value = 0.45; l.connect(lg).connect(sg.gain);
+      white.connect(fl).connect(a).connect(sg).connect(ciG);
+      o.start(); l.start(ctx.currentTime + dl);
+    }
+    // река: журчание — полоса шума, частота которой дрожит от трёх медленных генераторов, и низкий плеск
+    const river = chain(white, 'bandpass', 1100, 1.4, out), riverLow = chain(brown, 'lowpass', 420, 0.6, out);
+    for (const [f, d] of [[5.3, 260], [2.1, 180], [8.7, 120]]) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; g.gain.value = d; o.connect(g).connect(river.f.frequency); o.start();
+    }
+    // ветер на высотах: низкий шум, полоса гуляет порывами
+    const wind = chain(brown, 'bandpass', 380, 0.8, out);
     // покрытие: гул с тарахтением (am.gain = 1 − глубина/2 + квадратная волна) и шорох — в шину игрока (с эхом)
     const bus = Sound.bus(p), rAm = ctx.createGain(); rAm.gain.value = 1;
     const roar = chain(brown, 'lowpass', 400, 0.8, bus);
@@ -85,8 +103,8 @@ const SoundEnv = (() => {
     // гидрант: шипение струи и плеск, своя панорама
     const gyPan = ctx.createStereoPanner(); gyPan.connect(Sound.master);
     const gy = chain(white, 'bandpass', 2800, 0.6, gyPan), gyLow = chain(brown, 'lowpass', 500, 0.7, gyPan);
-    return { out, sea, surf, hum, wash, leaves, rain, crG, roar, rAm, amO, amG, hiss, gy, gyLow, gyPan,
-      beds: {}, w: Object.fromEntries(KEYS.map(k => [k, 0])), wT: 0, jointD: 0, ev: { gull: 3, bird: 2, horn: 4, ship: 20, bell: 15 } };
+    return { out, sea, surf, hum, wash, leaves, rain, crG, ciG, river, riverLow, wind, roar, rAm, amO, amG, hiss, gy, gyLow, gyPan,
+      beds: {}, w: Object.fromEntries(KEYS.map(k => [k, 0])), wT: 0, jointD: 0, ev: { gull: 3, bird: 2, horn: 4, ship: 20, bell: 15, dog: 6, creak: 3 } };
   }
 
   /* ---------- где машина: веса фонов, крыша над головой, настил под колёсами ---------- */
@@ -160,6 +178,20 @@ const SoundEnv = (() => {
       const out = voice(p, rand(-0.5, 0.5)), t0 = Sound.ctx.currentTime;
       for (const fr of [82, 123]) note(out, t0, 'sawtooth', fr, fr * 0.99, 2.8, 0.03 * k, { bp: 300, att: 0.35 });
     },
+    // лай собаки у фермы: 1–3 коротких «гав» — пила с провалом тона и квадрат октавой ниже
+    dog(p, k) {
+      const out = voice(p), t0 = Sound.ctx.currentTime, n = 1 + Math.floor(Math.random() * 3), f = rand(0.8, 1.25);
+      for (let i = 0; i < n; i++) {
+        const t = t0 + i * rand(0.3, 0.5);
+        note(out, t, 'sawtooth', 480 * f, 260 * f, 0.17, 0.03 * k, { peak: 0.03, pf: 640 * f, bp: 850 });
+        note(out, t, 'square', 240 * f, 150 * f, 0.14, 0.012 * k, { peak: 0.025, pf: 320 * f, bp: 500 });
+      }
+    },
+    // скрип лодки или причального каната: медленный низкий «вжик» вверх-вниз
+    creak(p, k) {
+      const out = voice(p), t0 = Sound.ctx.currentTime, f = rand(0.8, 1.2), n = Math.random() < 0.5 ? 1 : 2;
+      for (let i = 0; i < n; i++) note(out, t0 + i * rand(0.7, 1.2), 'sawtooth', 70 * f, 95 * f, rand(0.5, 0.9), 0.02 * k, { peak: 0.35, pf: 120 * f, bp: 700, att: 0.12 });
+    },
     // колокол: негармонические обертоны, 3–5 ударов
     bell(p, k) {
       const out = voice(p, rand(-0.4, 0.4)), t0 = Sound.ctx.currentTime, n = 3 + Math.floor(Math.random() * 3);
@@ -168,7 +200,8 @@ const SoundEnv = (() => {
     },
   };
   // [вес фона, через сколько секунд повторять: от, до]
-  const EV_RULE = { gull: ['gulls', 3, 9], bird: ['birds', 1.5, 5], horn: ['horns', 4, 12], ship: ['ship', 35, 70], bell: ['bells', 25, 50] };
+  const EV_RULE = { gull: ['gulls', 3, 9], bird: ['birds', 1.5, 5], horn: ['horns', 4, 12], ship: ['ship', 35, 70], bell: ['bells', 25, 50],
+    dog: ['dogs', 5, 16], creak: ['creak', 3, 9] };
 
   /* ---------- каждый кадр ---------- */
   function update(p, car, active, dt) {
@@ -203,6 +236,11 @@ const SoundEnv = (() => {
       syn('leaves', w.leaves * 0.012 * (0.6 + 0.4 * Math.sin(t * 0.37 + p)), 1);
       syn('crG', (w.birds + w.leaves) * 0.5 * night * 0.008, 1.5);
       syn('rain', rainy ? 0.05 : 0, 1);
+      // цикады — днём (на «Побережье» всегда), река, ветер с порывами
+      T(e.ciG, w.cicadas * 0.035 * (1 - night), 1.5);
+      T(e.river.g, w.river * 0.03, 1); T(e.riverLow.g, w.river * 0.035, 1);
+      const gust = 0.5 + 0.5 * Math.sin(t * 0.23 + p) * Math.sin(t * 0.61);
+      T(e.wind.g, w.wind * 0.05 * (0.5 + gust), 0.8); e.wind.f.frequency.setTargetAtTime(280 + gust * 320, t, 0.8);
       // эхо: под крышей — сильное; на мосту над водой и на эстакаде — слабое; уличный «каньон» Даунтауна — чуть-чуть
       const deck = world.decks ? world.decks.surface(x, z, y + 0.3) : -Infinity, onDeck = deck > world.ground(x, z) + 0.5;
       const wl = waterLevel(x, z), over = onDeck ? (wl != null && world.ground(x, z) < wl ? 0.3 : 0.15) : 0;
@@ -271,5 +309,7 @@ const SoundEnv = (() => {
 
   // отладка: что слышит игрок p (__game: SoundEnv.info(0))
   const info = p => S[p] && { beds: Object.fromEntries(Object.entries(S[p].beds).filter(([, b]) => b).map(([k, b]) => [k, +b.g.gain.value.toFixed(3)])), kind: S[p].kind, wet: S[p].wet, joints: S[p].joints || 0, geyser: S[p].geyser, w: { ...S[p].w } };
-  return { update, info, ROAD };
+  // разовый звук фона по запросу карты (например, крик взлетевших чаек — js/maps/coast/life.js)
+  function cry(p, name, k = 1) { if (Sound.ctx && S[p] && EVENTS[name]) EVENTS[name](p, clamp(k, 0, 1)); }
+  return { update, info, cry, ROAD };
 })();

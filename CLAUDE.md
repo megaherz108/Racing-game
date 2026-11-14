@@ -15,13 +15,14 @@
 | `js/data.js` | машины `CARS`, `derive()` (характеристики → физика), `HANDLING`, `NITRO`, режимы, `QUALITY`, сохранение `save` |
 | `js/core.js` | рендерер, `QUAL`, `clamp/lerp/rand`, общие материалы `MAT`, хелперы `box/cyl/beam`, `mergeByMaterial` |
 | `js/envprobe.js` | `EnvProbe`: подмена куска шейдера Three.js — свет окружения матовых поверхностей из шести цветов |
+| `js/breeze.js` | `Breeze`: тени облаков (кусок шейдера всех материалов с освещением, включает `world.clouds`) и качание крон `Breeze.sway()` |
 | `js/car-models.js` | модели машин игроков из примитивов, стили `STYLE` |
 | `js/showroom.js` | 3D-фон меню и гаража |
 | `js/world.js` | сцена, шум, `StaticGrid` (коллизии), `Breakables`, мини-карта, инстансы, чанки, `optimizeStatic`, `Decks` (мосты), шейдер фасадов |
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |
 | `js/maps/registry.js` | список карт, `getData()` / `getWorld()` / `activateWorld()`, текущий `world` |
 | `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
-| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `crossings.js` (мосты, акведук, трамплин), `backdrop.js` (горы-фон) |
+| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб) |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |
