@@ -1,8 +1,9 @@
 // Самопроверка: дешёвая текстовая проверка игры для разработчика и ИИ-ассистента (без скриншотов).
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
-// Использует: getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime (js/physics.js);
-//   Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); Capture (js/capture.js).
+// Использует: save, FLIP_REWARD, persist (js/data.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars,
+//   FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown,
+//   endMatch (js/match.js); updateCoins (js/ui.js); Capture (js/capture.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -137,6 +138,41 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
       } finally {
         KEYS.forEach(k => keys.delete(k));
         if (cars.length) endMatch('menu');
+      }
+    }
+    // удары (js/physics.js): удар передом отнимает FRONT_DMG от урона в борт; переворот соперника — FLIP_REWARD монет, один раз
+    if (mode === 'free' && maps.length) {
+      const coins0 = save.players.map(p => p.coins);
+      try {
+        cars = [];
+        startMatch('free', maps[0]);
+        for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
+        if (cars.length < 2) throw new Error('заезд на двоих не запустился');
+        countdown = 0;
+        const [a, b] = cars, [x, z, h] = world.spawns[0];
+        a.fullReset(x, z, h); b.fullReset(...world.spawns[1]);
+        // нос — точка в переднем углу (так её часто отдаёт Rapier), но сила вдоль кузова; dir — направление силы
+        const fwd = { x: Math.sin(a.h), y: 0, z: Math.cos(a.h) }, lat = { x: Math.cos(a.h), y: 0, z: -Math.sin(a.h) };
+        const loss = (lx, lz, dir) => { a.hp = a.maxHp; a.registerHit(8, null, ...a.local(lx, lz), dir); a.postStep(0); return a.maxHp - a.hp; };
+        const front = loss(a.W * 0.47, a.L * 0.43, fwd), side = loss(a.W / 2, 0, lat), rear = loss(0, -a.L / 2, fwd);
+        a.hp = a.maxHp;
+        if (Math.abs(front / side - FRONT_DMG) > 0.01 || Math.abs(rear - side) > 1e-6)
+          errors.push(`урон: нос ${front.toFixed(2)}, борт ${side.toFixed(2)}, корма ${rear.toFixed(2)} — ждали нос = ${FRONT_DMG} × борт`);
+        // соперник ударил Игрока 2 и тот лёг на крышу: Игроку 1 — бонус, ровно один раз за 1,5 с лёжки
+        const t = b.body.translation();
+        b.body.setTranslation({ x: t.x, y: t.y + 2, z: t.z }, true);
+        b.body.setRotation({ x: Math.cos(b.h / 2), y: 0, z: -Math.sin(b.h / 2), w: 0 }, true);   // кверху колёсами
+        b.lastHitBy = a; b.lastHitTime = simTime;
+        const before = save.players[0].coins;
+        for (let i = 0, n = Math.round(1.5 / FIXED); i < n; i++) stepWorld(FIXED);
+        const got = save.players[0].coins - before;
+        if (got !== FLIP_REWARD) errors.push(`переворот: Игроку 1 начислено ${got}, ждали ${FLIP_REWARD} (upY ${b.upY.toFixed(2)}, лёжка ${b.flipT.toFixed(2)} с)`);
+        lines.push(`удары: урон нос/борт ${(front / side).toFixed(2)}, за переворот +${got}`);
+      } catch (e) {
+        errors.push('удары: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
+      } finally {
+        if (cars.length) endMatch('menu');
+        save.players.forEach((p, i) => p.coins = coins0[i]); persist(); updateCoins();   // проверка не меняет кошельки
       }
     }
     // захват точек (js/capture.js): машина Игрока 1 стоит в активной зоне одна — очки идут, таймер точки убывает

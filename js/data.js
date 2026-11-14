@@ -1,9 +1,9 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
-//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap,
-//   RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN, COIN_MUL,
-//   TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save,
-//   persist, carIndex, browse.
+//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, FLIP_REWARD, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP,
+//   playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN,
+//   COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave,
+//   save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -122,6 +122,7 @@ const PLAYER_COLORS = [0x38c8ff, 0xff8a2a];
 const SAVE_KEY = 'steel_duel_save_v2', OLD_SAVE_KEY = 'steel_duel_save_v1';
 const MAP_IDS = ['city', 'forest', 'arena', 'coast'];
 const KO_REWARD = 5;
+const FLIP_REWARD = 5;   // за переворот соперника (js/physics.js, Car.sync())
 // режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1);
 // capture — захват точек (js/capture.js)
 const MODES = ['free', 'solo', 'race', 'capture'];

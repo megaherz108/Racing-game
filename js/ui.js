@@ -4,12 +4,12 @@
 //   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
 //   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
 //   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, CAP_REWARD, CAP_CFG,
-//   CAP_BONUS_PER, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS,
-//   defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium (js/showroom.js); smooth01, mulberry32
-//   (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars
-//   (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch, matchMode
-//   (js/match.js); Race (js/race.js); Capture (js/capture.js); Perf (js/main.js).
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, KO_REWARD, FLIP_REWARD,
+//   CAP_REWARD, CAP_CFG, CAP_BONUS_PER, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY,
+//   TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium (js/showroom.js);
+//   smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound
+//   (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch,
+//   endMatch, matchMode (js/match.js); Race (js/race.js); Capture (js/capture.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -176,8 +176,8 @@ function syncBrowse() { for (let p = 0; p < 2; p++) if (!save.players[p].owned.i
 
 // Экран выбора режима и карты (PLAY_MAPS в js/data.js). Гонка — только в городе: ей нужен дорожный граф.
 const MODE_INFO = {
-  free: { name: 'Свободная езда', tag: 'Монеты +1 · нокаут +5',
-    desc: 'Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал.' },
+  free: { name: 'Свободная езда', tag: `Монеты +1 · нокаут +${KO_REWARD} · переворот +${FLIP_REWARD}`,
+    desc: `Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал. Опрокинули соперника ударом в борт — +${FLIP_REWARD}; таранить лучше носом: удар передом бьёт по прочности на 30% слабее.` },
   solo: { name: 'Одиночная езда', tag: '1 игрок · монеты +1',
     desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками.' },
   capture: { name: 'Захват точек', tag: `Победителю +${CAP_REWARD} · +1 за 10 очков`,

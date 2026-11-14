@@ -2,12 +2,13 @@
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
 // Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
-//   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
-// Использует: derive, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, KO_REWARD (js/data.js); QUAL, MAT, lerp, clamp, rand
-//   (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01, waterLevel,
-//   dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js); CarFx
-//   (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins,
-//   keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
+//   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, hitZone, flipKick, contactPoint, handleContacts, NO_INPUT, readInput,
+//   FIXED, accum, brkTick, stepWorld.
+// Использует: derive, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD (js/data.js); QUAL, MAT, lerp,
+//   clamp, rand (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01,
+//   waterLevel, dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js);
+//   CarFx (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); addCoins,
+//   notify, keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -233,7 +234,7 @@ class Car {
     this.place(x, z, h);
     this.hp = this.maxHp; this.broken = 0;
     this.nitro = NITRO.start; this.boosting = false; this.hitTime = -9;
-    this.hitDv = 0; this.hitX = x; this.hitZ = z; this.lastHitBy = null; this.lastHitTime = -9;
+    this.hitDv = 0; this.hitDvFront = 0; this.flipPaid = false; this.hitX = x; this.hitZ = z; this.lastHitBy = null; this.lastHitTime = -9;
     this.shake = 0; this.smokeAcc = 0;
   }
   // вернуть на ближайшую дорогу
@@ -349,14 +350,26 @@ class Car {
     }
     // перевёрнутая машина сама встаёт на колёса
     if (this.drown <= 0 && this.upY < 0.35 && Math.hypot(lv.x, lv.y, lv.z) < 3) this.flipT += dt; else this.flipT = 0;
+    // бонус за переворот: машина легла на бок или крышу вскоре после удара соперника — ему FLIP_REWARD.
+    // Один раз за переворот: flipPaid сбрасывается, только когда машина снова стоит на колёсах
+    if (this.upY > 0.8) this.flipPaid = false;
+    if (this.flipT > FLIP_LIE && !this.flipPaid) {
+      this.flipPaid = true;
+      const att = this.lastHitBy;
+      if (att && simTime - this.lastHitTime < FLIP_WINDOW) {
+        addCoins(att.p, FLIP_REWARD); notify(att.p, `ПЕРЕВОРОТ! +${FLIP_REWARD}`, 'gold', true); Sound.coin(att.p);
+      }
+    }
     if (this.flipT > RT.uprightTime) {
       this.place(this.x, this.z, this.h, this.y + 1.5);
       notify(this.p, 'Машина поставлена на колёса', 'good');
     }
   }
 
-  registerHit(dv, other, px, pz) {
+  // dir — направление силы удара (необязательно, см. hitZone())
+  registerHit(dv, other, px, pz, dir) {
     this.hitDv += dv;
+    if (hitZone(this.body, px, pz, this.W / 2, this.L / 2, dir) === 'front') this.hitDvFront += dv;   // удар передом — урон меньше
     if (dv > 1) this.hitTime = simTime;              // для трюков: удар обрывает занос и «впритирку»
     if (dv > 0.6) { this.hitX = px; this.hitZ = pz; }
     if (other && other.isCar && dv > 1) { this.lastHitBy = other; this.lastHitTime = simTime; }
@@ -375,7 +388,9 @@ class Car {
       if (this.drown <= 0) this.fx.hit(strength, this.hitX, this.hitZ);
       Stunts.crash(this.p);
       if (this.broken <= 0 && this.drown <= 0) {
-        this.hp -= (strength - 2.5) * 2.1;
+        // доля удара, пришедшаяся в нос, получает урон ×FRONT_DMG (приземление и удары в борт/корму — полный)
+        const k = 1 - (1 - FRONT_DMG) * Math.min(1, this.hitDvFront / strength);
+        this.hp -= (strength - 2.5) * 2.1 * k;
         if (this.hp <= 0) {
           this.hp = 0; this.broken = 5;
           notify(this.p, 'ПОЛОМКА! −30% скорости', 'bad');
@@ -384,7 +399,7 @@ class Car {
         }
       }
     }
-    this.hitDv = 0;
+    this.hitDv = this.hitDvFront = 0;
     if (this.broken > 0) {
       this.broken -= dt;
       if (this.broken <= 0) { this.broken = 0; this.hp = this.maxHp; this.fx.repair(); notify(this.p, 'Машина починена', 'good'); }
@@ -547,15 +562,36 @@ function knockBreakables(dt) {
 const DMG_SCALE = { car: 1, traffic: 0.8, static: 0.5, ground: 0.5, deck: 0.5, brk: 0.5, barrel: 0.15 };
 // с какого Δv (м/с) боковой удар опрокидывает машину: о другую машину — легче, о стену — только сильный
 const FLIP_DV = { car: 6, traffic: 6, static: 10 };
+// удар передом: доля урона по прочности (0,7 — на 30% меньше, чем в борт или корму)
+const FRONT_DMG = 0.7;
+// бонус за переворот соперника (FLIP_REWARD в js/data.js): машина пролежала на боку или крыше FLIP_LIE с,
+// а соперник бил её не раньше FLIP_WINDOW с назад
+const FLIP_LIE = 0.3, FLIP_WINDOW = 3;
+
+// Куда пришёлся удар: 'side' — борт, 'front' — нос, 'rear' — корма. hw/hl — половины ширины и длины.
+// Без dir — по точке (px, pz): граница чуть сдвинута в пользу борта (0,8); точка в центре кузова (контакт не нашёлся) — борт.
+// С dir (направление силы удара в мировых осях, maxForceDirection() Rapier) — по нему: сила вдоль кузова — нос или
+// корма (по точке), поперёк или вертикально — борт. Направление надёжнее точки: при таране носом Rapier часто отдаёт
+// точку в переднем углу, а угол лежит на границе зон.
+function hitZone(body, px, pz, hw, hl, dir) {
+  const t = body.translation(), q = body.rotation();
+  const [fx, , fz] = qrot(q, 0, 0, 1), [lx, , lz] = qrot(q, 1, 0, 0);
+  const rx = px - t.x, rz = pz - t.z, lat = rx * lx + rz * lz, lon = rx * fx + rz * fz;
+  if (dir) {
+    const df = Math.abs(dir.x * fx + dir.z * fz), dl = Math.abs(dir.x * lx + dir.z * lz);
+    return df > dl && df > 0.3 ? (lon > 0 ? 'front' : 'rear') : 'side';
+  }
+  return Math.abs(lat) / hw >= 0.8 * Math.abs(lon) / hl ? 'side' : lon > 0 ? 'front' : 'rear';
+}
 
 // Опрокидывание: сильный удар в борт закручивает кузов вокруг продольной оси (ударенный борт идёт вверх)
 // и немного подбрасывает. Центр масс у машин специально низкий, поэтому без этого толчка они почти не переворачиваются.
 // excess — превышение порога Δv; hw/hl — половины ширины и длины. Возвращает true, если удар пришёлся в борт.
 function flipKick(body, excess, px, pz, hw, hl) {
+  if (hitZone(body, px, pz, hw, hl) !== 'side') return false;               // удар в нос или корму — не опрокидываем
   const t = body.translation(), q = body.rotation();
   const [fx, , fz] = qrot(q, 0, 0, 1), [lx, , lz] = qrot(q, 1, 0, 0);
-  const rx = px - t.x, rz = pz - t.z, lat = rx * lx + rz * lz, lon = rx * fx + rz * fz;
-  if (Math.abs(lat) / hw < 0.8 * Math.abs(lon) / hl) return false;          // удар в нос или корму — не опрокидываем
+  const lat = (px - t.x) * lx + (pz - t.z) * lz;
   const w = Math.min(7.5, 2.8 + excess * 0.8);
   const cy = fz * lx - fx * lz;                                             // y-компонента f × l
   const s = Math.sign(lat * cy) || 1;
@@ -588,7 +624,7 @@ function handleContacts() {
       const car = me.car, raw = F / car.mass, dv = raw * (DMG_SCALE[other.kind] ?? 0.5);
       if (dv < 0.3) continue;
       const p = getPt(car.x, car.z);
-      car.registerHit(dv, other.kind === 'car' ? other.car : null, p[0], p[1]);
+      car.registerHit(dv, other.kind === 'car' ? other.car : null, p[0], p[1], ev.maxForceDirection());
       const th = FLIP_DV[other.kind];
       if (th && raw > th && !(car.flipCd > 0) && car.drown <= 0 && flipKick(car.body, raw - th, p[0], p[1], car.W / 2, car.L / 2)) {
         car.flipCd = 1; car.tumble = 1.6;
