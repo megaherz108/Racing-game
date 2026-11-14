@@ -5,7 +5,7 @@
 // посчитанной (порядок — по важности), на мостах — к настилу, на броде — к мелкому дну. Потом дороги вдавливаются
 // в сетку высот H: полотно ровное поперёк, откосы тем шире, чем выше насыпь или глубже выемка; русло не трогается.
 // Определяет: ROAD_KIND, coastPlanRoads.
-// Использует: lerp, clamp (js/core.js); smooth01 (js/world.js); ellMetric (js/maps/coast/terrain.js).
+// Использует: clamp, lerp (js/core.js); smooth01 (js/world.js); ellMetric (js/maps/coast/terrain.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -102,8 +102,10 @@ function coastPlanRoads(C) {
     const wl = wlAt(P[(i0 + i1) >> 1].x);
     let type = r.bridge, deck;
     if (type === 'aqueduct') {
-      // акведук перекрывает всю долину: от склона до склона на высоте ~13 м над рекой (не длиннее 90 м в каждую сторону)
-      const top = wl + 13;
+      // акведук перекрывает долину от склона до склона (не длиннее 90 м в каждую сторону); высота — чуть ниже
+      // более низкого из краёв долины, но 8–14 м над рекой: дальше дорога выходит на склон без стены
+      const c = (i0 + i1) >> 1, rim = dir => { let m = -Infinity; for (let k = 0; k <= 45; k++) m = Math.max(m, P[clamp(c + dir * k, 0, P.length - 1)].h); return m; };
+      const top = clamp(Math.min(rim(-1), rim(1)) - 1, wl + 8, wl + 14);
       while (i0 > 0 && P[i0].h < top - 0.8 && (i1 + i0) / 2 - i0 < 45) i0--;
       while (i1 < P.length - 1 && P[i1].h < top - 0.8 && i1 - (i1 + i0) / 2 < 45) i1++;
       deck = () => top;
@@ -144,19 +146,35 @@ function coastPlanRoads(C) {
       }
       for (const [i, v] of r.pins) P[i].h = v;
     }
-    // предельный уклон: проход вперёд и назад (закреплённые точки не двигаются)
-    const g = r.grade * SP;
+    // предельный уклон; если закреплённые точки требуют круче (улочка от пьяццы вниз к кольцу) — сколько требуют
+    const dist = (i, j) => { const d = Math.abs(i - j); return r.closed ? Math.min(d, N - d) : d; };
+    const pins = [...r.pins];
+    let g = r.grade * SP;
+    for (let a = 0; a < pins.length; a++) for (let b = a + 1; b < pins.length; b++) {
+      const d = dist(pins[a][0], pins[b][0]);
+      if (d > 0) g = Math.max(g, Math.abs(pins[a][1] - pins[b][1]) / d * 1.02);
+    }
     for (const dir of [1, -1]) for (let s = 0; s < N; s++) {
       const i = dir > 0 ? s : N - 1 - s, j = i - dir;
-      if (j < 0 || j >= N || r.pins.has(i)) continue;
-      P[i].h = clamp(P[i].h, P[j].h - g, P[j].h + g);
+      if (j >= 0 && j < N) P[i].h = clamp(P[i].h, P[j].h - g, P[j].h + g);
     }
-    // возле закреплённых точек — плавный подход к ним (после ограничения уклона могли остаться ступеньки)
-    for (const [i, v] of r.pins) {
-      const d = v - P[i].h; if (Math.abs(d) < 1e-3) continue;
-      for (let k = -10; k <= 10; k++) { const j = idx(i + k); if (!r.pins.has(j)) P[j].h += d * (1 - Math.abs(k) / 11); }
-      P[i].h = v;
+    // «конусы» от закреплённых точек (настил моста, перекрёсток, площадка): от каждой дорога поднимается и опускается
+    // не круче предельного уклона — к крутому склону она подходит выемкой, а не упирается в стену. Минимум и максимум
+    // функций с уклоном не круче g — тоже не круче g, поэтому ограничение уклона не нарушается
+    const cones = () => {
+      for (let j = 0; j < N; j++) {
+        let lo = -Infinity, hi = Infinity;
+        for (const [i, v] of pins) { const d = dist(i, j) * g; lo = Math.max(lo, v - d); hi = Math.min(hi, v + d); }
+        P[j].h = clamp(P[j].h, lo, Math.max(lo, hi));
+      }
+    };
+    cones();
+    // лёгкое сглаживание изломов на границе конусов, потом конусы ещё раз — у закреплённых точек без ступенек
+    for (let pass = 0; pass < 2; pass++) {
+      const src = P.map(p => p.h);
+      for (let i = 0; i < N; i++) { let s = 0; for (let k = -3; k <= 3; k++) s += src[idx(i + k)]; P[i].h = s / 7; }
     }
+    cones();
     for (let i = 0; i < N; i++) P[i].slope = (P[idx(i + 1)].h - P[idx(i - 1)].h) / (2 * SP);
     for (const p of P) { const k = keyP(p.x, p.z); let a = done.get(k); if (!a) done.set(k, a = []); a.push({ p, r }); }
   }
