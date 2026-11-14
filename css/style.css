@@ -165,6 +165,20 @@ button{font:inherit;cursor:pointer;color:inherit}
 .race .rp{padding:1px 9px;border-radius:10px;background:rgba(8,12,18,.7);color:#ffb7a0;font-weight:700;font-size:13px}
 .race .rp.lead{color:#ffd23a}
 #hud.racing .feed{top:33%}
+/* захват точек (js/capture.js) */
+.cap{position:absolute;top:14px;right:16px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:7px 12px 8px;min-width:120px;
+  border-radius:12px;background:rgba(8,12,18,.62);border:1px solid rgba(255,210,58,.3);text-shadow:0 1px 4px rgba(0,0,0,.8);pointer-events:none}
+.cap .chead{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1}
+.cap .ch{font-size:12px;letter-spacing:1.5px;color:#ffe08a}
+.cap .cn{font-family:var(--fd);font-size:20px;color:#fff;text-align:right}
+.cap .ctime{font-family:var(--fd);font-size:24px;color:#ffd23a;font-variant-numeric:tabular-nums}
+.cap .cscore{display:flex;align-items:baseline;gap:6px;font-family:var(--fd);font-size:22px;font-variant-numeric:tabular-nums}
+.cap .cscore small{font-family:'Rubik';font-size:12px;letter-spacing:1.5px;color:#9aa3b0}
+#hud0 .cap .me{color:var(--p1)} #hud1 .cap .me{color:var(--p2)}
+.cap .cst{font-size:13px;font-weight:700;color:#d8dee8;text-align:right;white-space:nowrap}
+.cap .cst.mine{color:#7dffb0} .cap .cst.theirs{color:#ff8a70} .cap .cst.hot{color:#ff5a4a;animation:capHot .5s steps(2) infinite}
+.cap .cnext{font-size:12px;color:#fff;padding:1px 8px;border-radius:9px;background:rgba(255,255,255,.14)}
+@keyframes capHot{50%{color:#fff}}
 #raceEnd h2 .pl1{color:var(--p1)} #raceEnd h2 .pl2{color:var(--p2)}
 #reRows{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
 .rerow{display:grid;grid-template-columns:30px 1fr auto 70px;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;

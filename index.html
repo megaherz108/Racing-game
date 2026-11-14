@@ -79,6 +79,8 @@
     <div class="speedfx"></div>
     <div class="race hidden"><div class="rcp"><small>ЧЕКПОИНТ</small><span class="rc"></span></div><div class="rd"></div>
       <div class="rline"><span class="rt"></span><span class="rp"></span></div></div>
+    <div class="cap hidden"><div class="chead"><small class="ch"></small><span class="cn"></span></div><div class="ctime"></div>
+      <div class="cscore"><small>ОЧКИ</small><span class="me"></span></div><div class="cst"></div><div class="cnext"></div></div>
     <div class="top"><span class="tag">P1</span><span class="nm"></span></div>
     <div class="hp"><div class="hpbar"><div class="hpfill"></div></div><div class="hptxt"></div>
       <div class="wallet"><i class="coin"></i><span class="cv0">0</span></div></div>
@@ -92,6 +94,8 @@
     <div class="speedfx"></div>
     <div class="race hidden"><div class="rcp"><small>ЧЕКПОИНТ</small><span class="rc"></span></div><div class="rd"></div>
       <div class="rline"><span class="rt"></span><span class="rp"></span></div></div>
+    <div class="cap hidden"><div class="chead"><small class="ch"></small><span class="cn"></span></div><div class="ctime"></div>
+      <div class="cscore"><small>ОЧКИ</small><span class="me"></span></div><div class="cst"></div><div class="cnext"></div></div>
     <div class="top"><span class="tag">P2</span><span class="nm"></span></div>
     <div class="hp"><div class="hpbar"><div class="hpfill"></div></div><div class="hptxt"></div>
       <div class="wallet"><i class="coin"></i><span class="cv1">0</span></div></div>
@@ -231,13 +235,17 @@ const FILES = [
   "js/audio-env.js",
   "js/audio-traffic.js",
   "js/ui.js",
+  "js/arrow.js",
   "js/race.js",
+  "js/capture.js",
   "js/feel.js",
   "js/stunts.js",
   "js/main.js",
   "js/selftest.js"
 ];
 const BUILD = Date.now();
+// стили — с той же меткой: иначе браузер может взять из кэша старый style.css к новым скриптам
+document.querySelector('link[href="css/style.css"]').href = 'css/style.css?v=' + BUILD;
 try {
   for (const src of FILES) {
     await new Promise((ok, fail) => {

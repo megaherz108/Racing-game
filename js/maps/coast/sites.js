@@ -88,7 +88,7 @@ function coastPlanSites(C) {
     amphi.cols.push({ x: ax + Math.cos(a) * r, z: az + Math.sin(a) * r, h: rng() < 0.5 ? R(1.2, 3) : R(4.5, 6.5) });
   }
 
-  /* ---------- зоны захвата (для будущего режима «Захват точек») ---------- */
+  /* ---------- зоны захвата (режим «Захват точек», js/capture.js) ---------- */
   const zones = [
     { id: 1, name: 'Пьяцца', x: px, z: pz, r: 16 },
     { id: 2, name: 'Край пирса', x: pier.x, z: pier.z1 + 9, r: 8 },

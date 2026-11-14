@@ -353,6 +353,10 @@ const Sound = (() => {
       tone([784 * k, 988 * k, 1175 * k], 0.12, { gain: 0.07, pan: PAN[p], type: 'triangle', gap: 0.045 });
     },
     coin(p) { tone([1318, 1976], 0.12, { gain: 0.12, pan: PAN[p], type: 'square', gap: 0.06 }); },
+    // захват точек (js/capture.js): тихий тик за каждое очко, тревога — зону оспаривают, гонг — смена точки
+    capTick(p) { tone([1568], 0.06, { gain: 0.045, pan: PAN[p], type: 'triangle' }); },
+    capAlarm() { tone([880, 622], 0.1, { gain: 0.07, type: 'square', gap: 0.11 }); },
+    capGong() { tone([392, 523, 784], 0.5, { gain: 0.13, type: 'triangle', gap: 0.12 }); },
     ko(p) { tone([523, 659, 784, 1046], 0.16, { gain: 0.12, pan: PAN[p], type: 'square', gap: 0.08 }); },
     splash(p) { noise(1.0, { freq: 1600, type: 'bandpass', q: 0.8, sweep: 0.2, gain: 0.6, p }); },
     land(p, impact) { noise(0.2, { freq: 400, sweep: 0.4, gain: clamp(impact / 25, 0.1, 0.5), p }); },

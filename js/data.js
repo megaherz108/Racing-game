@@ -1,8 +1,9 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
-//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, playMap, RACE_CPS,
-//   RACE_REWARD, RACE_CP_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer,
-//   defaultSave, cleanPlayer, loadSave, save, persist, carIndex, browse.
+//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap,
+//   RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN, COIN_MUL,
+//   TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save,
+//   persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -121,15 +122,24 @@ const PLAYER_COLORS = [0x38c8ff, 0xff8a2a];
 const SAVE_KEY = 'steel_duel_save_v2', OLD_SAVE_KEY = 'steel_duel_save_v1';
 const MAP_IDS = ['city', 'forest', 'arena', 'coast'];
 const KO_REWARD = 5;
-// режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1)
-const MODES = ['free', 'solo', 'race'];
-// карты, которые можно выбрать на экране режима (остальные — для отладки); гонка нужна дорожному графу — только город
+// режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1);
+// capture — захват точек (js/capture.js)
+const MODES = ['free', 'solo', 'race', 'capture'];
+// карты, которые можно выбрать на экране режима (остальные — для отладки)
 const PLAY_MAPS = ['city', 'coast'];
 const PLAY_MAP = 'city';
-const playMap = (mode = save.mode) => mode === 'race' || !PLAY_MAPS.includes(save.map) ? PLAY_MAP : save.map;
+// у некоторых режимов карта своя: гонке нужен дорожный граф (только город), захвату — зоны world.zones (только Побережье)
+const MODE_MAP = { race: 'city', capture: 'coast' };
+const playMap = (mode = save.mode) => MODE_MAP[mode] || (PLAY_MAPS.includes(save.map) ? save.map : PLAY_MAP);
 const RACE_CPS = 10, RACE_REWARD = 30, RACE_CP_REWARD = 2;   // чекпоинтов в гонке, награда победителю и за каждый чекпоинт
+// захват точек — настройки, которые можно менять из консоли: CAP_CFG.time = 30 — активное время точки, с
+// (действует со следующей точки или заезда)
+const CAP_CFG = { time: 60 };
+// награда победителю; бонус — 1 монета за каждые CAP_BONUS_PER очков (обоим); скорость таймера, пока зону оспаривают
+// (очков никто не получает); за сколько секунд до смены показывать следующую точку
+const CAP_REWARD = 25, CAP_BONUS_PER = 10, CAP_CONTEST = 0.5, CAP_WARN = 10;
 // сколько монет на дорогах в каждом режиме: множитель к world.coinCount карты
-const COIN_MUL = { free: 1.5, solo: 1.5, race: 1 };
+const COIN_MUL = { free: 1.5, solo: 1.5, race: 1, capture: 0.5 };
 // интенсивность городского трафика: id, подпись, число машин вокруг игроков
 const TRAFFIC_LEVELS = [['off', 'Выкл', 0], ['low', 'Мало', 40], ['mid', 'Средне', 90], ['high', 'Много', 180]];
 const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';

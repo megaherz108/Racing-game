@@ -1,11 +1,12 @@
 // Камеры и запуск заезда
 // Определяет: cams, camYaw, camDist, camOff, camFov, camRoll, speedFrac, placeCam, STREAK_N, streaks, updateStreaks,
-//   state, paused, countdown, startMatch, endMatch.
+//   state, paused, countdown, matchMode, startMatch, endMatch.
 // Использует: save, playMap, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp (js/core.js);
 //   smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
-//   (js/ui.js); Race (js/race.js); Feel (js/feel.js); Stunts (js/stunts.js); resize (js/main.js).
+//   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); resize
+//   (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -100,12 +101,14 @@ function updateStreaks(p) {
   S.m.instanceMatrix.needsUpdate = true;
 }
 
-let state = 'menu', paused = false, countdown = 0;
+let state = 'menu', paused = false, countdown = 0, matchMode = 'free';
 // mode: 'free' — свободная езда, 'race' — гонка по чекпоинтам (js/race.js). mapId — карта, выбранная на экране режима
 // (playMap() в js/data.js); скрытые карты — только для отладки.
 function startMatch(mode = save.mode, mapId = playMap(mode)) {
   if (mode === 'race' && !getData(mapId).nodes) mode = 'free';     // для гонки нужен дорожный граф (есть только у города)
-  showLoading(mode === 'race' ? 'Подготовка гонки…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
+  if (mode === 'capture' && !getData(mapId).C?.zones) mode = 'free'; // для захвата нужны зоны (есть только у Побережья)
+  matchMode = mode;
+  showLoading(mode === 'race' ? 'Подготовка гонки…' : mode === 'capture' ? 'Подготовка захвата точек…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
   // даём браузеру отрисовать экран загрузки перед тяжёлой генерацией
   setTimeout(() => {
     for (const c of cars) c.dispose();
@@ -120,6 +123,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     clearSkids(); smoke.clear(); sparks.clear();
     resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));
     Race.start(mode === 'race');
+    Capture.start(mode === 'capture');
     Stunts.reset(); Feel.reset();
     simTime = 0; accum = 0; countdown = 3.2;
     $('hud').classList.toggle('solo', solo);
@@ -133,6 +137,8 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     }
     $('hudhint').textContent = mode === 'race'
       ? 'Гонка: проезжайте арки по порядку — стрелка вверху показывает на следующую · нитро: левый Shift (P1) и / (P2) · R / Enter — на дорогу · Esc — пауза'
+      : mode === 'capture'
+      ? 'Захват точек: стойте в светящемся круге один — очко в секунду, вдвоём — никому · стрелка показывает на точку · нитро: левый Shift (P1) и / (P2) · R / Enter — на дорогу · Esc — пауза'
       : solo ? 'Одиночная езда: WASD или стрелки · Пробел / правый Shift — ручник · левый Shift или / — нитро · R / Enter — вернуть на дорогу · Esc — пауза'
       : 'Свободная езда: собирайте монеты · нитро: левый Shift (P1) и / (P2) · R / Enter — вернуть на дорогу · Esc — пауза';
     $('hudhint').classList.remove('hidden');
@@ -144,6 +150,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
 }
 function endMatch(to) {
   Race.stop();
+  Capture.stop();
   for (const c of cars) c.dispose();
   Traffic.clear();
   cars = [];

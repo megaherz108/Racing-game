@@ -2,7 +2,7 @@
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
 // Использует: getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime (js/physics.js);
-//   Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js).
+//   Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); Capture (js/capture.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -89,7 +89,8 @@ function fingerprint(id = 'city') {
    ===================================================================== */
 // Для каждой карты: постройка → заезд (startMatch) → обе машины жмут газ и руль seconds секунд игрового времени
 // (шаги физики идут подряд, без отрисовки) → ночь/день и update() мира → выход в меню.
-// Проверяет: исключения, NaN в позициях, что машины поехали, что трафик появился (в городе).
+// Проверяет: исключения, NaN в позициях, что машины поехали, что трафик появился (в городе); на Побережье — что в
+// режиме «Захват точек» машина в зоне набирает очки.
 async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'free' } = {}) {
   const errors = [], lines = [];
   const onErr = e => errors.push('событие: ' + String(e.message || e.reason || e));
@@ -135,6 +136,26 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         errors.push(id + ': ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
       } finally {
         KEYS.forEach(k => keys.delete(k));
+        if (cars.length) endMatch('menu');
+      }
+    }
+    // захват точек (js/capture.js): машина Игрока 1 стоит в активной зоне одна — очки идут, таймер точки убывает
+    if (maps.includes('coast') && mode === 'free') {
+      try {
+        cars = [];
+        startMatch('capture', 'coast');
+        for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
+        if (!Capture.on) throw new Error('режим не включился');
+        countdown = 0;
+        const s = Capture.st, z = s.zones[s.order[0]];
+        cars[0].fullReset(z.x, z.z, 0);
+        cars[1].fullReset(z.x + z.r + 40, z.z, 0);
+        for (let i = 0, n = Math.round(2 / FIXED); i < n; i++) { stepWorld(FIXED); Capture.update(FIXED, simTime); }
+        if (!(s.score[0] > 1.5) || s.score[1] > 0) errors.push(`захват: очки не идут (${s.score.map(v => v.toFixed(2)).join(' / ')})`);
+        lines.push(`захват: ${s.order.length} точек, первая «${z.name}», за 2 с в зоне ${s.score[0].toFixed(2)} очка`);
+      } catch (e) {
+        errors.push('захват: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
+      } finally {
         if (cars.length) endMatch('menu');
       }
     }

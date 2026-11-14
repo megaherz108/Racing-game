@@ -63,14 +63,6 @@ function coastPlanMinimap(C) {
   for (const h of C.houses) quad(h.x, h.z, h.w, h.d, h.rot);
   for (const b of C.winery.blds) quad(b.x, b.z, b.w, b.d, b.rot);
   ctx.fillStyle = '#e2d3b0'; quad(C.church.x, C.church.z, C.church.w, C.church.d, C.church.rot);
-  // зоны захвата (для будущего режима «Захват точек»): пунктирный круг и номер
-  ctx.font = "bold 13px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const zn of C.zones) {
-    const X = m.X(zn.x), Z = m.Z(zn.z), r = Math.max(7, zn.r * m.sc);
-    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(214,69,47,.9)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(X, Z, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#d6452f'; ctx.beginPath(); ctx.arc(X + r * 0.75, Z - r * 0.75, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillText(String(zn.id), X + r * 0.75, Z - r * 0.75 + 0.5);
-  }
+  // зоны захвата на карте не рисуются: в режиме «Захват точек» видна только активная (js/capture.js)
   Object.assign(C, { mm: m, minimap: m.c, mmExt: EXT, mmBg: '#80766a' });
 }

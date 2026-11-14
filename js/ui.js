@@ -4,12 +4,12 @@
 //   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
 //   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
 //   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, RACE_REWARD,
-//   RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
-//   lerp, clamp (js/core.js); updatePodium (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData,
-//   MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic
-//   (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf
-//   (js/main.js).
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, CAP_REWARD, CAP_CFG,
+//   CAP_BONUS_PER, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS,
+//   defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium (js/showroom.js); smooth01, mulberry32
+//   (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars
+//   (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch, matchMode
+//   (js/match.js); Race (js/race.js); Capture (js/capture.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -41,7 +41,9 @@ const HUD = [0, 1].map(p => {
   return { root: r, nm: r.querySelector('.nm'), fill: r.querySelector('.hpfill'), hptxt: r.querySelector('.hptxt'), status: r.querySelector('.status'),
     feed: r.querySelector('.feed'), big: r.querySelector('.big'), spd: r.querySelector('.spd'), mm, mmx: mm.getContext('2d'), cache: {},
     fx: r.querySelector('.speedfx'), race: r.querySelector('.race'), rc: r.querySelector('.rc'), rd: r.querySelector('.rd'),
-    rt: r.querySelector('.rt'), rp: r.querySelector('.rp') };
+    rt: r.querySelector('.rt'), rp: r.querySelector('.rp'),
+    cap: r.querySelector('.cap'), ch: r.querySelector('.ch'), cn: r.querySelector('.cn'), ctime: r.querySelector('.ctime'),
+    cme: r.querySelector('.cscore .me'), cst: r.querySelector('.cst'), cnext: r.querySelector('.cnext') };
 });
 function notify(p, text, cls, coin) {
   const d = document.createElement('div'); d.className = cls || '';
@@ -64,6 +66,14 @@ function updateHUD() {
       setText(p, 'rc', h.rc, r.cp); setText(p, 'rd', h.rd, r.dist); setText(p, 'rt', h.rt, r.time); setText(p, 'rp', h.rp, r.place);
       if (h.cache.lead !== r.lead) { h.cache.lead = r.lead; h.rp.classList.toggle('lead', r.lead); }
     }
+    const cp = Capture.hud(p);                 // захват точек (js/capture.js)
+    if (cp) {
+      setText(p, 'ch', h.ch, cp.head); setText(p, 'cn', h.cn, cp.name); setText(p, 'ctime', h.ctime, cp.time);
+      setText(p, 'cme', h.cme, String(cp.me));
+      setText(p, 'cst', h.cst, cp.status); setText(p, 'cnext', h.cnext, cp.next);
+      if (h.cache.ccls !== cp.cls) { h.cache.ccls = cp.cls; h.cst.className = 'cst ' + cp.cls; }
+      h.cnext.classList.toggle('hidden', !cp.next);
+    }
     const f = c.hp / c.maxHp, w = (f * 100).toFixed(1) + '%';
     if (h.cache.w !== w) {
       h.cache.w = w; h.fill.style.width = w;
@@ -78,7 +88,7 @@ function updateHUD() {
     if (countdown > 0) big = countdown > 0.2 ? String(Math.ceil(countdown - 0.2)) : 'СТАРТ!';
     else if (countdown > -0.8) big = 'СТАРТ!';
     if (p === 0 && big !== h.cache.big && big) Sound.beep(big === 'СТАРТ!');
-    if (!big) big = Race.big(p);
+    if (!big) big = Race.big(p) || Capture.big(p);
     setText(p, 'big', h.big, big);
     h.big.classList.toggle('hidden', !big);
   }
@@ -115,6 +125,7 @@ function drawMinimap(p) {
   ctx.restore();
   ctx.save(); ctx.translate(S / 2, S / 2);
   Race.minimap(ctx, p, S / 2, k);
+  Capture.minimap(ctx, p, S / 2, k);
   ctx.fillStyle = PCSS[p]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();
@@ -169,6 +180,8 @@ const MODE_INFO = {
     desc: 'Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал.' },
   solo: { name: 'Одиночная езда', tag: '1 игрок · монеты +1',
     desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками.' },
+  capture: { name: 'Захват точек', tag: `Победителю +${CAP_REWARD} · +1 за 10 очков`,
+    get desc() { return `Пять точек в случайном порядке: площадь у фонтана, двор винодельни, руины амфитеатра, остров на реке; финал — всегда край пирса. Стойте в светящемся круге один — очко в секунду; вдвоём — очков никому, выталкивайте соперника. Через ${CAP_CFG.time} с захвата точка гаснет. Победителю +${CAP_REWARD}, обоим +1 за каждые ${CAP_BONUS_PER} очков.`; } },
   race: { name: 'Гонка · чекпоинты', tag: `Победителю +${RACE_REWARD} · чекпоинт +${RACE_CP_REWARD}`,
     desc: `По городу расставлены ${RACE_CPS} больших светящихся арок. Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. За каждую арку +${RACE_CP_REWARD}, по дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.` },
 };
@@ -179,6 +192,18 @@ function drawModePreview(cv, mode) {
   ctx.fillStyle = 'rgba(8,12,18,.35)'; ctx.fillRect(0, 0, S, S);
   const P = (x, z) => [(D.mmExt - x) * sc, (D.mmExt - z) * sc];
   const rng = mulberry32(mode === 'race' ? 7 : mode === 'solo' ? 5 : 3);
+  if (mode === 'capture') {                        // пять зон с номерами
+    ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const zn of D.C.zones) {
+      const [x, y] = P(zn.x, zn.z), r = Math.max(6, zn.r * sc);
+      ctx.fillStyle = 'rgba(255,210,58,.3)'; ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffd23a'; ctx.strokeStyle = '#141008';
+      ctx.beginPath(); ctx.arc(x + r * 0.8, y - r * 0.8, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#141008'; ctx.fillText(String(zn.id), x + r * 0.8, y - r * 0.8 + 0.5);
+    }
+    return;
+  }
   if (mode !== 'race') {
     ctx.fillStyle = '#ffd23a';
     for (let i = 0; i < 70; i++) {
@@ -208,16 +233,16 @@ function drawModePreview(cv, mode) {
 }
 function renderMaps() {
   const grid = $('mapGrid'), map = playMap('free');
-  if (grid.dataset.built !== map) {                // превью рисуются заново при смене карты
+  if (grid.dataset.built !== map + CAP_CFG.time) {     // описание захвата зависит от CAP_CFG.time                // превью рисуются заново при смене карты
     grid.innerHTML = MODES.map(id => `
       <button class="mapcard" data-mode="${id}">
         <canvas width="240" height="240"></canvas>
         <div class="mname">${MODE_INFO[id].name}</div>
-        <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ' · только в городе' : ''}</div>
+        <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ` · только: ${MAP_INFO[playMap(id)].name}` : ''}</div>
         <div class="mdesc">${MODE_INFO[id].desc}</div>
       </button>`).join('');
     grid.querySelectorAll('.mapcard').forEach(card => drawModePreview(card.querySelector('canvas'), card.dataset.mode));
-    grid.dataset.built = map;
+    grid.dataset.built = map + CAP_CFG.time;
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
   $('modeLine').innerHTML = `Карта: ${PLAY_MAPS.map(id =>
@@ -305,7 +330,7 @@ $('pMenu').onclick = () => { paused = false; endMatch('menu'); };
 // итоги гонки
 const raceEndOpen = () => !$('raceEnd').classList.contains('hidden');
 function closeRaceEnd() { $('raceEnd').classList.add('hidden'); paused = false; }
-$('reAgain').onclick = () => { closeRaceEnd(); startMatch('race'); };
+$('reAgain').onclick = () => { closeRaceEnd(); startMatch(matchMode); };
 $('reModes').onclick = () => { closeRaceEnd(); endMatch('maps'); };
 $('reMenu').onclick = () => { closeRaceEnd(); endMatch('menu'); };
 
