@@ -3,7 +3,7 @@
 // Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
 //   FLIP_DV, flipKick, contactPoint, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
-// Использует: derive, PLAYER_COLORS, NITRO, HANDLING, KO_REWARD (js/data.js); QUAL, MAT, lerp, clamp, rand
+// Использует: derive, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, KO_REWARD (js/data.js); QUAL, MAT, lerp, clamp, rand
 //   (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01, waterLevel,
 //   dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js); CarFx
 //   (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); notify, addCoins,
@@ -183,7 +183,7 @@ class Car {
     this.shadowProxy = shadowProxyOf(this.model.root);   // тень машины — одним мешем вместо полутора десятков (js/world.js)
 
     // кузов: начало координат тела совпадает с началом модели (уровень земли под колёсами)
-    this.body = rw.createRigidBody(R.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.3).setLinearDamping(0.02).setCanSleep(false));
+    this.body = rw.createRigidBody(R.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.3).setLinearDamping(LIN_DAMP).setCanSleep(false));
     // низ коллайдера — не ниже осей колёс: низкие машины не садятся «на брюхо» на гребнях рельефа
     const rAvg = (g.rF + g.rR) / 2, by = Math.max(g.bottomY, rAvg * 0.95), top = g.H * 0.92, hh = (top - by) / 2, hb = top - by;
     const I = [m / 12 * (hb * hb + g.L * g.L), m / 12 * (g.W * g.W + g.L * g.L), m / 12 * (g.W * g.W + hb * hb) * RT.rollInertia];
@@ -218,7 +218,7 @@ class Car {
   place(x, z, h, yHint = Infinity) {
     const R = RAPIER, b = this.body;
     if (b.bodyType() !== R.RigidBodyType.Dynamic) b.setBodyType(R.RigidBodyType.Dynamic, true);
-    b.setLinearDamping(0.02); b.setAngularDamping(0.3);
+    b.setLinearDamping(LIN_DAMP); b.setAngularDamping(0.3);
     let gy = -1e9;
     for (const wl of this.wheels) { const [wx, wz] = this.local(wl.side * this.g.track, wl.z, h, x, z); gy = Math.max(gy, surfaceAt(wx, wz, yHint)); }
     b.setTranslation({ x, y: gy + 0.08, z }, true);
@@ -290,7 +290,7 @@ class Car {
     if (this.boosting) this.nitro = Math.max(0, this.nitro - dt / NITRO.dur);
     const nb = this.boosting ? 1 : 0;
     // тяга и тормоза
-    const bf = this.broken > 0 ? 0.7 : 1, maxS = this.maxSpeed * bf * (1 + NITRO.top * nb), acc = this.accel * bf * (1 + NITRO.accel * nb);
+    const bf = this.broken > 0 ? 0.7 : 1, maxS = this.maxSpeed * bf * (1 + NITRO.top * nb), acc = this.accel * H.accelMul * bf * (1 + NITRO.accel * nb);
     let drive = 0, brake = 0;
     if (thr > 0) {
       if (vf < -0.5) brake = H.brake;

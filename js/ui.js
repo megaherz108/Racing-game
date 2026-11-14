@@ -4,10 +4,10 @@
 //   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
 //   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
 //   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, carIndex, RACE_REWARD, RACE_CP_REWARD, RACE_CPS,
-//   playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js);
-//   updatePodium (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO
-//   (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, RACE_REWARD,
+//   RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
+//   lerp, clamp (js/core.js); updatePodium (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData,
+//   MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic
 //   (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch (js/match.js); Race (js/race.js); Perf
 //   (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -143,7 +143,7 @@ function renderGarage() {
       <div class="ccls">${def.cls} · ${def.price ? def.price + ' монет' : 'бесплатно'}</div>
       <div class="chips">${chips}</div>
       ${stats}
-      <div class="derived">${Math.round(d.maxSpeed * KMH)} км/ч · ${Math.round(d.mass)} кг · прочность ${d.maxHp}</div>
+      <div class="derived">${Math.round(d.maxSpeed * KMH)} км/ч · 0–100 за ${time100(d.accel * HANDLING.accelMul, d.maxSpeed).toFixed(1).replace('.', ',')} с · ${Math.round(d.mass)} кг · прочность ${d.maxHp}</div>
       ${action}`;
     updatePodium(p);
   }

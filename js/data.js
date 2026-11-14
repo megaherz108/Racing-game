@@ -1,8 +1,8 @@
 // Данные машин, характеристики → физика, сохранение
-// Определяет: STATS, CARS, derive, HANDLING, KMH, NITRO, TIMES, cleanTime, PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY,
-//   MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, COIN_MUL,
-//   TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave, save,
-//   persist, carIndex, browse.
+// Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
+//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, MODES, PLAY_MAPS, PLAY_MAP, playMap, RACE_CPS,
+//   RACE_REWARD, RACE_CP_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer,
+//   defaultSave, cleanPlayer, loadSave, save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -59,11 +59,26 @@ const CARS = [
   },
 ];
 
-// Характеристики → физика
+// Разгон 0–100 км/ч задаёт «Скорость»: 10 → 3 с, 1 → 12 с, каждая единица — секунда.
+// На газу: dv/dt = accel · (1 − 0,55 · v / maxSpeed) − LIN_DAMP · v (js/physics.js, Car.control и демпфирование кузова),
+// поэтому accel подбирается (делением пополам) так, чтобы до 100 км/ч выходило ровно accelTime секунд.
+const accelTime = a => 13 - a;
+const LIN_DAMP = 0.02;                // линейное демпфирование кузова в Rapier, 1/с
+// время 0–100 км/ч при разгоне accel (м/с²) на месте; гараж показывает его с учётом HANDLING.accelMul
+function time100(accel, maxSpeed) {
+  const b = accel * 0.55 / maxSpeed + LIN_DAMP, x = b * (100 / KMH) / accel;
+  return x >= 1 ? Infinity : -Math.log(1 - x) / b;
+}
+function accelFor(T, maxSpeed) {
+  let lo = 0.1, hi = 100;
+  for (let i = 0; i < 50; i++) { const mid = (lo + hi) / 2; if (time100(mid, maxSpeed) > T) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
 function derive(s) {
+  const maxSpeed = (12 + s.speed * 2.6) * 1.875;
   return {
-    maxSpeed: (12 + s.speed * 2.6) * 1.875,  // м/с: Corolla ≈ 150 км/ч, Aventador ≈ 255 км/ч (спидометр честный, см. KMH)
-    accel: (6 + s.speed * 1.4) * 1.1,   // м/с²
+    maxSpeed,                           // м/с: Corolla ≈ 150 км/ч, Aventador ≈ 255 км/ч (спидометр честный, см. KMH)
+    accel: accelFor(accelTime(s.speed), maxSpeed),   // м/с² на месте
     grip: 10 + s.stability * 1.8,       // предел бокового ускорения (сцепление)
     stability: s.stability,
     mass: 700 + s.weight * 290,         // кг
@@ -85,6 +100,8 @@ const HANDLING = {
   assist: 0.3,         // ассистент стабилизации (+ assistPerStab × Устойчивость)
   assistPerStab: 0.1,
   assistGrip: 1.15,    // насколько ассистент может «докрутить» поворот сверх предела шин
+  accelMul: 1.5,       // МНОЖИТЕЛЬ РАЗГОНА всех машин игроков: сила тяги × accelMul (0.5 — 0–100 примерно вдвое дольше).
+                       // Можно менять на лету из консоли: HANDLING.accelMul = 0.8
 };
 // Спидометр показывает настоящие км/ч. Раньше стоял множитель 1,6 («игровые» км/ч) — из-за него 270 на спидометре
 // были реальными 170 км/ч, и скорость ощущалась заниженной.
