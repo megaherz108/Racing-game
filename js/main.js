@@ -139,6 +139,8 @@ function frameBody(now) {
     }
     renderer.setViewport(0, 0, W, H);
     renderer.shadowMap.needsUpdate = true;
+    // шоурум — всегда без подстройки карты (world.look ставит её в Sky.apply на время заезда)
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
     renderer.render(show, showCam);
   }
 }

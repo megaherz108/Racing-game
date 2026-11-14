@@ -127,9 +127,11 @@ function coastBuildWorld(K) {
   return {
     id: 'coast', group, grid, decks, barrels: worldBarrels, ground: D.ground, surface, surfaceKind, soundAt, waterAt: D.waterAt, water: 0,
     bounds: D.HZ, boundsX: D.HX, boundsZ: D.HZ, hfStep: 2,
-    // свет и даль: всегда золотой час, солнце низко над морем с юго-запада. Туман длинный — с холмов видна вся карта
-    // и горы вокруг, дальние хребты тонут в дымке
-    tod: 'golden', sunOff: [70, 26, -72], sky: 0xf2d2a6, fog: [250, 3000], far: 3000, near: 0.3,
+    // свет и даль: всегда ясный день, солнце над морем с юго-запада, голубая дымка. Туман длинный — с холмов видна
+    // вся карта и горы вокруг, дальние хребты тонут в дымке. look — глубже тени (меньше заполняющего света,
+    // темнее «земля»), чуть ниже экспозиция и тонкоррекция (js/sky.js, js/core.js); палитра зелени — coastGreen()
+    tod: 'day', sunOff: [60, 60, -70], sky: 0xcfdfec, fog: [250, 3000], far: 3000, near: 0.3,
+    look: { sun: 2.6, hemi: [0.5, 0x3a4a2c], exposure: 0.95, grade: true },
     // ветер с моря на север (кроны, дым, облака) и тени облаков, бегущие по земле (js/breeze.js)
     wind: [-0.35, 1], clouds: { k: 0.42, size: 190, speed: 6 },
     coinCount: 90, spawns,

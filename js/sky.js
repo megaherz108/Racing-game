@@ -2,8 +2,8 @@
 // отражения, ночные огни (окна — шейдер зданий в js/world.js, фонари — buildCity(), фары игроков — здесь).
 // Погода (дождь) делает небо пасмурным: js/weather.js.
 // Определяет: glowTexture, tileFbm, dataCanvasTex, NOISE, Sky.
-// Использует: envTex, pmrem, clamp (js/core.js); EnvProbe (js/envprobe.js); mulberry32, smooth01, scene, sun,
-//   SUN_OFFSET, hemi, NIGHT_U (js/world.js); Weather (js/weather.js); cars (js/physics.js); cams (js/match.js).
+// Использует: envTex, pmrem, clamp, renderer (js/core.js); EnvProbe (js/envprobe.js); mulberry32, smooth01, scene,
+//   sun, SUN_OFFSET, hemi, NIGHT_U (js/world.js); Weather (js/weather.js); cars (js/physics.js); cams (js/match.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -242,6 +242,13 @@ const Sky = (() => {
     for (const c of cams) { c.far = w.far ?? scene.fog.far + 40; c.near = w.near ?? 0.1; c.updateProjectionMatrix(); }
     sun.color.setHex(P.sun[0]); sun.intensity = P.sun[1]; SUN_OFFSET.set(...P.off);
     hemi.color.setHex(P.hemi[0]); hemi.groundColor.setHex(P.hemi[1]); hemi.intensity = P.hemi[2];
+    // w.look — подстройка карты поверх пресета: sun — сила солнца, hemi — [сила, цвет земли] заполняющего света,
+    // exposure — экспозиция, grade — тонкоррекция (js/core.js). Значения заменяют пресетные, а не умножают их
+    const L = w.look || {};
+    if (L.sun != null) sun.intensity = L.sun;
+    if (L.hemi) { hemi.intensity = L.hemi[0]; if (L.hemi[1] != null) hemi.groundColor.setHex(L.hemi[1]); }
+    renderer.toneMappingExposure = L.exposure ?? 1;
+    renderer.toneMapping = L.grade ? THREE.CustomToneMapping : THREE.ACESFilmicToneMapping;
     // купол
     U.uTop.value.setHex(P.top); U.uHor.value.setHex(horHex);
     U.uSunDir.value.set(...P.off).normalize(); U.uSunCol.value.setHex(P.sun[0]);

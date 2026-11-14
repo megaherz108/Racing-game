@@ -4,14 +4,27 @@
 //   песок, бетон порта, дно), «юбки» по краям чанков против щелей между уровнями; море — плоскость, река — лента
 //   воды на своём уровне (wlAt), над заводью — шире.
 // Порядок этапов — в buildCoast() (js/maps/coast/build.js).
-// Определяет: COAST_CHUNK, COAST_LOD, coastBuildGround.
-// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01, noiseTexture (js/world.js); Weather
+// Определяет: COAST_CHUNK, COAST_LOD, COAST_GREEN, coastGreen, coastBuildGround.
+// Использует: clamp (js/core.js); smooth01, makeNoise, mulberry32, noiseTexture (js/world.js); Weather
 //   (js/weather.js); waterMaterial (js/maps/city/textures.js); ellMetric (js/maps/coast/terrain.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
 const COAST_CHUNK = 128;                       // клеток сетки высот в чанке земли (по 2 м)
 const COAST_LOD = [[1, 0], [2, 150], [4, 380]];   // [шаг в клетках, с какого расстояния до чанка, м]
+// Палитра зелени: жёлто-зелёные тона (трава, кроны, горы-фон) сдвигаются к зелёному, чуть насыщеннее и темнее.
+// Считается в sRGB-HSL; вес плавно спадает по оттенку и насыщенности, поэтому песок, грунт, камень и бетон
+// почти не меняются. hue — сдвиг оттенка (доля круга), s и l — множители насыщенности и яркости.
+const COAST_GREEN = { hue: 0.04, s: 1.12, l: 0.8 };
+const coastGreen = (() => {
+  const h = {}, band = (a, b, x) => smooth01((x - a) / (b - a));
+  return c => {
+    c.getHSL(h, THREE.SRGBColorSpace);
+    const w = band(0.115, 0.15, h.h) * (1 - band(0.42, 0.5, h.h)) * band(0.06, 0.14, h.s);
+    if (w > 0) c.setHSL(h.h + COAST_GREEN.hue * w, Math.min(1, h.s * (1 + (COAST_GREEN.s - 1) * w)), h.l * (1 + (COAST_GREEN.l - 1) * w), THREE.SRGBColorSpace);
+    return c;
+  };
+})();
 function coastBuildGround(K) {
   const { D, group } = K;
   const { C } = D, { H, NX, NZ, gx, gz, STEP, ZC, port, RD, RI, riverPts, wlAt, waterAt, island, lagoon, roadAt } = C;
@@ -52,6 +65,7 @@ function coastBuildGround(K) {
       const rd = roadAt(x, z);
       if (rd) c.copy(COL[rd.kind === 'gravel' ? 'gravel' : rd.kind === 'cobble' ? 'cobble' : 'dirt']).multiplyScalar(0.92 + 0.1 * nz(x / 3, z / 3));
     }
+    coastGreen(c);
     colors[k * 3] = c.r; colors[k * 3 + 1] = c.g; colors[k * 3 + 2] = c.b;
   }
 

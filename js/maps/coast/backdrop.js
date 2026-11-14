@@ -4,7 +4,8 @@
 // Теней не отбрасывает.
 // Порядок этапов — в buildCoast() (js/maps/coast/build.js).
 // Определяет: coastBuildBackdrop.
-// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js).
+// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js); coastGreen
+//   (js/maps/coast/ground.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -44,6 +45,7 @@ function coastBuildBackdrop(K) {
     const n = nz(x / 37, z / 37);
     c.copy(green).lerp(dry, clamp(0.45 + 0.4 * nz(x / 70, z / 70), 0, 1) * 0.8).lerp(rock, smooth01((h - 80 - n * 55) / 110)).lerp(dark, clamp(0.3 + nz(x / 90, z / 90) * 0.5, 0, 1) * smooth01((h - 110) / 100));
     c.lerp(snow, smooth01((h - 250 - n * 40) / 50));
+    coastGreen(c);
     vid[j * w + i] = pos.length / 3;
     pos.push(x, h, z); col.push(c.r, c.g, c.b);
   }

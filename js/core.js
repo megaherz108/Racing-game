@@ -17,6 +17,20 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
+// Мягкая тонкоррекция для карт с world.look.grade (Sky.apply включает её вместо ACES как CustomToneMapping):
+// после ACES — насыщенность +10 % и контраст +8 % вокруг средне-серого. Десяток операций на пиксель в уже
+// существующем шаге тонмаппинга; переключается только при загрузке карты (программы шейдеров кэшируются по режиму).
+{
+  const STUB = 'vec3 CustomToneMapping( vec3 color ) { return color; }';
+  const src = THREE.ShaderChunk.tonemapping_pars_fragment;
+  if (src.includes(STUB)) THREE.ShaderChunk.tonemapping_pars_fragment = src.replace(STUB, `vec3 CustomToneMapping( vec3 color ) {
+	vec3 c = ACESFilmicToneMapping( color );
+	float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
+	c = max( mix( vec3( l ), c, 1.10 ), 0.0 );
+	return clamp( 0.18 * pow( c / 0.18, vec3( 1.08 ) ), 0.0, 1.0 );
+}`);
+  else console.warn('Тонкоррекция: не найден CustomToneMapping в шейдере Three.js — карты с look.grade пойдут без неё');
+}
 document.body.prepend(renderer.domElement);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
