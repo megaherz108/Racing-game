@@ -57,8 +57,8 @@ button{font:inherit;cursor:pointer;color:inherit}
 .carnav .nav:hover{background:rgba(255,255,255,.14)}
 .cname{flex:1;text-align:center;font-family:var(--fd);font-size:21px;line-height:1.1}
 .ccls{text-align:center;color:var(--mut);font-size:13px;margin-bottom:10px}
-.chips{display:flex;gap:5px;margin-bottom:14px}
-.chips button{flex:1;padding:6px 0;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+.chips button{flex:1 0 auto;padding:6px 7px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden}
 .chips button.on{border-color:var(--pc);color:#fff;background:rgba(255,255,255,.1)}
 .chips button.locked::before{content:'🔒';font-size:9px;margin-right:2px}
 .stat{display:grid;grid-template-columns:108px 1fr 22px;align-items:center;gap:8px;margin:7px 0;font-size:14px}

@@ -19,6 +19,15 @@
 const ENGINE = {
   corolla: { cyl: 4, base: 50, sub: 0.12, tilt: 0.85, bank: 0.004, q: 2.5, bright: 1.0, res: [420, 4], drive: 1.8, am: 0.1, amRate: 1, lope: 0, grit: 0.25, gears: 5, turbo: 0 },
   accord: { cyl: 4, base: 46, sub: 0.08, tilt: 1.1, bank: 0.003, q: 2, bright: 0.95, res: [360, 3], drive: 1.4, am: 0.06, amRate: 1, lope: 0, grit: 0.15, gears: 6, turbo: 0.6 },
+  golf: { cyl: 4, base: 52, sub: 0.1, tilt: 0.9, bank: 0.004, q: 2.8, bright: 1.1, res: [480, 4], drive: 2.0, am: 0.08, amRate: 1, lope: 0, grit: 0.22, gears: 6, turbo: 0.8 },
+  // «Нива»: глухой карбюраторный мотор, мало передач, заметная вибрация
+  niva: { cyl: 4, base: 40, sub: 0.3, tilt: 1.25, bank: 0.008, q: 2, bright: 0.75, res: [260, 3], drive: 2.4, am: 0.25, amRate: 0.6, lope: 0.012, grit: 0.45, gears: 4, turbo: 0 },
+  // Mustang: V8 с бубнением и качающимися холостыми
+  mustang: { cyl: 8, base: 34, sub: 0.6, tilt: 1.0, bank: 0.01, q: 4, bright: 0.95, res: [180, 6], drive: 3.2, am: 0.4, amRate: 0.5, lope: 0.04, grit: 0.3, gears: 6, turbo: 0 },
+  // WRX: оппозитная «четвёрка» — неровный рокот (полупорядки) и громкая турбина
+  wrx: { cyl: 4, base: 46, sub: 0.35, tilt: 0.95, bank: 0.006, q: 3, bright: 1.0, res: [380, 5], drive: 2.4, am: 0.3, amRate: 0.5, lope: 0.015, grit: 0.3, gears: 6, turbo: 1.0 },
+  // 911: оппозитная «шестёрка», звонкая на верхах
+  p911: { cyl: 6, base: 55, sub: 0.12, tilt: 0.7, bank: 0.005, q: 4.5, bright: 1.25, res: [1100, 5], drive: 2.4, am: 0.1, amRate: 1, lope: 0, grit: 0.18, gears: 7, turbo: 0.3 },
   x5: { cyl: 6, base: 38, sub: 0.15, tilt: 1.05, bank: 0.005, q: 3, bright: 0.85, res: [260, 5], drive: 2.2, am: 0.12, amRate: 0.5, lope: 0, grit: 0.2, gears: 6, turbo: 1 },
   hummer: { cyl: 8, base: 28, sub: 0.95, tilt: 1.35, bank: 0.012, q: 4, bright: 0.6, res: [95, 8], drive: 3, am: 0.55, amRate: 0.25, lope: 0.035, grit: 0.35, gears: 4, turbo: 0.35 },
   aventador: { cyl: 12, base: 60, sub: 0.05, tilt: 0.55, bank: 0.006, q: 6, bright: 1.35, res: [1700, 6], drive: 2.6, am: 0.05, amRate: 1, lope: 0, grit: 0.15, gears: 7, turbo: 0 },

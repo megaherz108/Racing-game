@@ -11,7 +11,7 @@
    DATA
    ===================================================================== */
 const STATS = [
-  ['speed', 'Скорость'], ['stability', 'Устойчивость'], ['weight', 'Вес'], ['health', 'Здоровье'],
+  ['speed', 'Скорость'], ['stability', 'Управление'], ['weight', 'Вес'], ['health', 'Здоровье'],
 ];
 
 // geo: L/W — габариты, rF/rR — радиусы колёс, axF/axR — оси по Z, track — полуколея,
@@ -26,15 +26,39 @@ const CARS = [
       gh: [[0.95, 0.92], [0.0, 1.38], [-0.85, 1.40], [-1.45, 0.98]], ghW: 1.46, bPillars: [-0.32], pillar: 'paint' },
   },
   {
-    id: 'accord', name: 'Honda Accord', short: 'Accord', cls: 'Бизнес-седан', price: 100,
-    stats: { speed: 5, stability: 7, weight: 5, health: 5 }, paints: [0x1e3566, 0x6e1322],
+    id: 'golf', name: 'Volkswagen Golf GTI', short: 'Golf', cls: 'Горячий хэтчбек · шустрый, но хрупкий', price: 100,
+    stats: { speed: 6, stability: 8, weight: 3, health: 3 }, paints: [0xc4161c, 0xe9ecef],
+    geo: { style: 'hatch', L: 4.27, W: 1.80, H: 1.46, rF: 0.32, rR: 0.32, ww: 0.23, axF: 1.26, axR: -1.37, track: 0.77,
+      bottomY: 0.25, archPad: 0.07, bevel: 0.06, rim: 0xbfc4ca,
+      top: [[2.10, 0.33], [2.14, 0.62], [1.98, 0.81], [0.95, 0.93], [-1.6, 0.98], [-2.05, 1.0], [-2.13, 0.92], [-2.14, 0.42], [-2.1, 0.32]],
+      gh: [[0.95, 0.92], [0.0, 1.40], [-1.58, 1.36], [-2.02, 1.0]], ghW: 1.48, bPillars: [-0.42], pillar: 'black' },
+  },
+  {
+    id: 'niva', name: 'Lada Niva', short: 'Нива', cls: 'Вездеход · медленная, но крепкая', price: 100,
+    stats: { speed: 3, stability: 5, weight: 6, health: 7 }, paints: [0x46703c, 0xd8cfae],
+    geo: { style: 'niva', L: 3.74, W: 1.68, H: 1.64, rF: 0.36, rR: 0.36, ww: 0.22, axF: 1.14, axR: -1.06, track: 0.71,
+      bottomY: 0.42, archPad: 0.08, bevel: 0.035, rim: 0xa7acb2,
+      top: [[1.84, 0.48], [1.87, 0.86], [1.72, 0.97], [0.75, 1.02], [-1.80, 1.05], [-1.87, 1.0], [-1.87, 0.5], [-1.82, 0.44]],
+      gh: [[0.75, 1.02], [0.38, 1.58], [-1.74, 1.60], [-1.83, 1.05]], ghW: 1.44, bPillars: [-0.36], pillar: 'paint' },
+  },
+  {
+    id: 'accord', name: 'Honda Accord', short: 'Accord', cls: 'Бизнес-седан', price: 200,
+    stats: { speed: 6, stability: 7, weight: 5, health: 5 }, paints: [0x1e3566, 0x6e1322],
     geo: { style: 'sedan', L: 4.9, W: 1.86, H: 1.45, rF: 0.33, rR: 0.33, ww: 0.23, axF: 1.47, axR: -1.36, track: 0.79,
       bottomY: 0.25, archPad: 0.08, bevel: 0.06, rim: 0xc9cdd3, chromeLine: true,
       top: [[2.43, 0.33], [2.47, 0.58], [2.27, 0.78], [1.05, 0.90], [-1.55, 0.98], [-2.32, 0.99], [-2.45, 0.86], [-2.45, 0.4], [-2.4, 0.32]],
       gh: [[1.05, 0.90], [0.05, 1.38], [-0.95, 1.40], [-1.8, 0.98]], ghW: 1.52, bPillars: [-0.36], pillar: 'paint' },
   },
   {
-    id: 'x5', name: 'BMW X5', short: 'X5', cls: 'Кроссовер премиум-класса', price: 200,
+    id: 'mustang', name: 'Ford Mustang GT', short: 'Mustang', cls: 'Маслкар V8 · быстрый таран, любит занос', price: 300,
+    stats: { speed: 8, stability: 4, weight: 7, health: 6 }, paints: [0x1d4fa8, 0xf2b814],
+    geo: { style: 'muscle', L: 4.79, W: 1.92, H: 1.38, rF: 0.34, rR: 0.35, ww: 0.27, axF: 1.32, axR: -1.40, track: 0.82,
+      bottomY: 0.22, archPad: 0.07, bevel: 0.05, rim: 0x3a3d42,
+      top: [[2.30, 0.32], [2.40, 0.72], [2.24, 0.83], [0.75, 0.92], [-1.6, 0.96], [-2.25, 0.99], [-2.39, 0.90], [-2.40, 0.42], [-2.35, 0.30]],
+      gh: [[0.75, 0.92], [-0.15, 1.34], [-0.85, 1.36], [-1.95, 0.97]], ghW: 1.44, bPillars: [], pillar: 'paint' },
+  },
+  {
+    id: 'x5', name: 'BMW X5', short: 'X5', cls: 'Кроссовер премиум-класса', price: 300,
     stats: { speed: 6, stability: 8, weight: 7, health: 7 }, paints: [0x24406e, 0xe6e8eb],
     geo: { style: 'suv', L: 4.92, W: 1.94, H: 1.76, rF: 0.40, rR: 0.40, ww: 0.27, axF: 1.5, axR: -1.43, track: 0.82,
       bottomY: 0.40, archPad: 0.09, bevel: 0.07, rim: 0xd5d8dc,
@@ -42,17 +66,34 @@ const CARS = [
       gh: [[1.10, 1.15], [0.32, 1.64], [-2.02, 1.68], [-2.32, 1.2]], ghW: 1.62, bPillars: [-0.42, -1.4], pillar: 'black' },
   },
   {
-    id: 'hummer', name: 'Hummer H1', short: 'H1', cls: 'Армейский внедорожник', price: 400,
-    stats: { speed: 5, stability: 10, weight: 10, health: 10 }, paints: [0x56613a, 0xcbb487],
+    id: 'wrx', name: 'Subaru WRX STI', short: 'WRX', cls: 'Раллийный седан · цепкий гонщик', price: 400,
+    stats: { speed: 8, stability: 9, weight: 4, health: 5 }, paints: [0x1b3f9c, 0xe9ecef],
+    geo: { style: 'rally', L: 4.60, W: 1.80, H: 1.48, rF: 0.33, rR: 0.33, ww: 0.25, axF: 1.37, axR: -1.28, track: 0.78,
+      bottomY: 0.27, archPad: 0.08, bevel: 0.06, rim: 0xc9a227,
+      top: [[2.26, 0.34], [2.30, 0.60], [2.12, 0.80], [1.0, 0.92], [-1.4, 0.98], [-2.15, 1.0], [-2.29, 0.88], [-2.29, 0.40], [-2.24, 0.32]],
+      gh: [[1.0, 0.92], [0.05, 1.40], [-0.85, 1.42], [-1.55, 1.0]], ghW: 1.46, bPillars: [-0.36], pillar: 'black' },
+  },
+  {
+    id: 'hummer', name: 'Hummer H1', short: 'H1', cls: 'Армейский внедорожник', price: 500,
+    stats: { speed: 5, stability: 6, weight: 10, health: 10 }, paints: [0x56613a, 0xcbb487],
     geo: { style: 'hummer', L: 4.7, W: 2.2, H: 1.98, rF: 0.47, rR: 0.47, ww: 0.36, axF: 1.62, axR: -1.62, track: 0.9,
       bottomY: 0.55, archPad: 0.1, bevel: 0.025, rim: 0x5d6152,
       top: [[2.32, 0.70], [2.35, 1.08], [2.05, 1.28], [0.78, 1.33], [-2.30, 1.33], [-2.35, 1.28], [-2.35, 0.68], [-2.3, 0.6]],
       gh: [[0.78, 1.33], [0.6, 1.93], [-2.18, 1.93], [-2.28, 1.33]], ghW: 1.70, bPillars: [-0.38, -1.4], pillar: 'paint' },
   },
   {
-    id: 'aventador', name: 'Lamborghini Aventador', short: 'Aventador', cls: 'Суперкар V12', price: 700,
-    stats: { speed: 10, stability: 7, weight: 5, health: 5 }, paints: [0x86cf12, 0xff7400],
-    geo: { style: 'super', L: 4.78, W: 2.03, H: 1.15, rF: 0.33, rR: 0.37, ww: 0.28, axF: 1.40, axR: -1.30, track: 0.86,
+    id: 'p911', name: 'Porsche 911', short: '911', cls: 'Спорткар · мотор сзади, бьётся легко', price: 600,
+    stats: { speed: 9, stability: 10, weight: 4, health: 4 }, paints: [0xd02a1e, 0xb8bcc2],
+    geo: { style: 'sport', rearEngine: true, L: 4.52, W: 1.85, H: 1.30, rF: 0.34, rR: 0.36, ww: 0.28, axF: 1.28, axR: -1.17, track: 0.80,
+      bottomY: 0.18, archPad: 0.06, bevel: 0.06, rim: 0xc0c4ca,
+      top: [[2.20, 0.28], [2.26, 0.46], [2.15, 0.60], [1.75, 0.70], [0.85, 0.82], [-0.6, 0.88], [-1.6, 0.90], [-2.12, 0.88], [-2.26, 0.78], [-2.26, 0.40], [-2.20, 0.28]],
+      gh: [[0.85, 0.82], [0.15, 1.24], [-0.42, 1.28], [-1.95, 0.93]], ghW: 1.34, bPillars: [], pillar: 'paint',
+      engine: [[-1.25, 1.11], [-2.05, 0.93], [-2.05, 0.87], [-1.25, 0.9]] },
+  },
+  {
+    id: 'aventador', name: 'Lamborghini Aventador', short: 'Aventador', cls: 'Суперкар V12', price: 800,
+    stats: { speed: 10, stability: 8, weight: 5, health: 5 }, paints: [0x86cf12, 0xff7400],
+    geo: { style: 'super', rearEngine: true, L: 4.78, W: 2.03, H: 1.15, rF: 0.33, rR: 0.37, ww: 0.28, axF: 1.40, axR: -1.30, track: 0.86,
       bottomY: 0.16, archPad: 0.06, bevel: 0.05, rim: 0x2a2c30,
       top: [[2.36, 0.22], [2.42, 0.40], [2.2, 0.62], [1.0, 0.82], [-0.95, 0.90], [-2.15, 0.95], [-2.39, 0.90], [-2.40, 0.42], [-2.35, 0.22]],
       gh: [[1.0, 0.82], [-0.05, 1.12], [-0.5, 1.13], [-0.95, 0.90]], ghW: 1.36, bPillars: [], pillar: 'paint',
@@ -98,7 +139,7 @@ const HANDLING = {
   peakSlipF: 0.12,     // угол увода (рад), при котором шины выходят на предел
   peakSlipR: 0.10,
   slideDrag: 0.22,     // потеря скорости при боковом скольжении
-  assist: 0.3,         // ассистент стабилизации (+ assistPerStab × Устойчивость)
+  assist: 0.3,         // ассистент стабилизации (+ assistPerStab × Управление)
   assistPerStab: 0.1,
   assistGrip: 1.15,    // насколько ассистент может «докрутить» поворот сверх предела шин
   accelMul: 1.5,       // МНОЖИТЕЛЬ РАЗГОНА всех машин игроков: сила тяги × accelMul (0.5 — 0–100 примерно вдвое дольше).

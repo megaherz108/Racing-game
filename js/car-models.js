@@ -1,5 +1,5 @@
 // Mid-poly модели машин из примитивов
-// Определяет: buildCarModel, STYLE, disposeTree.
+// Определяет: buildCarModel, STYLE, carFaces, disposeTree.
 // Использует: MAT, extrude, lowerShape, box, polyShape, beam, lerp, clamp, mergeByMaterial, makeWheel, cyl
 //   (js/core.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -197,7 +197,145 @@ const STYLE = {
     box(1.6, 0.12, 0.3, MAT.black, 0, 0.22, rFace + 0.05, bp.r);              // диффузор
     const ex = cyl(0.12, 0.12, 0.16, 6, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(0, 0.42, rFace - 0.04);
   },
+
+  // Golf GTI: короткий хэтчбек, толстая задняя стойка, красная полоса через решётку
+  hatch(g, body, paint, bp) {
+    const W = g.W, [fFace, rFace] = carFaces(g);
+    // толстая задняя стойка: сплошной блок в цвет кузова поверх бокового стекла
+    extrude(polyShape([[-1.0, 0.99], [-1.12, 1.37], [-1.54, 1.355], [-1.92, 1.0]]), g.ghW + 0.03, paint, 0.01, body);
+    for (const s of [1, -1]) {
+      const hl = box(0.42, 0.1, 0.22, MAT.head, s * (W / 2 - 0.33), 0.69, fFace - 0.1, body); hl.rotation.x = -0.5;
+      box(0.09, 0.06, 0.1, MAT.amber, s * (W / 2 - 0.09), 0.64, fFace - 0.1, body);
+      box(0.5, 0.13, 0.08, MAT.tail, s * (W / 2 - 0.3), 0.87, rFace - 0.02, body);
+      for (const dz of [0.25, -0.85]) box(0.03, 0.035, 0.18, MAT.chrome, s * (W / 2 + 0.01), 0.86, dz, body);
+      box(0.04, 0.1, 1.6, MAT.black, s * (W / 2 + 0.01), 0.33, -0.06, body);              // пороги
+      box(0.18, 0.07, 0.05, MAT.head, s * 0.62, 0.4, fFace + 0.01, bp.f);                  // противотуманки
+      const ex = cyl(0.045, 0.045, 0.18, 8, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(s * 0.55, 0.3, rFace - 0.03);
+    }
+    const gr = box(0.62, 0.08, 0.2, MAT.black, 0, 0.7, fFace - 0.1, body); gr.rotation.x = -0.5;   // узкая решётка между фар
+    box(1.3, 0.022, 0.05, MAT.tail, 0, 0.615, fFace - 0.0, body);                            // красная полоса GTI
+    box(1.0, 0.16, 0.06, MAT.black, 0, 0.42, fFace + 0.0, bp.f);                             // сотовый воздухозаборник
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.53, fFace + 0.01, bp.f);
+    box(1.45, 0.05, 0.12, MAT.black, 0, 0.32, fFace - 0.06, bp.f);                          // губа
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.66, rFace - 0.02, body);
+    box(1.65, 0.12, 0.06, MAT.black, 0, 0.4, rFace - 0.03, bp.r);
+    box(1.3, 0.04, 0.26, paint, 0, 1.39, -1.7, body).rotation.x = 0.15;                     // спойлер над пятой дверью
+  },
+
+  // Lada Niva: короткая «коробка», круглые фары в чёрной решётке, стальные бамперы, багажник на крыше
+  niva(g, body, paint, bp) {
+    const W = g.W, [fFace, rFace] = carFaces(g);
+    box(W - 0.24, 0.26, 0.05, MAT.black, 0, 0.71, fFace + 0.01, body);                      // решётка во всю ширину
+    for (const y of [0.66, 0.76]) box(0.6, 0.025, 0.06, MAT.trim, 0, y, fFace + 0.02, body);
+    for (const s of [1, -1]) {
+      const ring = cyl(0.12, 0.12, 0.04, 16, MAT.chrome, body); ring.rotation.x = Math.PI / 2; ring.position.set(s * 0.58, 0.72, fFace + 0.03);
+      const hl = cyl(0.095, 0.095, 0.05, 16, MAT.head, body); hl.rotation.x = Math.PI / 2; hl.position.set(s * 0.58, 0.72, fFace + 0.04);
+      box(0.14, 0.06, 0.04, MAT.amber, s * 0.62, 0.55, fFace + 0.02, body);
+      // фонари: красный сверху, оранжевый снизу
+      box(0.2, 0.15, 0.05, MAT.tail, s * (W / 2 - 0.16), 0.8, rFace - 0.02, body);
+      box(0.2, 0.08, 0.05, MAT.amber, s * (W / 2 - 0.16), 0.68, rFace - 0.02, body);
+      box(0.03, 0.035, 0.16, MAT.chrome, s * (W / 2 + 0.01), 0.9, 0.0, body);               // ручка двери (дверей две)
+      box(0.03, 0.05, g.axF - g.axR - 1.05, MAT.black, s * (W / 2 + 0.012), 0.72, (g.axF + g.axR) / 2, body);   // молдинг
+      for (const az of [g.axF, g.axR]) box(g.ww + 0.04, 0.22, 0.02, MAT.black, s * g.track, 0.38, az - g.rF - 0.14, body);   // брызговики
+      // багажник на крыше: продольные трубы и стойки
+      const rx = s * (g.ghW / 2 - 0.1);
+      box(0.04, 0.04, 1.7, MAT.trim, rx, 1.72, -0.7, body);
+      for (const lz of [0.1, -0.7, -1.5]) box(0.04, 0.1, 0.04, MAT.trim, rx, 1.66, lz, body);
+    }
+    for (const lz of [0.05, -0.45, -0.95, -1.45]) box(g.ghW - 0.2, 0.03, 0.04, MAT.trim, 0, 1.72, lz, body);
+    box(W + 0.04, 0.12, 0.14, MAT.trim, 0, 0.48, fFace + 0.06, bp.f);                        // стальные бамперы
+    box(0.48, 0.11, 0.03, MAT.plate, 0, 0.48, fFace + 0.14, bp.f);
+    box(W + 0.04, 0.12, 0.14, MAT.trim, 0, 0.5, rFace - 0.06, bp.r);
+    box(0.48, 0.11, 0.03, MAT.plate, 0, 0.72, rFace - 0.03, body);
+    const ex = cyl(0.04, 0.04, 0.18, 8, MAT.trim, body); ex.rotation.x = Math.PI / 2; ex.position.set(-0.5, 0.4, rFace - 0.05);
+  },
+
+  // Mustang: «акулий» нос с большой решёткой, вытянутый капот с вентиляцией, фастбэк, три полосы фонарей
+  muscle(g, body, paint, bp) {
+    const W = g.W, [fFace, rFace] = carFaces(g);
+    // нос наклонён вперёд: поверхность между первыми двумя точками профиля (+ фаска)
+    const [[z0, y0], [z1, y1]] = g.top, noseZ = y => z0 + (y - y0) / (y1 - y0) * (z1 - z0) + g.bevel;
+    const gr = box(1.05, 0.26, 0.05, MAT.black, 0, 0.53, noseZ(0.53) + 0.015, body); gr.rotation.x = Math.atan2(z1 - z0, y1 - y0);
+    box(1.4, 0.05, 0.1, MAT.black, 0, 0.31, noseZ(0.31) - 0.03, bp.f);
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.4, noseZ(0.4) + 0.02, bp.f);
+    // чёрная панель между фонарями
+    box(1.5, 0.24, 0.03, MAT.black, 0, 0.74, rFace - 0.012, body);
+    for (const s of [1, -1]) {
+      const hl = box(0.46, 0.08, 0.22, MAT.head, s * (W / 2 - 0.36), 0.77, fFace - 0.1, body); hl.rotation.x = -0.6;
+      box(0.06, 0.12, 0.04, MAT.head, s * (W / 2 - 0.42), 0.5, noseZ(0.5) + 0.02, bp.f);                // вертикальные ходовые огни
+      box(0.28, 0.03, 0.4, MAT.black, s * 0.4, 0.88, 1.5, body).rotation.x = 0.06;        // жабры на капоте
+      for (let i = 0; i < 3; i++) box(0.09, 0.2, 0.04, MAT.tail, s * (0.4 + i * 0.14), 0.74, rFace - 0.035, body);
+      box(0.03, 0.035, 0.16, MAT.chrome, s * (W / 2 + 0.01), 0.84, -0.2, body);
+      box(0.04, 0.1, 1.7, MAT.black, s * (W / 2 + 0.01), 0.3, -0.05, body);
+      for (const ex0 of [0.5, 0.64]) { const ex = cyl(0.05, 0.05, 0.18, 10, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(s * ex0, 0.3, rFace - 0.03); }
+    }
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.55, rFace - 0.03, bp.r);
+    box(1.7, 0.1, 0.06, MAT.black, 0, 0.38, rFace - 0.03, bp.r);
+    box(1.62, 0.04, 0.16, paint, 0, 1.0, -2.3, body).rotation.x = 0.2;                     // «утиный хвост»
+  },
+
+  // WRX STI: седан с воздухозаборником на капоте, большим антикрылом и брызговиками
+  rally(g, body, paint, bp) {
+    const W = g.W, [fFace, rFace] = carFaces(g);
+    for (const s of [1, -1]) {
+      const hl = box(0.46, 0.1, 0.22, MAT.head, s * (W / 2 - 0.34), 0.7, fFace - 0.08, body); hl.rotation.x = -0.5;
+      box(0.3, 0.14, 0.05, MAT.black, s * 0.62, 0.42, fFace - 0.035, bp.f);
+      box(0.14, 0.08, 0.04, MAT.head, s * 0.62, 0.42, fFace + 0.0, bp.f);                   // противотуманки
+      box(0.44, 0.13, 0.08, MAT.tail, s * (W / 2 - 0.3), 0.84, rFace - 0.03, body);
+      for (const dz of [0.4, -0.7]) box(0.03, 0.035, 0.18, MAT.chrome, s * (W / 2 + 0.01), 0.87, dz, body);
+      box(0.04, 0.1, 1.7, MAT.black, s * (W / 2 + 0.01), 0.35, 0.05, body);
+      for (const az of [g.axF, g.axR]) box(g.ww + 0.06, 0.24, 0.02, MAT.black, s * g.track, 0.2, az - g.rF - 0.12, body);   // брызговики
+      // антикрыло на стойках
+      box(0.05, 0.22, 0.08, MAT.black, s * 0.5, 1.1, -1.95, body);
+      box(0.03, 0.12, 0.32, paint, s * 0.78, 1.2, -2.0, body);
+      for (const ex0 of [0.42, 0.56]) { const ex = cyl(0.05, 0.05, 0.18, 10, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(s * ex0, 0.3, rFace - 0.03); }
+    }
+    box(1.56, 0.04, 0.3, paint, 0, 1.24, -2.0, body).rotation.x = 0.1;
+    box(0.62, 0.17, 0.08, MAT.black, 0, 0.53, fFace + 0.02, bp.f);                          // шестигранная решётка
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.42, fFace + 0.03, bp.f);
+    box(1.5, 0.05, 0.12, MAT.black, 0, 0.32, fFace - 0.06, bp.f);
+    // воздухозаборник интеркулера на капоте
+    box(0.52, 0.1, 0.42, paint, 0, 0.89, 1.55, body).rotation.x = 0.1;
+    box(0.42, 0.05, 0.04, MAT.black, 0, 0.91, 1.77, body);
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.62, rFace - 0.03, bp.r);
+    box(1.6, 0.12, 0.06, MAT.black, 0, 0.38, rFace - 0.03, bp.r);
+  },
+
+  // Porsche 911: круглые фары на крыльях, покатая крыша до самой кормы, жалюзи над мотором, сплошная полоса фонарей
+  sport(g, body, paint, bp) {
+    const W = g.W, [fFace, rFace] = carFaces(g), e = g.engine;
+    extrude(polyShape(e), g.ghW + 0.1, paint, 0.03, body);                                 // крышка мотора
+    for (let i = 0; i < 5; i++) {
+      const t = 0.12 + i * 0.17;
+      box(g.ghW * 0.6, 0.02, 0.08, MAT.black, 0, lerp(e[0][1], e[1][1], t) + 0.035, lerp(e[0][0], e[1][0], t), body);
+    }
+    box(1.3, 0.03, 0.2, paint, 0, 0.97, -2.0, body).rotation.x = 0.12;                      // выдвижной спойлер
+    for (const s of [1, -1]) {
+      // «лягушачьи глаза»: круглые фары в выступах крыльев
+      const ax = Math.PI / 2 - 0.25, hx = s * (W / 2 - 0.32), dy = Math.sin(0.25), dz = Math.cos(0.25);
+      const hous = cyl(0.15, 0.15, 0.36, 18, paint, body); hous.rotation.x = ax; hous.position.set(hx, 0.72, 1.78);
+      const hl = cyl(0.125, 0.125, 0.04, 18, MAT.head, body); hl.rotation.x = ax; hl.position.set(hx, 0.72 + dy * 0.18, 1.78 + dz * 0.18);
+      box(0.32, 0.12, 0.05, MAT.black, s * 0.6, 0.38, fFace - 0.03, bp.f);                  // боковые воздухозаборники
+      box(0.24, 0.025, 0.05, MAT.head, s * 0.6, 0.46, fFace - 0.02, bp.f);
+      box(0.03, 0.03, 0.15, MAT.chrome, s * (W / 2 + 0.01), 0.8, -0.15, body);
+      box(0.04, 0.1, 1.5, MAT.black, s * (W / 2 + 0.01), 0.27, 0.05, body);
+      const ex = cyl(0.06, 0.06, 0.16, 10, MAT.chrome, body); ex.rotation.x = Math.PI / 2; ex.position.set(s * 0.55, 0.3, rFace - 0.03);
+    }
+    box(0.6, 0.12, 0.05, MAT.black, 0, 0.36, fFace - 0.0, bp.f);
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.36, fFace + 0.03, bp.f);
+    box(1.6, 0.04, 0.24, MAT.black, 0, 0.22, fFace - 0.1, bp.f);
+    box(W - 0.2, 0.045, 0.05, MAT.tail, 0, 0.74, rFace - 0.015, body);                      // фонари — одна полоса
+    box(W - 0.3, 0.07, 0.03, MAT.black, 0, 0.66, rFace - 0.01, body);
+    box(0.5, 0.11, 0.03, MAT.plate, 0, 0.52, rFace - 0.03, bp.r);
+    box(1.6, 0.1, 0.06, MAT.black, 0, 0.35, rFace - 0.03, bp.r);
+  },
 };
+// передняя и задняя поверхности кузова по Z: крайние точки профиля плюс фаска выдавливания (она раздувает контур)
+function carFaces(g) {
+  let f = -Infinity, r = Infinity;
+  for (const [z] of g.top) { f = Math.max(f, z); r = Math.min(r, z); }
+  return [f + g.bevel, r - g.bevel];
+}
 
 function disposeTree(o) {
   o.traverse(c => {

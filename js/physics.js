@@ -21,7 +21,7 @@ const RT = {
   sagFrac: 0.38,                // доля хода, на которую машина проседает в покое (задаёт жёсткость)
   dampComp: 0.45,               // демпфирование сжатия (доля от критического)
   dampRelax: 0.65,              // демпфирование отбоя
-  gripScale: 1.0,               // множитель сцепления шин относительно «Устойчивости»
+  gripScale: 1.0,               // множитель сцепления шин относительно «Управления»
   frontGrip: 1.05,              // перед держит чуть лучше зада → лёгкая недостаточная поворачиваемость
   sideStiff: 1.0,               // жёсткость бокового трения шин
   rearDrive: 0.7,               // доля тяги на заднюю ось (остальное — на переднюю)
@@ -212,7 +212,7 @@ class Car {
       v.setWheelSideFrictionStiffness(i, RT.sideStiff);
       this.wheels.push({ front, r, connY, side, z: axZ, contact: false });
     }
-    this.baseGrip = this.grip / GRAV * RT.gripScale;     // «Устойчивость» → коэффициент трения шин
+    this.baseGrip = this.grip / GRAV * RT.gripScale;     // «Управление» → коэффициент трения шин
   }
 
   // поставить машину в точку (без ремонта)
@@ -449,7 +449,7 @@ class Car {
     const hpFrac = this.hp / this.maxHp;
     const rate = this.drown > 0 ? 0 : this.broken > 0 ? 16 : hpFrac < 0.3 ? 7 : hpFrac < 0.55 ? 2.5 : 0;
     this.smokeAcc += rate * dt;
-    const engZ = this.g.style === 'super' ? -1.4 : this.L * 0.32;
+    const engZ = this.g.rearEngine ? -1.4 : this.L * 0.32;      // мотор сзади (geo.rearEngine) — дым над моторным отсеком
     while (this.smokeAcc >= 1) {
       this.smokeAcc -= 1;
       const [sx, sz] = this.local(rand(-0.3, 0.3), engZ);
