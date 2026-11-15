@@ -2,8 +2,8 @@
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
 // Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
-//   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, hitZone, flipKick, contactPoint, handleContacts, NO_INPUT, readInput,
-//   FIXED, accum, brkTick, stepWorld.
+//   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, PUSH, hitZone, flipKick, contactPoint, rivalKnock, pushContacts,
+//   handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
 // Использует: derive, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD (js/data.js); QUAL, MAT, lerp,
 //   clamp, rand (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01,
 //   waterLevel, dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js);
@@ -229,6 +229,7 @@ class Car {
     this.vx = this.vz = this.vy = this.w = 0; this.vf = this.vl = 0; this.steer = 0; this.thr = 0; this.hb = false;
     this.grounded = true; this.contacts = 4; this.upY = 1; this.flipT = 0; this.airVy = 0;
     this.drown = 0; this.skidPrev = [null, null];
+    this.touchT = this.shoveT = this.dazeT = this.knockCd = 0;
   }
   fullReset(x, z, h) {
     this.place(x, z, h);
@@ -300,8 +301,15 @@ class Car {
     } else if (thr < 0) {
       if (vf > 0.5) brake = H.brake;
       else if (vf > -maxS * 0.4) drive = -acc * 0.6;
-    } else brake = spd < 1 ? H.brake : RT.rollRes + RT.airDrag * vf * vf;   // почти стоим — держим на месте
+    } else brake = spd < 1 && !(this.touchT > 0) ? H.brake : RT.rollRes + RT.airDrag * vf * vf;   // почти стоим — держим на месте (если не толкают)
+    // толкотня (PUSH): машину толкают в борт или корму — тормоз слабее, на малой скорости шины почти не держат
+    const shoved = this.shoveT > 0;
+    if (shoved) brake = Math.min(brake, PUSH.brake);
     const bImp = m * brake * dt / 4;                        // тормоз в Rapier — предельный импульс за шаг на колесо
+    // боковое трение шин (жёсткость: какую долю бокового скольжения шина гасит за шаг) — тягу вперёд не трогает,
+    // поэтому зажатая в борт машина может уехать газом
+    const side = RT.sideStiff * (shoved ? lerp(PUSH.side, 1, smooth01((Math.hypot(vf, this.vl) - PUSH.sideSpd[0]) / (PUSH.sideSpd[1] - PUSH.sideSpd[0]))) : 1);
+    const sideChanged = side !== this.sideK; this.sideK = side;
     const grip = this.baseGrip * (this.broken > 0 ? 0.9 : 1);
     for (let i = 0; i < 4; i++) {
       const wl = this.wheels[i], rearHb = !wl.front && this.hb;
@@ -309,6 +317,7 @@ class Car {
       v.setWheelEngineForce(i, drive === 0 ? 0 : m * drive * (wl.front ? 1 - RT.rearDrive : RT.rearDrive) / 2);
       v.setWheelBrake(i, drive !== 0 && !rearHb ? 0 : rearHb ? Math.max(bImp, m * H.hbDecel * dt / 2) : bImp);
       v.setWheelFrictionSlip(i, grip * (wl.front ? RT.frontGrip : rearHb ? H.hbRearGrip : 1));
+      if (sideChanged) v.setWheelSideFrictionStiffness(i, side);
     }
 
     // ассистент стабилизации: тянет рыскание к «поворот без скольжения», не круче предела сцепления
@@ -316,7 +325,8 @@ class Car {
     if (this.contacts >= 2 && !this.hb && spd > 1) {
       const wKin = vf * Math.tan(delta) / this.wb;
       const wGrip = this.grip * H.assistGrip / Math.max(spd, 1);
-      const k = Math.min(1, dt * (H.assist + this.stability * H.assistPerStab));
+      // после удара соперника и пока толкают — ассистент слабеет: машину можно развернуть ударом в угол
+      const k = Math.min(1, dt * (H.assist + this.stability * H.assistPerStab)) * (shoved || this.dazeT > 0 ? PUSH.assist : 1);
       av.y += (clamp(wKin, -wGrip, wGrip) - av.y) * k;
     }
     // в полёте гасим кувырки — машина чаще приземляется на колёса (но не сразу после удара-опрокидывания)
@@ -378,6 +388,10 @@ class Car {
   postStep(dt) {
     if (this.flipCd > 0) this.flipCd -= dt;
     if (this.tumble > 0) this.tumble -= dt;
+    if (this.touchT > 0) this.touchT -= dt;
+    if (this.shoveT > 0) this.shoveT -= dt;
+    if (this.dazeT > 0) this.dazeT -= dt;
+    if (this.knockCd > 0) this.knockCd -= dt;
     if (this.hitDv > 2.5) {
       const strength = this.hitDv;
       Sound.impact(strength, this.p);
@@ -567,6 +581,23 @@ const FRONT_DMG = 0.7;
 // бонус за переворот соперника (FLIP_REWARD в js/data.js): машина пролежала на боку или крыше FLIP_LIE с,
 // а соперник бил её не раньше FLIP_WINDOW с назад
 const FLIP_LIE = 0.3, FLIP_WINDOW = 3;
+// Толкотня машин игроков. Раньше стоящую машину было не сдвинуть: без газа она сама вставала на тормоз 30 м/с²,
+// а шины держали 21–28 м/с² вбок — втрое больше, чем тянет мотор соперника (6–9 м/с²). В «Захвате точек» игроки
+// упирались друг в друга и стояли. Теперь: касание соперника снимает автотормоз; машину, которую толкают в борт или
+// корму, шины на малой скорости почти не держат; удар отбрасывает (сильнее всего — в борт); после удара ассистент
+// стабилизации ненадолго слабеет, и машину можно развернуть. Значения можно менять из консоли: PUSH.side = 0.05
+const PUSH = {
+  hold: 0.25,            // сколько секунд после касания действует толкотня
+  side: 0.015,           // доля бокового трения шин у машины, которую толкают в борт или корму…
+  sideSpd: [5, 12],      // …на скорости до 5 м/с; к 12 м/с — обычное трение (в гонке борт о борт шины держат)
+  brake: 6,              // предел тормоза, пока толкают, м/с²
+  knockMin: 1.5,         // Δv удара соперника (м/с), с которого добавляется отбрасывание
+  knock: 0.6,            // добавка скорости — доля превышения knockMin…
+  knockMax: 6,           // …но не больше, м/с
+  knockZone: { side: 1, rear: 0.7, front: 0.5 },   // множитель по месту удара: в борт — полный
+  daze: 0.8,             // на сколько секунд после удара ассистент стабилизации слабеет…
+  assist: 0.15,          // …до этой доли
+};
 
 // Куда пришёлся удар: 'side' — борт, 'front' — нос, 'rear' — корма. hw/hl — половины ширины и длины.
 // Без dir — по точке (px, pz): граница чуть сдвинута в пользу борта (0,8); точка в центре кузова (контакт не нашёлся) — борт.
@@ -600,15 +631,43 @@ function flipKick(body, excess, px, pz, hw, hl) {
   body.setLinvel({ x: lv.x, y: Math.max(lv.y, 0) + Math.min(4, 1 + excess * 0.3), z: lv.z }, true);
   return true;
 }
-function contactPoint(c1, c2) {
+// точка касания двух коллайдеров [x, z, нормаль] или null. solver — только настоящее касание (точки, которые решатель
+// использует), без «предсказанных» контактов на подлёте
+function contactPoint(c1, c2, solver) {
   let pt = null;
   PH.rw.contactPair(c1, c2, (mf, flipped) => {
-    if (pt || mf.numContacts() === 0) return;
+    if (pt || mf.numContacts() === 0 || (solver && mf.numSolverContacts() === 0)) return;
     const a = flipped ? c2 : c1, lp = mf.localContactPoint1(0), t = a.translation();
     const [x, , z] = qrot(a.rotation(), lp.x, lp.y, lp.z);
-    pt = [t.x + x, t.z + z];
+    pt = [t.x + x, t.z + z, mf.normal()];        // нормаль — в мировых осях, знак не важен (см. hitZone())
   });
   return pt;
+}
+// Отбрасывание (PUSH): удар соперника добавляет машине скорость от него — импульс в точке удара, поэтому удар
+// в угол ещё и закручивает. raw — Δv удара по Rapier: тяжёлая машина бьёт лёгкую сильнее. Один раз за удар (knockCd).
+function rivalKnock(car, other, raw, p, dir) {
+  if (car.knockCd > 0 || car.drown > 0) return;
+  const zone = hitZone(car.body, p[0], p[1], car.W / 2, car.L / 2, dir);
+  const dv = Math.min(PUSH.knockMax, (raw - PUSH.knockMin) * PUSH.knock) * PUSH.knockZone[zone];
+  let dx = car.x - other.x, dz = car.z - other.z;
+  const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+  const t = car.body.translation(), J = car.mass * dv;
+  car.body.applyImpulseAtPoint({ x: dx * J, y: 0, z: dz * J }, { x: p[0], y: t.y + 0.1, z: p[1] }, true);
+  car.knockCd = 0.3; car.dazeT = PUSH.daze;
+}
+// Касания машин игроков (каждый шаг): касание снимает автотормоз (touchT), касание в борт или корму — ещё и
+// ослабляет шины (shoveT). Пару, которая заведомо далеко, у Rapier не спрашиваем.
+function pushContacts() {
+  for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
+    const a = cars[i], b = cars[j];
+    if (a.drown > 0 || b.drown > 0 || Math.abs(a.x - b.x) + Math.abs(a.z - b.z) > a.L + b.L) continue;
+    const p = contactPoint(a.collider, b.collider, true);
+    if (!p) continue;
+    for (const c of [a, b]) {
+      c.touchT = PUSH.hold;
+      if (hitZone(c.body, p[0], p[1], c.W / 2, c.L / 2, p[2]) !== 'front') c.shoveT = PUSH.hold;   // по нормали: точка часто в углу носа
+    }
+  }
 }
 function handleContacts() {
   PH.events.drainContactForceEvents(ev => {
@@ -625,6 +684,7 @@ function handleContacts() {
       if (dv < 0.3) continue;
       const p = getPt(car.x, car.z);
       car.registerHit(dv, other.kind === 'car' ? other.car : null, p[0], p[1], ev.maxForceDirection());
+      if (other.kind === 'car' && raw > PUSH.knockMin) rivalKnock(car, other.car, raw, p, ev.maxForceDirection());
       const th = FLIP_DV[other.kind];
       if (th && raw > th && !(car.flipCd > 0) && car.drown <= 0 && flipKick(car.body, raw - th, p[0], p[1], car.W / 2, car.L / 2)) {
         car.flipCd = 1; car.tumble = 1.6;
@@ -658,6 +718,7 @@ function stepWorld(dt) {
   if ((brkTick ^= 1)) knockBreakables(dt * 2);
   PH.rw.step(PH.events);
   handleContacts();
+  pushContacts();
   Traffic.postStep(dt);
   for (const { b, body } of PH.barrels) {
     const t = body.translation(), v = body.linvel();
