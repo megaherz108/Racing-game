@@ -257,12 +257,13 @@ function renderMaps() {
         <canvas width="240" height="240"></canvas>
         <div class="mname">${MODE_INFO[id].name}</div>
         <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ` · только: ${MAP_INFO[playMap(id)].name}` : ''}</div>
-        <div class="mdesc">${MODE_INFO[id].desc}</div>
       </button>`).join('');
+    grid.style.setProperty('--n', MODES.length);
     grid.querySelectorAll('.mapcard').forEach(card => drawModePreview(card.querySelector('canvas'), card.dataset.mode));
     grid.dataset.built = map + CAP_CFG.time + BOMB_CFG.fuse;
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
+  $('modeDesc').textContent = MODE_INFO[save.mode] ? MODE_INFO[save.mode].desc : '';   // описание — одно, под карточками
   $('modeLine').innerHTML = `Карта: ${PLAY_MAPS.map(id =>
     `<button class="tsel ${id === map ? 'on' : ''}" data-map="${id}">${MAP_INFO[id].name}</button>`).join('')}
     <span class="thint">C</span> · ← / → — режим, Enter — старт`;

@@ -78,18 +78,26 @@ button{font:inherit;cursor:pointer;color:inherit}
 #garage .hint.l{left:26px} #garage .hint.r{right:26px;text-align:right}
 
 /* ---------- MAP SELECT ---------- */
-#maps{background:radial-gradient(ellipse at center,rgba(7,10,16,.55),rgba(7,10,16,.92))}
-.mapgrid{position:absolute;top:92px;bottom:226px;left:24px;right:24px;display:flex;justify-content:center;align-items:stretch;align-content:center;gap:22px;flex-wrap:wrap;overflow:auto}
-.mapcard{width:290px;padding:16px;border-radius:18px;background:var(--bg);border:2px solid var(--line);text-align:left;display:flex;flex-direction:column;gap:8px;
-  transition:border-color .15s,transform .15s}
+/* Экран — колонка: шапка, карточки (берут оставшееся место), описание выбранного режима, настройки.
+   Размер превью --pv считается от размеров сетки (единицы cqw/cqh), чтобы все карточки влезали в один ряд
+   на любом экране; --n (число режимов) выставляет renderMaps(). */
+#maps{background:radial-gradient(ellipse at center,rgba(7,10,16,.55),rgba(7,10,16,.92));
+  display:flex;flex-direction:column;align-items:center;gap:10px;padding:76px 16px 14px}
+.mapgrid{flex:1 1 0;min-height:0;width:100%;container-type:size;display:flex;justify-content:safe center;align-items:safe center;
+  gap:var(--gap);overflow:auto;--gap:16px}
+.mapcard{--pv:max(64px,min(300px,(100cqw - (var(--n,5) - 1) * var(--gap)) / var(--n,5) - 28px,100cqh - 116px));
+  flex:0 0 auto;width:calc(var(--pv) + 28px);min-width:150px;padding:12px;border-radius:16px;background:var(--bg);border:2px solid var(--line);
+  text-align:left;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,transform .15s}
 .mapcard:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.3)}
 .mapcard.on{border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,200,58,.18),0 10px 30px rgba(0,0,0,.4)}
-.mapcard canvas{width:100%;aspect-ratio:1;border-radius:12px;display:block}
-.mname{font-family:var(--fd);font-size:20px}
-.msize{color:var(--gold);font-size:13px}
-.mdesc{color:var(--mut);font-size:13px;line-height:1.45}
-.mapsbottom{position:absolute;bottom:18px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:10px}
+.mapcard canvas{width:var(--pv);height:var(--pv);align-self:center;border-radius:10px}
+.mname{font-family:var(--fd);font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msize{color:var(--gold);font-size:12.5px;line-height:1.3;min-height:2.6em}
+.mdesc{flex:none;max-width:860px;min-height:3em;color:#c3cdda;font-size:14px;line-height:1.5;text-align:center;text-shadow:0 1px 4px #000}
+.mapsbottom{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:100%}
+.mopts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 28px;max-width:1100px}
 .modeline{color:#cdd6e2;font-size:14px;text-shadow:0 1px 4px #000}
+#mapsGo{padding:11px 26px}
 
 /* ---------- HELP / PAUSE ---------- */
 .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,6,10,.62);backdrop-filter:blur(4px)}
@@ -147,7 +155,7 @@ button{font:inherit;cursor:pointer;color:inherit}
 
 /* интенсивность трафика на экране выбора карты */
 .trafficline{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted,#aab)}
-.tsel{padding:6px 14px;border-radius:999px;border:2px solid var(--line,rgba(255,255,255,.15));background:var(--bg,rgba(20,24,32,.8));color:inherit;font:inherit;cursor:pointer}
+.tsel{padding:5px 13px;border-radius:999px;border:2px solid var(--line,rgba(255,255,255,.15));background:var(--bg,rgba(20,24,32,.8));color:inherit;font:inherit;cursor:pointer}
 .tsel:hover{border-color:rgba(255,255,255,.35)}
 .tsel.on{border-color:var(--gold,#ffc83a);color:#fff;box-shadow:0 0 0 3px rgba(255,200,58,.18)}
 .trafficline .jrec{margin-right:10px;color:#e6edf6} .trafficline .jrec b{color:#ffd23a}
