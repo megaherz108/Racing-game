@@ -17,7 +17,8 @@
 //   (js/maps/coast/roads3d.js); coastBuildStructures (js/maps/coast/structures.js); coastBuildProps
 //   (js/maps/coast/props.js); coastBuildMarket (js/maps/coast/market.js); coastBuildCrossings
 //   (js/maps/coast/crossings.js); coastBuildBackdrop (js/maps/coast/backdrop.js); coastBuildLife
-//   (js/maps/coast/life.js).
+//   (js/maps/coast/life.js); coastTrafficGraph (js/maps/coast/trafficnet.js); COAST_TRAFFIC_TYPES
+//   (js/traffic/models-rural.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -153,6 +154,10 @@ function coastBuildWorld(K) {
     breakables: brks,
     // зоны захвата для будущего режима «Захват точек» (js/maps/coast/sites.js)
     zones: C.zones,
+    // дорожный граф для трафика (js/maps/coast/trafficnet.js) — строится при первом заезде с трафиком
+    trafficGraph: () => coastTrafficGraph(C, grid),
+    // лёгкий трафик на всю карту: мотороллеры, трёхколёсные фургончики, тракторы (js/traffic/models-rural.js)
+    traffic: { global: true, types: COAST_TRAFFIC_TYPES, count: { low: 8, mid: 12, high: 15 } },
     reset() {
       for (const b of brks) b.reset();
       for (const b of worldBarrels) { b.x = b.home[0]; b.z = b.home[1]; b.vx = b.vz = b.w = 0; b.h = 0; }

@@ -22,10 +22,10 @@
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |
 | `js/maps/registry.js` | список карт, `getData()` / `getWorld()` / `activateWorld()`, текущий `world` |
 | `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`), `jumps.js` (листы на улицах и дюны для прыжков, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
-| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `jumps.js` (обрушенный мост, сходни на тюках), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб) |
+| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `jumps.js` (обрушенный мост, сходни на тюках), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб); `trafficnet.js` — дорожный граф трафика из сплайнов дорог (строится при заезде) |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
-| `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |
+| `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `models-rural.js` типы «Побережья» (мотороллер, фургончик, трактор с тележкой), `traffic.js` объект `Traffic`, `driver.js` вождение ботов (и прицеп `follow`), `test.js` проверка поведения `__game.trafficTest()` |
 | `js/blobs.js` | пятна под машинами вместо теней на качестве «Минимум» (`QUAL.blobs`) |
 | `js/effects.js`, `js/carfx.js` | частицы, следы, монеты; фары, повреждения, обломки |
 | `js/audio.js` | процедурный звук: ядро, мотор (профили `ENGINE`), эхо, разовые звуки `Sound` |
@@ -61,6 +61,7 @@
 1. Сервер: `.claude/launch.json` (python http.server). Если порт занят другой сессией — заведи конфиг с другим портом.
 2. В консоли страницы: `await __game.selfTest()` — строит все карты, гоняет машины 4 с, включает ночь; отчёт текстом, «ошибок нет» = ок.
 3. Рефакторинг генерации карт — `__game.fingerprint('city')` до и после (см. выше).
-4. Скриншот — только для визуальных правок. Быстрый старт заезда: `__game.startMatch('free')` (или `'race'`, `'solo'`, `'capture'`, `'bomb'`).
-5. `node tools/deps.js --check` — шапки файлов актуальны.
-6. Правка ради скорости — замер `tools/bench.js` (как пользоваться — README, «Производительность»): сравнивай варианты через `__ab()` на одной загрузке страницы; цифры разных загрузок расходятся на ±1 мс.
+4. Правка трафика — `await __game.trafficTest()` (Побережье: серпантин, мосты, деревня, долгий прогон) и `trafficTest({ map: 'city' })`.
+5. Скриншот — только для визуальных правок. Быстрый старт заезда: `__game.startMatch('free')` (или `'race'`, `'solo'`, `'capture'`, `'bomb'`).
+6. `node tools/deps.js --check` — шапки файлов актуальны.
+7. Правка ради скорости — замер `tools/bench.js` (как пользоваться — README, «Производительность»): сравнивай варианты через `__ab()` на одной загрузке страницы; цифры разных загрузок расходятся на ±1 мс.

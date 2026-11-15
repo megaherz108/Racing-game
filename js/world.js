@@ -667,11 +667,12 @@ class Decks {
     d.points = new Float32Array(P); d.base = base;
     return d;
   }
-  // высота верхней грани настила в точке (или -Infinity, если точка не на нём)
+  // высота верхней грани настила в точке (или -Infinity, если точка не на нём). Допуск 0,1 м по длине: плиты
+  // моста на изгибе стыкуются по хорде, и на внешней стороне стыка остаётся щель — точка в ней «проваливалась» к земле
   top(d, x, z) {
     const rx = x - d.p0[0], rz = z - d.p0[2], s = rx * d.dirx + rz * d.dirz, lat = rx * d.dirz - rz * d.dirx;
-    if (s < 0 || s > d.Lh || Math.abs(lat) > d.w / 2) return -Infinity;
-    return d.p0[1] + d.dy * s / d.Lh;
+    if (s < -0.1 || s > d.Lh + 0.1 || Math.abs(lat) > d.w / 2) return -Infinity;
+    return d.p0[1] + d.dy * clamp(s, 0, d.Lh) / d.Lh;
   }
   // самая высокая поверхность для езды не выше y + 0.6
   surface(x, z, y = Infinity) {

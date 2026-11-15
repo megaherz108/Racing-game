@@ -219,4 +219,24 @@ function coastPlanRoads(C) {
     return { kind: ['', 'asphalt', 'gravel', 'cobble', 'dirt'][RKind[k]], shoulder: d > RHw[k] + 0.3 };
   };
   Object.assign(C, { roads, roadAt, roadDist: (x, z) => RDd[cellJ(z) * NX + cellI(x)], channel });
+
+  /* ---------- проходы в ярусах амфитеатра ---------- */
+  // ярусы и колонны (js/maps/coast/sites.js) ставятся до дорог, проходы там — по заданным углам и с дорогой не совпадают
+  // (восточная дорога шла прямо в ярус). Убираем всё, что легло на полотно дороги с обочиной (+0,4 м). Только фильтр,
+  // rng() не вызывается — остальная карта не меняется
+  const { amphi } = C;
+  if (amphi) {
+    const near = [];
+    for (const r of roads) for (const p of r.pts) if (Math.hypot(p.x - amphi.x, p.z - amphi.z) < 60) near.push({ p, R: r.core + 0.4 });
+    const onRoad = (x, z) => near.some(q => Math.hypot(q.p.x - x, q.p.z - z) < q.R);
+    amphi.tiers = amphi.tiers.filter(t => {
+      const c = Math.cos(t.rot), s = Math.sin(t.rot);
+      for (let a = -1; a <= 1; a += 0.5) for (let b = -1; b <= 1; b += 0.5) {
+        const u = a * t.w / 2, v = b * t.d / 2;                     // локальные оси OBB (как grid.addOBB в structures.js)
+        if (onRoad(t.x + u * c + v * s, t.z - u * s + v * c)) return false;
+      }
+      return true;
+    });
+    amphi.cols = amphi.cols.filter(o => !onRoad(o.x, o.z) && !near.some(q => Math.hypot(q.p.x - o.x, q.p.z - o.z) < q.R + 0.65));
+  }
 }

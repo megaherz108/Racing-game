@@ -6,13 +6,18 @@
 // поэтому удары по-честному передают импульс игрокам. После сильного удара бот теряет управление
 // (становится обычным телом — может закрутиться и перевернуться) и через несколько секунд исчезает.
 // Машины всегда держатся вокруг игроков: далёкие исчезают и появляются снова в 170–380 м от игроков.
+// Карта может задать свой трафик (world.traffic: типы, число машин по уровням, global): на «Побережье» немного
+// машин на всю карту — они не исчезают вдали, а заново появляются только разбитыми или застрявшими.
+// Прицеп (type.trailer, тележка трактора) — отдельное тело в общем списке (tc.lead — тягач, tc.trailer — прицеп):
+// водитель им не управляет, тележка тянется за сцепкой (Traffic.follow, js/traffic/driver.js), появляется,
+// исчезает и разбивается вместе с тягачом.
 //
 // Этот файл — объект Traffic: запуск, появление и исчезновение машин, удары, отрисовка (InstancedMesh по типам).
 // Вождение ботов (полосы, уступить дорогу, светофоры, дистанция, preStep) — js/traffic/driver.js.
 // Определяет: TRAFFIC_FAR, TRAFFIC_NEAR, TRAFFIC_SHADOW_R, shadowBefore, shadowAfter, Traffic.
 // Использует: CARS (js/data.js); clamp, QUAL (js/core.js); buildCarModel (js/car-models.js); scene (js/world.js); PH,
-//   FIXED, cars, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, flipKick (js/physics.js); buildTrafficGraph, lanePoint
-//   (js/traffic/graph.js); buildTaxiModel, buildBusModel, buildTruckModel, mergeBakedParts, bakeModel, TRAFFIC_TYPES
+//   FIXED, cars, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, flipKick (js/physics.js); buildTrafficGraph, tPieceAt, tPieceIdx
+//   (js/traffic/graph.js); TRAFFIC_TYPES, buildTaxiModel, buildBusModel, buildTruckModel, mergeBakedParts, bakeModel
 //   (js/traffic/models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -29,7 +34,7 @@ function shadowAfter() { this.count = 0; }
 const _tq = new THREE.Quaternion(), _te = new THREE.Euler(0, 0, 0, 'YXZ'), _tp = [0, 0, 0, 0];
 const _tv = new THREE.Vector3(), _tone = new THREE.Vector3(1, 1, 1), _tfr = new THREE.Frustum(), _tpm = new THREE.Matrix4(), _tsph = new THREE.Sphere();
 const Traffic = {
-  list: [], graph: null, templates: {}, world: null, timer: 0, count: 0, target: 0, _cand: [], _cw: [], hash: new Map(), _near: [],
+  list: [], trailers: [], graph: null, templates: {}, world: null, timer: 0, count: 0, target: 0, _cand: [], _cw: [], hash: new Map(), _near: [],
   // отрисовка: на каждый тип машины — InstancedMesh кузова и остального (2 вызова отрисовки на тип вместо ≈11 на машину)
   // с общим буфером матриц, цвет кузова — цвет экземпляра; плюс отдельный меш для карты теней (см. cullView)
   batches: [],
@@ -37,7 +42,9 @@ const Traffic = {
   template(id) {
     if (this.templates[id]) return this.templates[id];
     let m;
-    if (id === 'taxi') m = buildTaxiModel();
+    const T = this.types || TRAFFIC_TYPES, tp = T.find(t => t.id === id) || T.map(t => t.trailer).find(t => t && t.id === id);
+    if (tp && tp.model) m = tp.model();                       // своя модель типа (js/traffic/models-rural.js)
+    else if (id === 'taxi') m = buildTaxiModel();
     else if (id === 'bus') m = buildBusModel(0xffffff);
     else if (id === 'truck') m = buildTruckModel(0xffffff);
     else { const def = CARS.find(c => c.id === id); const cm = buildCarModel(def, 0xffffff); m = { root: cm.root, paint: cm.paint, dims: { L: def.geo.L, W: def.geo.W, H: def.geo.H } }; }
@@ -48,23 +55,30 @@ const Traffic = {
     return this.templates[id] = t;
   },
 
-  start(w, count) {
+  // count — число машин из настройки (TRAFFIC_LEVELS), level — её id; у карты со своим трафиком число — cfg.count[level]
+  start(w, count, level) {
     this.clear();
-    if (!w.trafficData || !count) return;
-    this.world = w;
-    if (!w.__trafficGraph) w.__trafficGraph = buildTrafficGraph(w.trafficData);
+    const cfg = w.traffic;
+    if (cfg) count = cfg.count[level] || 0;
+    if (!count || !(w.trafficData || w.trafficGraph)) return;
+    this.world = w; this.global = !!(cfg && cfg.global); this.types = cfg ? cfg.types : TRAFFIC_TYPES;
+    if (!w.__trafficGraph) w.__trafficGraph = w.trafficGraph ? w.trafficGraph() : buildTrafficGraph(w.trafficData);
     this.graph = w.__trafficGraph;
     for (const n of this.graph.nodes) n.occ.clear();
+    for (const e of this.graph.edges) if (e.narrow) e.narrow.n = 0;
     // count — число машин вокруг игроков, когда они рядом; разъехавшимся игрокам нужно вдвое больше,
-    // чтобы плотность вокруг каждого не падала (см. postStep), поэтому создаём запас ×2
+    // чтобы плотность вокруг каждого не падала (см. postStep), поэтому создаём запас ×2. На всю карту — без запаса
     this.count = this.target = count;
-    const total = TRAFFIC_TYPES.reduce((s, t) => s + t.w, 0);
-    for (let i = 0; i < count * 2; i++) {
-      let r = Math.random() * total, type = TRAFFIC_TYPES[0];
-      for (const t of TRAFFIC_TYPES) { if (r < t.w) { type = t; break; } r -= t.w; }
+    const T = this.types, total = T.reduce((s, t) => s + t.w, 0), used = new Map();
+    for (let i = 0; i < (this.global ? count : count * 2); i++) {
+      let r = Math.random() * total, type = T[0];
+      for (const t of T) { if (r < t.w) { type = t; break; } r -= t.w; }
+      if (type.max && (used.get(type) || 0) >= type.max) type = T.find(t => !t.max) || type;   // тракторов — не больше max
+      used.set(type, (used.get(type) || 0) + 1);
       const tc = this.create(type);
+      if (type.trailer) this.attach(tc);
       if (i >= count) this.kill(tc);
-      else if (!this.respawn(tc, 30, 380)) this.respawn(tc, 30, 1e9);
+      else if (!this.respawn(tc, this.global ? 60 : 30, 380)) this.respawn(tc, 30, 1e9);
     }
     this.buildBatches();
   },
@@ -106,7 +120,7 @@ const Traffic = {
       .setMass(type.mass).setFriction(0).setRestitution(0.1)
       .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(type.mass * 1.2 / FIXED), body);
     const tc = { type, color, mat, body, collider, L, W, H, mass: type.mass, vmax: type.vmax * (0.9 + Math.random() * 0.2), accel: type.accel,
-      v: 0, h: 0, x: 0, z: 0, y: 0, dead: true, tick: Math.random() < 0.5 ? 1 : 0, wreck: false, wreckT: 0, flipCd: 0, stuckT: 0, ghostT: 0, obs: Infinity, scan: Math.floor(Math.random() * 3), far: false, q: new THREE.Quaternion(), waitT: 0 };
+      v: 0, h: 0, x: 0, z: 0, y: 0, roll: 0, slope: 0, hold: null, dead: true, tick: Math.random() < 0.5 ? 1 : 0, wreck: false, wreckT: 0, flipCd: 0, stuckT: 0, ghostT: 0, obs: Infinity, scan: Math.floor(Math.random() * 3), far: false, q: new THREE.Quaternion(), waitT: 0 };
     PH.info.set(collider.handle, { kind: 'traffic', tc });
     this.list.push(tc);
     return tc;
@@ -121,7 +135,7 @@ const Traffic = {
     for (const tc of this.list) {
       if (PH.rw && PH.rw.getRigidBody(tc.body.handle) === tc.body) { PH.info.delete(tc.collider.handle); PH.rw.removeRigidBody(tc.body); }
     }
-    this.list = []; this.graph = null; this.world = null;
+    this.list = []; this.trailers = []; this.graph = null; this.world = null; this.global = false; this.types = null;
   },
 
   // сетка 48×48 м для поиска соседей: перестраивается каждый шаг управления в preStep
@@ -159,72 +173,135 @@ const Traffic = {
   // поставить бота на свободную полосу в кольце minD…maxD вокруг игрока. Полоса выбирается с весом по длине
   // (иначе районы с крупными кварталами и длинными улицами получают меньше машин на метр дороги);
   // едущему игроку машины ставятся в основном впереди — сзади они быстро отстанут и исчезнут
+  // На всю карту (global) — в любом месте графа не ближе minD к игрокам (maxD не важен), кроме узких участков и рёбер,
+  // куда этой машине нельзя
   respawn(tc, minD, maxD) {
     if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
-    const P = this.spawnAnchor(), E = this.graph.edges, cand = this._cand, cw = this._cw;
+    this.release(tc);
+    const glob = this.global, P = glob ? null : this.spawnAnchor(), E = this.graph.edges, cand = this._cand, cw = this._cw;
     cand.length = cw.length = 0;
     let tot = 0;
     for (const e of E) {
       if (tc.L > 6 && (e.B.round || e.A.round)) continue;
-      const d = Math.hypot((e.A.x + e.B.x) / 2 - P.x, (e.A.z + e.B.z) / 2 - P.z), h = e.len / 2;
-      if (d + h < minD || d - h > maxD) continue;
+      if (e.narrow || tc.W > (e.maxW || 99) || (e.noLong && tc.type.long)) continue;
+      if (!glob) {
+        const d = Math.hypot((e.A.x + e.B.x) / 2 - P.x, (e.A.z + e.B.z) / 2 - P.z), h = e.len / 2;
+        if (d + h < minD || d - h > maxD) continue;
+      }
       tot += (e.s1 - e.s0) * e.lanes.length; cand.push(e); cw.push(tot);
     }
-    const sp = Math.hypot(P.vx || 0, P.vz || 0);
+    const sp = glob ? 0 : Math.hypot(P.vx || 0, P.vz || 0);
     for (let k = 0; k < 40 && cand.length; k++) {
       const r = Math.random() * tot;
       let lo = 0, hi = cw.length - 1;
       while (lo < hi) { const m = (lo + hi) >> 1; if (cw[m] < r) lo = m + 1; else hi = m; }
-      const e = cand[lo], l = Math.floor(Math.random() * e.lanes.length);
-      const s = e.s0 + Math.random() * (e.s1 - e.s0 - 2), [x, z] = lanePoint(e, l, s);
-      const dP = Math.hypot(x - P.x, z - P.z);
-      if (dP < minD || dP > maxD) continue;
-      if (sp > 8 && ((x - P.x) * P.vx + (z - P.z) * P.vz) / (dP * sp) < -0.2 && Math.random() < 0.75) continue;
+      const e = cand[lo], l = Math.floor(Math.random() * e.lanes.length), piece = e.lp[l];
+      const s = Math.random() * Math.max(0, piece.len - 2);
+      tPieceAt(piece, s, _tp);
+      const x = _tp[0], z = _tp[1];
+      if (!glob) {
+        const dP = Math.hypot(x - P.x, z - P.z);
+        if (dP < minD || dP > maxD) continue;
+        if (sp > 8 && ((x - P.x) * P.vx + (z - P.z) * P.vz) / (dP * sp) < -0.2 && Math.random() < 0.75) continue;
+      }
       let dmin = Infinity; for (const c of cars) dmin = Math.min(dmin, Math.hypot(c.x - x, c.z - z));
       if (dmin < minD) continue;
       if (this.list.some(o => o !== tc && !o.dead && (o.x - x) ** 2 + (o.z - z) ** 2 < 13 * 13)) continue;
-      this.enterEdge(tc, e, l, s - e.s0);
-      const y = this.world.surface ? this.world.surface(x, z, e.bridge || e.ov ? Infinity : 1) : this.world.ground(x, z);
-      tc.h = Math.atan2(e.fx, e.fz); tc.x = x; tc.z = z; tc.y = y;
-      const b = tc.body;
-      b.setEnabled(true);
-      b.lockRotations(true, true); tc.collider.setFriction(0); b.setLinearDamping(0); b.setAngularDamping(0);
-      // пока машиной управляет бот: без гравитации и без контакта с рельефом — высоту задаёт preStep()
-      tc.collider.setCollisionGroups(TRAFFIC_DRIVEN_GROUPS); b.setGravityScale(0, true);
-      b.setTranslation({ x, y: y + 0.05, z }, true);
-      _tq.setFromEuler(_te.set(0, tc.h, 0)); b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
-      b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      Object.assign(tc, { dead: false, wreck: false, wreckT: 0, v: tc.vmax * 0.6, stuckT: 0, ghostT: 0, waitT: 0, obs: Infinity, far: dmin > TRAFFIC_FAR });
-      if (tc.far) { tc.q.copy(_tq); b.setEnabled(false); }
-      tc.mat.compose(_tv.set(x, y + 0.05, z), _tq, _tone);
+      this.place(tc, e, l, s, dmin > TRAFFIC_FAR);
       return true;
     }
     this.kill(tc);
     return false;
   },
 
+  // прицеп тягачу: своё тело и своя модель, в запасе, пока тягач не поставлен на дорогу
+  attach(lead) {
+    const tl = this.create(lead.type.trailer);
+    tl.lead = lead; lead.trailer = tl; this.trailers.push(tl);
+    tl.kind = 'trailer';
+    // тягач и его прицеп не толкают друг друга (группы решателя Rapier: членство << 16 | фильтр) — в крутом
+    // развороте тележка может задеть трактор, и удар разбил бы обоих. С остальными оба сталкиваются как обычно
+    lead.collider.setSolverGroups((0x0004 << 16) | (0xffff & ~0x0008));
+    tl.collider.setSolverGroups((0x0008 << 16) | (0xffff & ~0x0004));
+    this.kill(tl);
+    return tl;
+  },
+  // поставить прицеп за тягачом: ось — на полосе тягача позади него (или по прямой, если полоса только началась)
+  placeTrailer(tl) {
+    const L = tl.lead, T = tl.type, back = L.L / 2 + T.gap + T.bar;
+    if (L.piece && L.s >= back) { tPieceAt(L.piece, L.s - back, _tp); tl.ax = _tp[0]; tl.az = _tp[1]; }
+    else { tl.ax = L.x - Math.sin(L.h) * back; tl.az = L.z - Math.cos(L.h) * back; }
+    tl.h = L.h; tl.x = tl.ax; tl.z = tl.az; tl.y = this.world.surface(tl.x, tl.z, L.y + 1.5);
+    const b = tl.body;
+    b.setEnabled(true);
+    b.lockRotations(true, true); tl.collider.setFriction(0); b.setLinearDamping(0); b.setAngularDamping(0);
+    tl.collider.setCollisionGroups(TRAFFIC_DRIVEN_GROUPS); b.setGravityScale(0, true);
+    b.setTranslation({ x: tl.x, y: tl.y + 0.05, z: tl.z }, true);
+    _tq.setFromEuler(_te.set(0, tl.h, 0)); b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    Object.assign(tl, { dead: false, wreck: false, wreckT: 0, v: 0, far: L.far });
+    tl.q.copy(_tq);
+    if (tl.far) b.setEnabled(false);
+    tl.mat.compose(_tv.set(tl.x, tl.y + 0.05, tl.z), _tq, _tone);
+  },
+
+  // поставить бота на полосу l ребра e в s м от её начала; far — без тела Rapier (далеко от игроков)
+  place(tc, e, l, s, far) {
+    const piece = e.lp[l];
+    tPieceAt(piece, s, _tp);
+    const x = _tp[0], z = _tp[1], hdg = Math.atan2(_tp[2], _tp[3]);
+    this.release(tc);
+    if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
+    this.enterEdge(tc, e, l, s);
+    // высота: у кривых дорог — подсказка из профиля (на акведуке настил, а не дно долины под ним)
+    const hint = e.hy ? e.hy[tPieceIdx(piece, s)] + 1.5 : e.bridge || e.ov ? Infinity : 1;
+    const y = this.world.surface ? this.world.surface(x, z, hint) : this.world.ground(x, z);
+    tc.h = hdg; tc.x = x; tc.z = z; tc.y = y; tc.roll = 0;
+    const b = tc.body;
+    b.setEnabled(true);
+    b.lockRotations(true, true); tc.collider.setFriction(0); b.setLinearDamping(0); b.setAngularDamping(0);
+    // пока машиной управляет бот: без гравитации и без контакта с рельефом — высоту задаёт preStep()
+    tc.collider.setCollisionGroups(TRAFFIC_DRIVEN_GROUPS); b.setGravityScale(0, true);
+    b.setTranslation({ x, y: y + 0.05, z }, true);
+    _tq.setFromEuler(_te.set(0, tc.h, 0)); b.setRotation({ x: _tq.x, y: _tq.y, z: _tq.z, w: _tq.w }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    // начальная скорость — не выше предела поворота в этом месте (кривые полосы Побережья)
+    const v0 = Math.min(tc.vmax * 0.6, e.vprof ? e.vprof[tPieceIdx(piece, s)] : Infinity);
+    Object.assign(tc, { dead: false, wreck: false, wreckT: 0, v: v0, stuckT: 0, ghostT: 0, waitT: 0, obs: Infinity, far });
+    if (tc.far) { tc.q.copy(_tq); b.setEnabled(false); }
+    tc.mat.compose(_tv.set(x, y + 0.05, z), _tq, _tone);
+    if (tc.trailer) this.placeTrailer(tc.trailer);
+  },
+
   // убрать бота в запас (невидим, тело выключено)
   kill(tc) {
     if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
+    this.release(tc);
     tc.dead = true; tc.far = false; tc.body.setEnabled(false);
+    if (tc.trailer && !tc.trailer.dead) this.kill(tc.trailer);
   },
 
-  wreck(tc) {
+  wreck(tc, why) {
     if (tc.wreck) return;
-    tc.wreck = true; tc.wreckT = 0;
+    tc.wreck = true; tc.wreckT = 0; tc.why = why;               // why — причина (для проверки js/traffic/test.js)
     if (tc.node) { tc.node.occ.delete(tc); tc.node = null; }
+    this.release(tc);
     tc.body.lockRotations(false, true);
     tc.collider.setCollisionGroups(ALL_GROUPS); tc.body.setGravityScale(1, true);   // обычное тело: падает и лежит на земле
     tc.collider.setFriction(0.7);
     tc.body.setLinearDamping(0.3); tc.body.setAngularDamping(0.5);
+    // тягач и прицеп разбиваются вместе
+    if (tc.trailer && !tc.trailer.dead) this.wreck(tc.trailer, why);
+    if (tc.lead) this.wreck(tc.lead, why);
   },
 
   // сильный удар: бот теряет управление; боковой — ещё и опрокидывает (flipKick из js/physics.js)
   hit(tc, dv, other, getPt) {
     if (tc.dead || dv < 1.6) return;
     if (other.kind === 'ground' || other.kind === 'deck') return;
+    if (other.kind === 'traffic' && (other.tc === tc.lead || other.tc === tc.trailer)) return;   // своя сцепка
     const th = other.kind === 'car' ? 1.8 : other.kind === 'traffic' ? 5.5 : 12;
-    if (!tc.wreck && dv > th) this.wreck(tc);
+    if (!tc.wreck && dv > th) this.wreck(tc, 'удар: ' + (other.kind === 'traffic' ? other.tc.type.id : other.kind) + ' ' + dv.toFixed(1));
     if (tc.wreck && dv > 3 && !(tc.flipCd > 0)) {
       const p = getPt();
       if (flipKick(tc.body, dv - 1.5, p[0], p[1], tc.W / 2, tc.L / 2)) tc.flipCd = 1;
@@ -238,16 +315,20 @@ const Traffic = {
     if (check) this.timer = 0;
     let alive = 0, spawned = 0;
     if (check) {
-      // разъехавшимся игрокам — до вдвое больше машин: круги вокруг них уже не перекрываются
+      // разъехавшимся игрокам — до вдвое больше машин: круги вокруг них уже не перекрываются (на всю карту — всегда count)
       const dP = cars.length > 1 ? Math.hypot(cars[0].x - cars[1].x, cars[0].z - cars[1].z) : 0;
-      this.target = Math.round(this.count * (1 + clamp((dP - 200) / 600, 0, 1)));
-      for (const tc of this.list) if (!tc.dead) alive++;
+      this.target = this.global ? this.count : Math.round(this.count * (1 + clamp((dP - 200) / 600, 0, 1)));
+      for (const tc of this.list) if (!tc.dead && !tc.lead) alive++;
     }
     for (const tc of this.list) {
       if (tc.flipCd > 0) tc.flipCd -= dt;
+      if (tc.lead) {                                         // прицеп живёт и появляется вместе с тягачом
+        if (tc.wreck && !tc.dead) { const t = tc.body.translation(); tc.x = t.x; tc.z = t.z; tc.y = t.y; }
+        continue;
+      }
       if (tc.dead) {
         // не больше 12 появлений за проверку, чтобы не было рывков
-        if (check && alive < this.target && spawned++ < 12 && this.respawn(tc, 170, 380)) alive++;
+        if (check && alive < this.target && spawned++ < 12 && this.respawn(tc, this.global ? 150 : 170, 380)) alive++;
         continue;
       }
       if (tc.wreck) {
@@ -258,9 +339,9 @@ const Traffic = {
       let dmin = Infinity; for (const c of cars) dmin = Math.min(dmin, Math.hypot(c.x - tc.x, c.z - tc.z));
       // далеко от игроков, разбит или утонул — появляется снова в другом месте
       // машин больше нормы (игроки съехались) — лишние дальние уходят в запас
-      if (alive > this.target && dmin > 300) { this.kill(tc); alive--; }
-      else if (dmin > 400 || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || (tc.stuckT > 45 && dmin > 60))
-        this.respawn(tc, 170, 380);
+      if (!this.global && alive > this.target && dmin > 300) { this.kill(tc); alive--; }
+      else if ((!this.global && dmin > 400) || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || (tc.stuckT > 45 && dmin > 60))
+        this.respawn(tc, this.global ? 150 : 170, 380);
     }
   },
 

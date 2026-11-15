@@ -119,7 +119,8 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     cars = solo ? [new Car(CARS[browse[0]], 0)] : [new Car(CARS[browse[0]], 0), new Car(CARS[browse[1]], 1)];
     cars.forEach((c, p) => c.fullReset(...world.spawns[p]));
     // городской трафик: число машин из настройки на экране выбора карты
-    Traffic.start(world, (TRAFFIC_LEVELS.find(l => l[0] === save.traffic) || TRAFFIC_LEVELS[2])[2]);
+    const tl = TRAFFIC_LEVELS.find(l => l[0] === save.traffic) || TRAFFIC_LEVELS[2];
+    Traffic.start(world, tl[2], tl[0]);
     if (world.reset) world.reset();
     clearSkids(); smoke.clear(); sparks.clear();
     resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));

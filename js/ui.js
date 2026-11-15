@@ -305,9 +305,9 @@ function renderWeather() {
     <span class="thint">R</span>`;
 }
 function setWeather(v) { save.rain = !!v; persist(); renderWeather(); }
-// интенсивность городского трафика
+// интенсивность трафика (на «Побережье» — своё число машин на всю карту, world.traffic)
 function renderTraffic() {
-  $('trafficLine').innerHTML = `Трафик в городе: ${TRAFFIC_LEVELS.map(([id, label]) =>
+  $('trafficLine').innerHTML = `Трафик: ${TRAFFIC_LEVELS.map(([id, label]) =>
     `<button class="tsel ${id === save.traffic ? 'on' : ''}" data-traffic="${id}">${label}</button>`).join('')}
     <span class="thint">↑ / ↓</span>`;
 }
