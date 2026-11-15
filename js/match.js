@@ -5,8 +5,8 @@
 //   smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
-//   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); resize
-//   (js/main.js).
+//   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); Jumps
+//   (js/jumps.js); resize (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -125,7 +125,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));
     Race.start(mode === 'race');
     Capture.start(mode === 'capture');
-    Stunts.reset(); Feel.reset();
+    Stunts.reset(); Jumps.reset(); Feel.reset();
     simTime = 0; accum = 0; countdown = 3.2;
     $('hud').classList.toggle('solo', solo);
     Sound.solo(solo);

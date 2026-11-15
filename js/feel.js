@@ -43,6 +43,7 @@ const Feel = (() => {
     },
     ko(attacker, victim) { slowT = FEEL.koTime; flash(attacker, 'gold', 0.35); flash(victim, 'hit', 0.55); },
     trick(p) { flash(p, 'boost', 0.12); },
+    record(p) { flash(p, 'gold', 0.4); },          // рекорд прыжка (js/jumps.js)
     air(p, h) { airH[p] = h; },
     // вызывается раз в кадр с реальным dt; возвращает множитель времени игры
     step(dt) {

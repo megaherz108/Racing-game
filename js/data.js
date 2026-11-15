@@ -1,9 +1,9 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
-//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, FLIP_REWARD, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP,
-//   playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN,
-//   COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanPlayer, loadSave,
-//   save, persist, carIndex, browse.
+//   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, FLIP_REWARD, JUMP, MODES, PLAY_MAPS, PLAY_MAP,
+//   MODE_MAP, playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST,
+//   CAP_WARN, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanJumps,
+//   cleanPlayer, loadSave, save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -166,6 +166,17 @@ const SAVE_KEY = 'steel_duel_save_v2', OLD_SAVE_KEY = 'steel_duel_save_v1';
 const MAP_IDS = ['city', 'forest', 'arena', 'coast'];
 const KO_REWARD = 5;
 const FLIP_REWARD = 5;   // за переворот соперника (js/physics.js, Car.sync())
+// длинные прыжки (js/jumps.js), только свободная и одиночная езда. Длина — по горизонтали от точки отрыва до
+// приземления. tiers — пороги [метров, монет, подпись]; один и тот же трамплин (точка отрыва в радиусе spotR м)
+// платит раз в cooldown с. record — монеты за первое место в таблице карты (top лучших прыжков, save.jumps).
+const JUMP = {
+  tiers: [[25, 3, 'ХОРОШИЙ ПРЫЖОК'], [45, 6, 'ОТЛИЧНЫЙ ПРЫЖОК'], [70, 10, 'НЕВЕРОЯТНЫЙ ПРЫЖОК']],
+  record: 10, top: 5,
+  spotR: 30, cooldown: 120,
+  minAir: 0.5,        // короче (с) — не прыжок, а кочка
+  settle: 1,          // столько секунд после приземления машина должна остаться на колёсах
+  modes: ['free', 'solo'],
+};
 // режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1);
 // capture — захват точек (js/capture.js)
 const MODES = ['free', 'solo', 'race', 'capture'];
@@ -201,7 +212,18 @@ const QUALITY = {
   min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350 } };
 const cleanQuality = q => QUALITY[q] ? q : 'high';
 const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla' });
-const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high' });
+const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high', jumps: {} });
+// таблицы рекордов прыжков: { карта: [{ d: метров, p: игрок 0/1, car: короткое имя машины }] } — по убыванию d
+function cleanJumps(j) {
+  const out = {};
+  if (!j || typeof j !== 'object') return out;
+  for (const id of MAP_IDS) {
+    if (!Array.isArray(j[id])) continue;
+    const list = j[id].filter(e => e && isFinite(e.d) && e.d > 0).map(e => ({ d: Math.round(e.d * 10) / 10, p: e.p === 1 ? 1 : 0, car: String(e.car || '').slice(0, 20) }));
+    if (list.length) out[id] = list.sort((a, b) => b.d - a.d).slice(0, JUMP.top);
+  }
+  return out;
+}
 function cleanPlayer(p) {
   if (!p || typeof p !== 'object') return defaultPlayer();
   const owned = Array.isArray(p.owned) ? p.owned.filter(id => CARS.some(c => c.id === id)) : [];
@@ -213,14 +235,15 @@ function loadSave() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && Array.isArray(s.players) && s.players.length === 2)
       return { players: s.players.map(cleanPlayer), map: MAP_IDS.includes(s.map) ? s.map : 'city', traffic: cleanTraffic(s.traffic),
-        mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod), rain: s.rain === true, quality: cleanQuality(s.quality) };
+        mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod), rain: s.rain === true, quality: cleanQuality(s.quality),
+        jumps: cleanJumps(s.jumps) };
   } catch (e) { /* повреждённое сохранение — начинаем заново */ }
   // перенос со старого формата с общим балансом: монеты делятся пополам, купленные машины есть у обоих
   try {
     const o = JSON.parse(localStorage.getItem(OLD_SAVE_KEY));
     if (o && typeof o.coins === 'number') {
       const c = Math.max(0, Math.floor(o.coins)), sel = Array.isArray(o.sel) ? o.sel : [];
-      return { players: [0, 1].map(i => cleanPlayer({ coins: i === 0 ? Math.ceil(c / 2) : Math.floor(c / 2), owned: o.owned, sel: sel[i] })), map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high' };
+      return { players: [0, 1].map(i => cleanPlayer({ coins: i === 0 ? Math.ceil(c / 2) : Math.floor(c / 2), owned: o.owned, sel: sel[i] })), map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high', jumps: {} };
     }
   } catch (e) { }
   return defaultSave();

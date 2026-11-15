@@ -4,7 +4,7 @@
 // Определяет: TRICK, Stunts.
 // Использует: NITRO (js/data.js); rand (js/core.js); sparks (js/effects.js); Sound (js/audio.js); cars, surfaceAt,
 //   simTime (js/physics.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); HUD, notify (js/ui.js); Feel
-//   (js/feel.js).
+//   (js/feel.js); Jumps (js/jumps.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -90,7 +90,7 @@ const Stunts = (() => {
       s.air += dt; s.airH = Math.max(s.airH, h);
     } else if (s.air > 0) {
       if (s.air >= TRICK.airMin && s.airH >= TRICK.airHeight && c.upY > 0.5 && c.drown <= 0)
-        award(p, `ПОЛЁТ ${s.air.toFixed(1)} с · ${Math.round(s.airH)} м`, TRICK.airGain * s.air);
+        award(p, `ПОЛЁТ ${Math.round(Jumps.dist(p))} м · ${s.air.toFixed(1)} с`, TRICK.airGain * s.air);
       s.air = 0; s.airH = 0;
     }
     Feel.air(p, h);
@@ -148,7 +148,7 @@ const Stunts = (() => {
     if (E.on !== on) { E.on = on; E.n.className = 'nitro ' + on; }
     let txt = '';
     if (s.drift >= 0.4) txt = `ЗАНОС ${s.drift.toFixed(1)} с`;
-    else if (s.air >= 0.4 && h > 0.8) txt = `ПОЛЁТ ${s.air.toFixed(1)} с`;
+    else if (s.air >= 0.4 && h > 0.8) txt = `ПОЛЁТ ${Math.round(Jumps.dist(p))} м`;
     if (txt && s.combo > 1) txt += ` · ×${s.combo}`;
     if (E.txt !== txt) { E.txt = txt; E.t.textContent = txt; E.t.classList.toggle('hidden', !txt); }
   }

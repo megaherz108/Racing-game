@@ -15,7 +15,7 @@ function cityBuildGround(K) {
   /* ---------- рельеф по чанкам ---------- */
   const nz = makeNoise(mulberry32(7));
   const cGrass = new THREE.Color(0x6c9a45), cPark = new THREE.Color(0x5f9d3f), cSand = new THREE.Color(0xe6d6a6), cPath = new THREE.Color(0xd2bf8e),
-    cPort = new THREE.Color(0x8f918f), cDeep = new THREE.Color(0xb59f72), cQuay = new THREE.Color(0x5a5b58);
+    cPort = new THREE.Color(0x8f918f), cDune = new THREE.Color(0xc9a66a), cDeep = new THREE.Color(0xb59f72), cQuay = new THREE.Color(0x5a5b58);
   const landMat = Weather.wet(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.35);   // в дождь трава и песок чуть темнеют
   const P = D.PARK, landLod = [];
   for (let cx = -1050; cx < 1050; cx += CHUNK) for (let cz = -1050; cz < 1050; cz += CHUNK) {
@@ -31,7 +31,11 @@ function cityBuildGround(K) {
       pos.setY(k, y);
       if (cd < 0) _col.copy(cDeep).multiplyScalar(clamp(1 + cd * 0.025, 0.45, 1));
       else if (qd < 0) _col.copy(cQuay);
-      else if (cd < 16 || z < D.BEACH_Z) _col.copy(cSand).multiplyScalar(0.95 + nz(x / 9, z / 9) * 0.05);
+      else if (cd < 16 || z < D.BEACH_Z) {
+        _col.copy(cSand).multiplyScalar(0.95 + nz(x / 9, z / 9) * 0.05);
+        const dh = D.dune ? D.dune(x, z) : 0;        // дюны для прыжков (js/maps/city/jumps.js) — песок темнее и теплее
+        if (dh > 0) _col.lerp(cDune, 0.85 * smooth01(dh / 1.2));
+      }
       else {
         const dt = D.district(x, z);
         if (dt === 'port') _col.copy(cPort).multiplyScalar(0.95 + nz(x / 12, z / 12) * 0.05);

@@ -1,15 +1,16 @@
 // Интерфейс: меню, гараж, выбор карты, HUD, мини-карта, ввод
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
-//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, MODE_INFO,
-//   drawModePreview, renderMaps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
+//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, JUMP_DESC, MODE_INFO,
+//   drawModePreview, renderMaps, renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
 //   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
 //   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, KO_REWARD, FLIP_REWARD,
-//   CAP_REWARD, CAP_CFG, CAP_BONUS_PER, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY,
-//   TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium (js/showroom.js);
-//   smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound
-//   (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch,
-//   endMatch, matchMode (js/match.js); Race (js/race.js); Capture (js/capture.js); Perf (js/main.js).
+// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, JUMP, KO_REWARD,
+//   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES,
+//   PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
+//   (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins
+//   (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused,
+//   countdown, startMatch, endMatch, matchMode (js/match.js); Race (js/race.js); Capture (js/capture.js); jumpTable
+//   (js/jumps.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -175,11 +176,12 @@ function buyCar(p) {
 function syncBrowse() { for (let p = 0; p < 2; p++) if (!save.players[p].owned.includes(CARS[browse[p]].id)) browse[p] = carIndex(save.players[p].sel); }
 
 // Экран выбора режима и карты (PLAY_MAPS в js/data.js). Гонка — только в городе: ей нужен дорожный граф.
+const JUMP_DESC = `Прыжок от ${JUMP.tiers[0][0]} м — +${JUMP.tiers[0][1]}, от ${JUMP.tiers[1][0]} м — +${JUMP.tiers[1][1]}, от ${JUMP.tiers[2][0]} м — +${JUMP.tiers[2][1]}; рекорд карты — ещё +${JUMP.record}.`;
 const MODE_INFO = {
   free: { name: 'Свободная езда', tag: `Монеты +1 · нокаут +${KO_REWARD} · переворот +${FLIP_REWARD}`,
-    desc: `Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал. Опрокинули соперника ударом в борт — +${FLIP_REWARD}; таранить лучше носом: удар передом бьёт по прочности на 30% слабее.` },
+    desc: `Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал. Опрокинули соперника ударом в борт — +${FLIP_REWARD}; таранить лучше носом: удар передом бьёт по прочности на 30% слабее. ${JUMP_DESC}` },
   solo: { name: 'Одиночная езда', tag: '1 игрок · монеты +1',
-    desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками.' },
+    desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками. ' + JUMP_DESC },
   capture: { name: 'Захват точек', tag: `Победителю +${CAP_REWARD} · +1 за 10 очков`,
     get desc() { return `Пять точек в случайном порядке: площадь у фонтана, двор винодельни, руины амфитеатра, остров на реке; финал — всегда край пирса. Стойте в светящемся круге один — очко в секунду; вдвоём — очков никому, выталкивайте соперника. Через ${CAP_CFG.time} с захвата точка гаснет. Победителю +${CAP_REWARD}, обоим +1 за каждые ${CAP_BONUS_PER} очков.`; } },
   race: { name: 'Гонка · чекпоинты', tag: `Победителю +${RACE_REWARD} · чекпоинт +${RACE_CP_REWARD}`,
@@ -248,7 +250,14 @@ function renderMaps() {
   $('modeLine').innerHTML = `Карта: ${PLAY_MAPS.map(id =>
     `<button class="tsel ${id === map ? 'on' : ''}" data-map="${id}">${MAP_INFO[id].name}</button>`).join('')}
     <span class="thint">C</span> · ← / → — режим, Enter — старт`;
-  renderTraffic(); renderTime(); renderWeather(); renderQuality();
+  renderJumps(map); renderTraffic(); renderTime(); renderWeather(); renderQuality();
+}
+// таблица лучших прыжков выбранной карты (js/jumps.js)
+function renderJumps(map) {
+  const list = jumpTable(map);
+  $('jumpLine').innerHTML = `Рекорды прыжков · ${MAP_INFO[map].name}: ` + (list.length
+    ? list.map((e, i) => `<span class="jrec"><b>${i + 1}.</b> ${Math.round(e.d)} м <i class="pl${e.p + 1}">P${e.p + 1}</i> ${e.car}</span>`).join('')
+    : `<span class="thint">пока нет — прыжок от ${JUMP.tiers[0][0]} м попадёт в таблицу</span>`);
 }
 // качество графики (QUALITY в js/data.js): сглаживание задаётся при создании WebGL, поэтому смена — с перезагрузкой
 // страницы; после неё игра сразу возвращается на этот экран
@@ -309,7 +318,7 @@ $('mGarage').onclick = () => setState('garage');
 $('mHelp').onclick = () => $('help').classList.remove('hidden');
 $('hClose').onclick = () => $('help').classList.add('hidden');
 $('mReset').onclick = () => {
-  if (!confirm('Сбросить монеты и купленные машины обоих игроков?')) return;
+  if (!confirm('Сбросить монеты, купленные машины обоих игроков и рекорды прыжков?')) return;
   save = Object.assign(defaultSave(), { quality: save.quality }); persist();   // графику не сбрасываем — она уже применена browse[0] = browse[1] = 0; updatePodium(0); updatePodium(1); updateCoins(); toast('Прогресс сброшен');
 };
 $('gBack').onclick = () => setState('menu');

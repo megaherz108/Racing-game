@@ -15,6 +15,7 @@
 //   cityPlanPort (infra)      портовые краны, мосты, разводной мост, трамплины в парке
 //   cityPlanStreets (streets) фонари, пальмы, деревья, ограждения, маяк, светофоры, знаки, кафе, скамейки
 //   cityPlanOverpass (overpass) трюки на эстакаде: кикеры, вылеты, крыши с монетами, разрыв, съезды, трафик (без R())
+//   cityPlanJumps (jumps)     места для длинных прыжков: стальные листы на улицах, дюны на пляже (без R())
 //   cityPlanMinimap (здесь)   мини-карта и итоговый объект данных (его читают buildCity() и трафик)
 // ВАЖНО: город детерминирован — зерно mulberry32 в cityPlanBase(), вызовы R() идут строго по порядку этапов.
 //   Новый вызов R() или перестановка кода в середине раскладки меняет весь город после этого места.
@@ -22,7 +23,8 @@
 // Определяет: cityData, cityPlanBase, cityPlanMinimap.
 // Использует: lerp, clamp (js/core.js); mulberry32, makeNoise, smooth01, mmCanvas (js/world.js); cityPlanKit,
 //   cityPlanFill (js/maps/city/blocks.js); cityPlanInfra, cityPlanPort (js/maps/city/infra.js); cityPlanStreets
-//   (js/maps/city/streets.js); cityPlanOverpass, OV_ST (js/maps/city/overpass.js).
+//   (js/maps/city/streets.js); cityPlanOverpass, OV_ST (js/maps/city/overpass.js); cityPlanJumps
+//   (js/maps/city/jumps.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -38,6 +40,7 @@ function cityData() {
   cityPlanPort(C);
   cityPlanStreets(C);
   cityPlanOverpass(C);
+  cityPlanJumps(C);
   return cityPlanMinimap(C);
 }
 
@@ -197,7 +200,7 @@ function cityPlanMinimap(C) {
     roadSegs, parkBlock, blocks, blockAt, BEACH_Z, ground, parkPath, towers, caps, units, slants, spires, plain,
     roofs, neon, pools, containers, solids, trees, palms, slabs, lamps, umbrellas, domes, pyramids, rtanks, helipads,
     medians, alleys, landmarks, mmShapes, deckPlan, lanes, OV, ovRuns, ovPillars, ovArcs, cranes, rails, lh,
-    litNodes, hydrants, signs, tables, chairs, benches, bins, CAFE_COL, coinFixed, ovTraffic, ovMarks, ovCleared } = C;
+    litNodes, hydrants, signs, tables, chairs, benches, bins, CAFE_COL, coinFixed, ovTraffic, ovMarks, ovCleared, dune } = C;
   /* ---------- мини-карта ---------- */
   const MM = BOUNDS, m = mmCanvas(MM, 1024);
   const img = m.ctx.createImageData(1024, 1024);
@@ -256,5 +259,5 @@ function cityPlanMinimap(C) {
   return { WATER, BOUNDS, CURB, CANAL, BASIN, PARK, PC, PROM_Z, BEACH_Z, BRIDGES, DRAW_X, coastD, quayD, district, ground, parkPath, blockAt,
     OV, ovRuns, ovPillars, litNodes, lanes, alleys, medians, landmarks, domes, pyramids, rtanks, helipads, segs, roadSegs, nodes: [...nodes.values()], blocks, parkBlock, towers, caps, units, slants, spires, plain, roofs, neon, pools, containers, solids,
     trees, palms, slabs, lamps, umbrellas, rails, cranes, deckPlan, lighthouse: lh, minimap: m.c, mmExt: MM, mmBg: '#2a6f9e',
-    hydrants, signs, tables, chairs, benches, bins, cafeColors: CAFE_COL, coinFixed, ovTraffic, ovMarks, ovCleared };
+    hydrants, signs, tables, chairs, benches, bins, cafeColors: CAFE_COL, coinFixed, ovTraffic, ovMarks, ovCleared, dune };
 }

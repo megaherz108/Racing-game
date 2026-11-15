@@ -60,7 +60,7 @@ function cityBuildBuildings(K) {
   const haz = hazardTexture(); haz.repeat.set(4, 1);
   decks.build(group, {
     deck: Weather.wet(stdMat(0x45494f, { roughness: 0.9 })), rail: stdMat(0xd8dde3, { metalness: 0.5, roughness: 0.4 }), steel: stdMat(0x5a7184, { metalness: 0.6, roughness: 0.5 }),
-    hazard: stdMat(0xffffff, { map: haz, roughness: 0.6 }), tower: stdMat(0x8d8f93, { roughness: 0.85 }), wedge: stdMat(0xc96a2b, { roughness: 0.7 }),
+    hazard: stdMat(0xffffff, { map: haz, roughness: 0.6 }), tower: stdMat(0x8d8f93, { roughness: 0.85 }), wedge: stdMat(0xc96a2b, { roughness: 0.7 }), plate: Weather.wet(stdMat(0x4a4d50, { metalness: 0.55, roughness: 0.45 }), 0.6),
     ramp: Weather.wet(stdMat(0x9a978f, { roughness: 0.9 })), pier: Weather.wet(stdMat(0x9b7b56, { roughness: 0.9 }), 0.7), ovdeck: Weather.wet(stdMat(0xa29f97, { roughness: 0.9, emissive: 0x3a3833 })),   // снизу на настил почти не падает свет — подсвечиваем
   });
   Object.assign(K, { decks });

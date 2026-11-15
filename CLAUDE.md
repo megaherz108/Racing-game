@@ -21,8 +21,8 @@
 | `js/world.js` | сцена, шум, `StaticGrid` (коллизии), `Breakables`, мини-карта, инстансы, чанки, `optimizeStatic`, `Decks` (мосты), шейдер фасадов |
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |
 | `js/maps/registry.js` | список карт, `getData()` / `getWorld()` / `activateWorld()`, текущий `world` |
-| `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
-| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб) |
+| `js/maps/city/` | город: раскладка `plan.js` → `blocks.js`, `infra.js`, `streets.js`, `overpass.js` (трюки на эстакаде, без `R()`), `jumps.js` (листы на улицах и дюны для прыжков, без `R()`); постройка `build.js` → `ground.js`, `buildings.js`, `props.js`; `textures.js`, `landmarks.js` |
+| `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `jumps.js` (обрушенный мост, сходни на тюках), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб) |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `traffic.js` объект `Traffic`, `driver.js` вождение ботов |
@@ -33,6 +33,7 @@
 | `js/match.js` | камеры, `startMatch()` / `endMatch()`, `state`, `countdown` |
 | `js/ui.js` | меню, гараж, экран режима, HUD, мини-карта, клавиатура `keys` |
 | `js/race.js`, `js/stunts.js`, `js/feel.js` | гонка по чекпоинтам; трюки и нитро; стоп-кадр и замедление |
+| `js/jumps.js` | длинные прыжки: длина, монеты по порогам (`JUMP` в `data.js`), рекорды карты `save.jumps` |
 | `js/capture.js`, `js/arrow.js` | захват точек (только «Побережье»); 3D-стрелка на цель `TargetArrow` (гонка и захват) |
 | `js/main.js` | главный цикл, `window.__game` |
 | `js/selftest.js` | `__game.selfTest()`, `__game.fingerprint()` |

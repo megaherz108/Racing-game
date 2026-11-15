@@ -7,7 +7,8 @@
 //   обрыв — каменный клин-трамплин на кромке.
 // Порядок этапов — в buildCoast() (js/maps/coast/build.js).
 // Определяет: AQ_GATE, coastBuildCrossings.
-// Использует: lerp (js/core.js); noiseTexture, stdMat, inst, setInst (js/world.js).
+// Использует: lerp (js/core.js); noiseTexture, stdMat, inst, setInst (js/world.js); coastBuildJumps
+//   (js/maps/coast/jumps.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -105,6 +106,7 @@ function coastBuildCrossings(K) {
     decks.wedge([p12[0], p12[1] + 0.02, p12[2]], [p6[0], y6, p6[2]], 7, p12[1] - 1, { mat: 'rock' });
     decks.wedge([p6[0], y6, p6[2]], [p0[0], y0, p0[2]], 7, p6[1] - 1, { mat: 'rock' });
   }
+  coastBuildJumps(K, mats);                  // обрушенный мост и скирды (js/maps/coast/jumps.js)
   decks.build(group, mats);
   // столбики и сваи — одной InstancedMesh
   if (posts.length) {

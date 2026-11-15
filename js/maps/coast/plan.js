@@ -7,12 +7,14 @@
 //   coastPlanRoads               дороги: сплайны, профили, мосты и брод, вдавливание в рельеф (js/maps/coast/roads.js)
 //   coastPlanVillage             дома деревни, фермы, рыбацкие дома (js/maps/coast/village.js)
 //   coastPlanNature              лес, кипарисы, оливы, виноградники, тюки сена, кусты (js/maps/coast/nature.js)
+//   coastPlanJumps               места для прыжков: обрушенный мост, скирды (js/maps/coast/jumps.js)
 //   coastPlanMinimap             мини-карта (js/maps/coast/minimap.js)
 // Оси: +Z — север (верх мини-карты), +X — запад (mmCanvas рисует +X слева). Море — на юге (−Z).
 // Определяет: coastData, coastPlanBase.
 // Использует: mulberry32, makeNoise (js/world.js); coastPlanTerrain (js/maps/coast/terrain.js); coastPlanSites
 //   (js/maps/coast/sites.js); coastPlanRoads (js/maps/coast/roads.js); coastPlanVillage (js/maps/coast/village.js);
-//   coastPlanNature (js/maps/coast/nature.js); coastPlanMinimap (js/maps/coast/minimap.js).
+//   coastPlanNature (js/maps/coast/nature.js); coastPlanJumps (js/maps/coast/jumps.js); coastPlanMinimap
+//   (js/maps/coast/minimap.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -27,6 +29,7 @@ function coastData() {
   coastPlanRoads(C);
   coastPlanVillage(C);
   coastPlanNature(C);
+  coastPlanJumps(C);
   coastPlanMinimap(C);
   const { HX, HZ, STEP, NX, NZ, H, ground, waterAt, wlAt, riverPts, lagoon, island, ford, cliff, port, coastZ, minimap, mmExt, mmBg } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (монеты на дорогах, js/ui.js)

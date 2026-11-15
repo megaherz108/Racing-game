@@ -7,7 +7,7 @@
 //   (js/physics.js); Traffic (js/traffic/traffic.js); Blobs (js/blobs.js); cams, state, paused, countdown, placeCam,
 //   updateStreaks, startMatch (js/match.js); drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins,
 //   keys, renderGarage (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts
-//   (js/stunts.js).
+//   (js/stunts.js); Jumps (js/jumps.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -83,6 +83,7 @@ function frameBody(now) {
       updateCoins3D(gdt, t);
       Race.update(gdt, t);
       Capture.update(gdt, t);
+      Jumps.update(gdt);                   // перед трюками: «ПОЛЁТ» берёт длину прыжка отсюда
       Stunts.update(gdt);
       smoke.update(gdt); sparks.update(gdt); updateSkids(); Wrecks.update(gdt);
       Sky.update(t);

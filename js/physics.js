@@ -229,6 +229,7 @@ class Car {
     this.vx = this.vz = this.vy = this.w = 0; this.vf = this.vl = 0; this.steer = 0; this.thr = 0; this.hb = false;
     this.grounded = true; this.contacts = 4; this.upY = 1; this.flipT = 0; this.airVy = 0;
     this.drown = 0; this.skidPrev = [null, null];
+    this.placeN = (this.placeN || 0) + 1;     // счётчик переносов: прыжок, прерванный переносом, не считается (js/jumps.js)
     this.touchT = this.shoveT = this.dazeT = this.knockCd = 0;
   }
   fullReset(x, z, h) {

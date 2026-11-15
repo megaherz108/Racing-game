@@ -79,7 +79,7 @@ button{font:inherit;cursor:pointer;color:inherit}
 
 /* ---------- MAP SELECT ---------- */
 #maps{background:radial-gradient(ellipse at center,rgba(7,10,16,.55),rgba(7,10,16,.92))}
-.mapgrid{position:absolute;top:92px;bottom:196px;left:24px;right:24px;display:flex;justify-content:center;align-items:stretch;align-content:center;gap:22px;flex-wrap:wrap;overflow:auto}
+.mapgrid{position:absolute;top:92px;bottom:226px;left:24px;right:24px;display:flex;justify-content:center;align-items:stretch;align-content:center;gap:22px;flex-wrap:wrap;overflow:auto}
 .mapcard{width:290px;padding:16px;border-radius:18px;background:var(--bg);border:2px solid var(--line);text-align:left;display:flex;flex-direction:column;gap:8px;
   transition:border-color .15s,transform .15s}
 .mapcard:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.3)}
@@ -150,6 +150,8 @@ button{font:inherit;cursor:pointer;color:inherit}
 .tsel{padding:6px 14px;border-radius:999px;border:2px solid var(--line,rgba(255,255,255,.15));background:var(--bg,rgba(20,24,32,.8));color:inherit;font:inherit;cursor:pointer}
 .tsel:hover{border-color:rgba(255,255,255,.35)}
 .tsel.on{border-color:var(--gold,#ffc83a);color:#fff;box-shadow:0 0 0 3px rgba(255,200,58,.18)}
+.trafficline .jrec{margin-right:10px;color:#e6edf6} .trafficline .jrec b{color:#ffd23a}
+.trafficline .jrec i{font-style:normal;font-size:12px;font-weight:700;margin:0 3px} .jrec i.pl1{color:var(--p1)} .jrec i.pl2{color:var(--p2)}
 .trafficline .thint{opacity:.6;font-size:12px;margin-left:6px}
 
 /* ---------- ощущение скорости и гонка ---------- */
