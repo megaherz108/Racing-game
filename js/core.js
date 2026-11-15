@@ -145,10 +145,23 @@ function mergeByMaterial(group, disposeOld = false) {
   return group;
 }
 
-function makeWheel(r, w, side, rimColor) {
+// steel — штампованный стальной диск (крашеный, с кольцом отверстий и колпачком) вместо спиц
+function makeWheel(r, w, side, rimColor, steel = false) {
   const spin = new THREE.Group();
-  const rimMat = new THREE.MeshStandardMaterial({ color: rimColor, metalness: 0.85, roughness: 0.3 });
+  const rimMat = steel
+    ? new THREE.MeshStandardMaterial({ color: rimColor, metalness: 0.35, roughness: 0.45 })
+    : new THREE.MeshStandardMaterial({ color: rimColor, metalness: 0.85, roughness: 0.3 });
   const tire = cyl(r, r, w, 22, MAT.tire, spin); tire.rotation.z = Math.PI / 2;
+  if (steel) {
+    const rim = cyl(r * 0.6, r * 0.6, w + 0.012, 18, rimMat, spin); rim.rotation.z = Math.PI / 2;
+    const dish = cyl(r * 0.34, r * 0.4, 0.03, 14, rimMat, spin); dish.rotation.z = -side * Math.PI / 2; dish.position.x = side * (w / 2 + 0.015);
+    for (let k = 0; k < 10; k++) {                // кольцо отверстий
+      const a = k / 10 * Math.PI * 2, h = cyl(r * 0.045, r * 0.045, 0.014, 6, MAT.black, spin);
+      h.rotation.z = Math.PI / 2; h.position.set(side * (w / 2 + 0.002), Math.sin(a) * r * 0.47, Math.cos(a) * r * 0.47);
+    }
+    const cap = cyl(r * 0.12, r * 0.15, 0.04, 10, MAT.chrome, spin); cap.rotation.z = -side * Math.PI / 2; cap.position.x = side * (w / 2 + 0.035);
+    return mergeByMaterial(spin, true);
+  }
   const rim = cyl(r * 0.64, r * 0.64, w + 0.012, 16, rimMat, spin); rim.rotation.z = Math.PI / 2;
   const hub = cyl(r * 0.15, r * 0.15, w + 0.05, 8, MAT.trim, spin); hub.rotation.z = Math.PI / 2;
   for (let k = 0; k < 3; k++) {
