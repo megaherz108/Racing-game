@@ -6,7 +6,7 @@
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
 //   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); Jumps
-//   (js/jumps.js); resize (js/main.js).
+//   (js/jumps.js); Bomb (js/bomb.js); resize (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -109,7 +109,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
   if (mode === 'race' && !getData(mapId).nodes) mode = 'free';     // для гонки нужен дорожный граф (есть только у города)
   if (mode === 'capture' && !getData(mapId).C?.zones) mode = 'free'; // для захвата нужны зоны (есть только у Побережья)
   matchMode = mode;
-  showLoading(mode === 'race' ? 'Подготовка гонки…' : mode === 'capture' ? 'Подготовка захвата точек…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
+  showLoading(mode === 'race' ? 'Подготовка гонки…' : mode === 'capture' ? 'Подготовка захвата точек…' : mode === 'bomb' ? 'Подготовка горячей бомбы…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
   // даём браузеру отрисовать экран загрузки перед тяжёлой генерацией
   setTimeout(() => {
     for (const c of cars) c.dispose();
@@ -125,6 +125,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));
     Race.start(mode === 'race');
     Capture.start(mode === 'capture');
+    Bomb.start(mode === 'bomb');                // ставит машины на старт первого раунда (js/bomb.js)
     Stunts.reset(); Jumps.reset(); Feel.reset();
     simTime = 0; accum = 0; countdown = 3.2;
     $('hud').classList.toggle('solo', solo);
@@ -140,6 +141,8 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
       ? 'Гонка: проезжайте арки по порядку — стрелка вверху показывает на следующую · нитро: левый Shift (P1) и / (P2) · R / Enter — на дорогу · Esc — пауза'
       : mode === 'capture'
       ? 'Захват точек: стойте в светящемся круге один — очко в секунду, вдвоём — никому · стрелка показывает на точку · нитро: левый Shift (P1) и / (P2) · R / Enter — на дорогу · Esc — пауза'
+      : mode === 'bomb'
+      ? 'Горячая бомба: у кого бомба — догоняет и касается соперника, остальные убегают · стрелка у хозяина бомбы показывает на соперника · нитро: левый Shift (P1) и / (P2) · R / Enter — на дорогу · Esc — пауза'
       : solo ? 'Одиночная езда: WASD или стрелки · Пробел / правый Shift — ручник · левый Shift или / — нитро · R / Enter — вернуть на дорогу · Esc — пауза'
       : 'Свободная езда: собирайте монеты · нитро: левый Shift (P1) и / (P2) · R / Enter — вернуть на дорогу · Esc — пауза';
     $('hudhint').classList.remove('hidden');
@@ -152,6 +155,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
 function endMatch(to) {
   Race.stop();
   Capture.stop();
+  Bomb.stop();
   for (const c of cars) c.dispose();
   Traffic.clear();
   cars = [];

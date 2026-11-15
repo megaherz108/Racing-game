@@ -365,6 +365,17 @@ const Sound = (() => {
     // захват точек (js/capture.js): тихий тик за каждое очко, тревога — зону оспаривают, гонг — смена точки
     capTick(p) { tone([1568], 0.06, { gain: 0.045, pan: PAN[p], type: 'triangle' }); },
     capAlarm() { tone([880, 622], 0.1, { gain: 0.07, type: 'square', gap: 0.11 }); },
+    // горячая бомба (js/bomb.js): тиканье фитиля (последние 10 с — выше и громче), щелчок передачи, взрыв
+    bombTick(p, hot) { tone([hot ? 1760 : 1175], 0.05, { gain: hot ? 0.07 : 0.04, pan: PAN[p], type: 'square' }); },
+    bombPass(p) {
+      tone([523, 1046], 0.09, { gain: 0.1, pan: PAN[p], type: 'square', gap: 0.05 });
+      noise(0.12, { freq: 2500, type: 'bandpass', q: 2, gain: 0.25, pan: PAN[p] });
+    },
+    boom(p) {
+      noise(2.2, { freq: 1400, sweep: 0.05, gain: 0.95, pan: PAN[p] * 0.6 });
+      noise(0.35, { freq: 3000, type: 'highpass', gain: 0.4, pan: PAN[p] });
+      tone([110], 1.2, { gain: 0.4, slide: 0.35, pan: PAN[p] * 0.6 });
+    },
     capGong() { tone([392, 523, 784], 0.5, { gain: 0.13, type: 'triangle', gap: 0.12 }); },
     ko(p) { tone([523, 659, 784, 1046], 0.16, { gain: 0.12, pan: PAN[p], type: 'square', gap: 0.08 }); },
     splash(p) { noise(1.0, { freq: 1600, type: 'bandpass', q: 0.8, sweep: 0.2, gain: 0.6, p }); },

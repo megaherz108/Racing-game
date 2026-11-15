@@ -31,6 +31,7 @@ const Feel = (() => {
     void d.offsetWidth; d.style.transition = ''; d.style.opacity = 0;
   }
   return {
+    flash,                                         // вспышка половины экрана p: kind — 'hit', 'gold', 'boost'
     reset() { stopT = slowT = airK = 0; scale = 1; kick.fill(0); boost.fill(0); airH.fill(0); Sound.slow(0); },
     // удар по машине car с силой strength (Δv, м/с); withCar — удар о машину соперника
     impact(car, strength, withCar) {

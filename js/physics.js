@@ -213,6 +213,7 @@ class Car {
       this.wheels.push({ front, r, connY, side, z: axZ, contact: false });
     }
     this.baseGrip = this.grip / GRAV * RT.gripScale;     // «Управление» → коэффициент трения шин
+    this.speedMul = 1; this.markerLift = 0;
   }
 
   // поставить машину в точку (без ремонта)
@@ -231,6 +232,7 @@ class Car {
     this.drown = 0; this.skidPrev = [null, null];
     this.placeN = (this.placeN || 0) + 1;     // счётчик переносов: прыжок, прерванный переносом, не считается (js/jumps.js)
     this.touchT = this.shoveT = this.dazeT = this.knockCd = 0;
+    this.touchAt = -1;                        // когда последний раз касалась соперника (simTime): передача бомбы, js/bomb.js
   }
   fullReset(x, z, h) {
     this.place(x, z, h);
@@ -238,6 +240,8 @@ class Car {
     this.nitro = NITRO.start; this.boosting = false; this.hitTime = -9;
     this.hitDv = 0; this.hitDvFront = 0; this.flipPaid = false; this.hitX = x; this.hitZ = z; this.lastHitBy = null; this.lastHitTime = -9;
     this.shake = 0; this.smokeAcc = 0;
+    this.markerLift = 0;                      // метка над машиной выше (над горячей бомбой, js/bomb.js)
+    this.speedMul = 1;                        // множитель разгона и максималки (у кого горячая бомба — больше, js/bomb.js)
   }
   // вернуть на ближайшую дорогу
   toRoad() {
@@ -293,7 +297,7 @@ class Car {
     if (this.boosting) this.nitro = Math.max(0, this.nitro - dt / NITRO.dur);
     const nb = this.boosting ? 1 : 0;
     // тяга и тормоза
-    const bf = this.broken > 0 ? 0.7 : 1, maxS = this.maxSpeed * bf * (1 + NITRO.top * nb), acc = this.accel * H.accelMul * bf * (1 + NITRO.accel * nb);
+    const bf = (this.broken > 0 ? 0.7 : 1) * this.speedMul, maxS = this.maxSpeed * bf * (1 + NITRO.top * nb), acc = this.accel * H.accelMul * bf * (1 + NITRO.accel * nb);
     let drive = 0, brake = 0;
     if (thr > 0) {
       if (vf < -0.5) brake = H.brake;
@@ -456,7 +460,7 @@ class Car {
       wh.pivot.rotation.y = wl.front ? this.veh.wheelSteering(i) || 0 : 0;
       wh.spin.rotation.x += (this.hb && !wl.front ? 0 : this.vf) * dt / wh.r;
     }
-    this.marker.position.set(0, this.H + 1.1 + Math.sin(performance.now() / 300) * 0.12, 0);
+    this.marker.position.set(0, this.H + 1.1 + this.markerLift + Math.sin(performance.now() / 300) * 0.12, 0);
     this.marker.quaternion.copy(_q.copy(m.root.quaternion).invert());     // маркер всегда вертикален
     this.marker.rotateY(performance.now() / 500); this.marker.rotateX(Math.PI);
 
@@ -665,7 +669,7 @@ function pushContacts() {
     const p = contactPoint(a.collider, b.collider, true);
     if (!p) continue;
     for (const c of [a, b]) {
-      c.touchT = PUSH.hold;
+      c.touchT = PUSH.hold; c.touchAt = simTime;
       if (hitZone(c.body, p[0], p[1], c.W / 2, c.L / 2, p[2]) !== 'front') c.shoveT = PUSH.hold;   // по нормали: точка часто в углу носа
     }
   }

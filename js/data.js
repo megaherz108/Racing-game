@@ -2,8 +2,8 @@
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
 //   PLAYER_COLORS, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS, KO_REWARD, FLIP_REWARD, JUMP, MODES, PLAY_MAPS, PLAY_MAP,
 //   MODE_MAP, playMap, RACE_CPS, RACE_REWARD, RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST,
-//   CAP_WARN, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave, cleanJumps,
-//   cleanPlayer, loadSave, save, persist, carIndex, browse.
+//   CAP_WARN, BOMB_CFG, BOMB_REWARD, BOMB_ROUND_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY,
+//   cleanQuality, defaultPlayer, defaultSave, cleanJumps, cleanPlayer, loadSave, save, persist, carIndex, browse.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -178,8 +178,8 @@ const JUMP = {
   modes: ['free', 'solo'],
 };
 // режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1);
-// capture — захват точек (js/capture.js)
-const MODES = ['free', 'solo', 'race', 'capture'];
+// capture — захват точек (js/capture.js); bomb — горячая бомба (js/bomb.js)
+const MODES = ['free', 'solo', 'race', 'capture', 'bomb'];
 // карты, которые можно выбрать на экране режима (остальные — для отладки)
 const PLAY_MAPS = ['city', 'coast'];
 const PLAY_MAP = 'city';
@@ -193,8 +193,15 @@ const CAP_CFG = { time: 60 };
 // награда победителю; бонус — 1 монета за каждые CAP_BONUS_PER очков (обоим); скорость таймера, пока зону оспаривают
 // (очков никто не получает); за сколько секунд до смены показывать следующую точку
 const CAP_REWARD = 25, CAP_BONUS_PER = 10, CAP_CONTEST = 0.5, CAP_WARN = 10;
+// горячая бомба (js/bomb.js) — настройки, которые можно менять из консоли: BOMB_CFG.fuse = 30.
+// fuse — фитиль раунда, с (не сбрасывается при передаче); back — сколько секунд новый хозяин бомбы не может отдать её
+// обратно; wins — побед до конца матча; speed — прибавка к разгону и максималке у того, у кого бомба (0,1 = +10 %);
+// nitro — сколько шкалы нитро в секунду копится у него; gap — расстояние между машинами в начале раунда, м
+const BOMB_CFG = { fuse: 40, back: 2, wins: 3, speed: 0.1, nitro: 0.06, gap: 45 };
+// награда победителю матча и за каждый выигранный раунд
+const BOMB_REWARD = 25, BOMB_ROUND_REWARD = 5;
 // сколько монет на дорогах в каждом режиме: множитель к world.coinCount карты
-const COIN_MUL = { free: 1.5, solo: 1.5, race: 1, capture: 0.5 };
+const COIN_MUL = { free: 1.5, solo: 1.5, race: 1, capture: 0.5, bomb: 0.5 };
 // интенсивность городского трафика: id, подпись, число машин вокруг игроков
 const TRAFFIC_LEVELS = [['off', 'Выкл', 0], ['low', 'Мало', 40], ['mid', 'Средне', 90], ['high', 'Много', 180]];
 const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';

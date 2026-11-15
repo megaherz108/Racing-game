@@ -3,7 +3,7 @@
 // Определяет: fingerprint, selfTest.
 // Использует: save, FLIP_REWARD, persist (js/data.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars,
 //   FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown,
-//   endMatch (js/match.js); updateCoins (js/ui.js); Capture (js/capture.js).
+//   endMatch (js/match.js); updateCoins (js/ui.js); Capture (js/capture.js); Bomb (js/bomb.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -193,6 +193,37 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         errors.push('захват: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
       } finally {
         if (cars.length) endMatch('menu');
+      }
+    }
+    // горячая бомба (js/bomb.js): касание передаёт бомбу, вернуть сразу нельзя, догоревший фитиль — победа сопернику
+    if (maps.includes('city') && mode === 'free') {
+      const coins0 = save.players.map(p => p.coins);
+      try {
+        cars = [];
+        startMatch('bomb', 'city');
+        for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
+        if (!Bomb.on) throw new Error('режим не включился');
+        const s = Bomb.st, run = n => { for (let i = 0; i < n; i++) { stepWorld(FIXED); Bomb.update(FIXED, simTime); } };
+        const gap = Math.hypot(cars[0].x - cars[1].x, cars[0].z - cars[1].z);
+        countdown = 0;
+        run(2);
+        const h0 = s.holder, a = cars[h0], b = cars[1 - h0];
+        // ставим машины вплотную бок о бок и толкаем хозяина бомбы к сопернику
+        a.fullReset(a.x, a.z, 0); b.fullReset(a.x + a.W + 0.3, a.z, 0);
+        a.body.setLinvel({ x: 3, y: 0, z: 0 }, true);
+        run(30);
+        if (s.holder === h0) errors.push('бомба: касание не передало бомбу');
+        const h1 = s.holder;
+        run(60);                                          // всё ещё рядом, но BOMB_CFG.back не прошло
+        if (s.holder !== h1) errors.push('бомба: вернулась раньше BOMB_CFG.back');
+        s.fuse = 0.01; run(2);
+        if (s.phase !== 'boom' || s.wins[1 - h1] !== 1) errors.push(`бомба: фитиль догорел, а раунд не закончился (${s.phase}, ${s.wins})`);
+        lines.push(`бомба: старт в ${gap.toFixed(0)} м, передача ${h0 + 1} → ${h1 + 1}, взрыв у Игрока ${h1 + 1}, счёт ${s.wins.join(' : ')}`);
+      } catch (e) {
+        errors.push('бомба: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
+      } finally {
+        if (cars.length) endMatch('menu');
+        save.players.forEach((p, i) => p.coins = coins0[i]); persist(); updateCoins();
       }
     }
   } finally {

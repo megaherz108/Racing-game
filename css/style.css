@@ -181,6 +181,20 @@ button{font:inherit;cursor:pointer;color:inherit}
 .cap .cst.mine{color:#7dffb0} .cap .cst.theirs{color:#ff8a70} .cap .cst.hot{color:#ff5a4a;animation:capHot .5s steps(2) infinite}
 .cap .cnext{font-size:12px;color:#fff;padding:1px 8px;border-radius:9px;background:rgba(255,255,255,.14)}
 @keyframes capHot{50%{color:#fff}}
+/* горячая бомба (js/bomb.js) */
+.bomb{position:absolute;top:14px;right:16px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:7px 12px 8px;min-width:120px;
+  border-radius:12px;background:rgba(8,12,18,.62);border:1px solid rgba(255,59,59,.35);text-shadow:0 1px 4px rgba(0,0,0,.8);pointer-events:none}
+.bomb .bh{font-size:12px;letter-spacing:1.5px;color:#ffb0a0}
+.bomb .bt{font-family:var(--fd);font-size:30px;color:#fff;font-variant-numeric:tabular-nums;line-height:1.1}
+.bomb .bt.low{color:#ff4a3a;animation:capHot .5s steps(2) infinite}
+.bomb .bs{display:flex;align-items:baseline;gap:5px;font-family:var(--fd);font-size:22px;font-variant-numeric:tabular-nums}
+.bomb .bs small{font-family:'Rubik';font-size:12px;letter-spacing:1.5px;color:#9aa3b0;margin-right:2px}
+.bomb .bs i{font-style:normal;color:#9aa3b0}
+#hud0 .bomb .me,#hud1 .bomb .op{color:var(--p1)} #hud1 .bomb .me,#hud0 .bomb .op{color:var(--p2)}
+.bomb .bst{font-size:13px;font-weight:700;color:#d8dee8;text-align:right;white-space:nowrap}
+.bomb .bst.mine{color:#7dffb0} .bomb .bst.theirs{color:#ff8a70} .bomb .bst.hot{color:#ff5a4a;animation:capHot .5s steps(2) infinite}
+.bomb .bd{font-size:12px;color:#c9d0da}
+.bombfx{position:absolute;inset:0;pointer-events:none;opacity:0;box-shadow:inset 0 0 14vh 3vh rgba(255,30,20,.7);transition:opacity .08s}
 #raceEnd h2 .pl1{color:var(--p1)} #raceEnd h2 .pl2{color:var(--p2)}
 #reRows{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
 .rerow{display:grid;grid-template-columns:30px 1fr auto 70px;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;
