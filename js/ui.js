@@ -210,8 +210,12 @@ function drawModePreview(cv, mode) {
     return;
   }
   if (mode === 'bomb') {                           // погоня: две машины и бомба
-    const route = D.roadSegs.filter(s => Math.hypot(s.x1 - s.x0, s.z1 - s.z0) > 60), s = route[Math.floor(rng() * route.length)];
-    const [ax, ay] = P(s.x0, s.z0), [bx, by] = P(s.x1, s.z1), mx = (ax + bx) / 2 + (ay - by) * 0.25, my = (ay + by) / 2 + (bx - ax) * 0.25;
+    // концы погони — два места на дорогах в 60–200 м друг от друга (на «Побережье» куски дорог короче 20 м)
+    const segs = D.roadSegs, a = segs[Math.floor(rng() * segs.length)];
+    if (!a) return;
+    const near = segs.filter(s => { const d = Math.hypot(s.x1 - a.x0, s.z1 - a.z0); return d > 60 && d < 200; });
+    const b = near.length ? near[Math.floor(rng() * near.length)] : a;
+    const [ax, ay] = P(a.x0, a.z0), [bx, by] = P(b.x1, b.z1), mx = (ax + bx) / 2 + (ay - by) * 0.25, my = (ay + by) / 2 + (bx - ax) * 0.25;
     ctx.strokeStyle = 'rgba(255,59,59,.8)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(mx, my, bx, by); ctx.stroke(); ctx.setLineDash([]);
     for (const [x, y, col] of [[ax, ay, '#ff8a2a'], [bx, by, '#38c8ff']]) {
@@ -259,7 +263,10 @@ function renderMaps() {
         <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ` · только: ${MAP_INFO[playMap(id)].name}` : ''}</div>
       </button>`).join('');
     grid.style.setProperty('--n', MODES.length);
-    grid.querySelectorAll('.mapcard').forEach(card => drawModePreview(card.querySelector('canvas'), card.dataset.mode));
+    // ошибка в одном превью не должна обрывать renderMaps(): иначе строки настроек ниже остаются пустыми
+    grid.querySelectorAll('.mapcard').forEach(card => {
+      try { drawModePreview(card.querySelector('canvas'), card.dataset.mode); } catch (e) { console.error(e); }
+    });
     grid.dataset.built = map + CAP_CFG.time + BOMB_CFG.fuse;
   }
   grid.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.mode === save.mode));
