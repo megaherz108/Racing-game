@@ -1,14 +1,15 @@
 // Ситжес — РАСКЛАДКА: распаковка данных карты и порядок этапов. Реальный город Ситжес (Каталония) от гольфа
 // Террамар до марины Айгуадольс. Данные (js/maps/sitges/data-*.js) готовит конвейер tools/sitges/ из OSM,
 // кадастра и рельефа ICGC — здесь их только распаковываем; случайностей в раскладке нет.
-//   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, рельеф, ориентиры
+//   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, рельеф ICGC, ориентиры
+//   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
-// Этап 0 (docs/sitges-plan.md): земля плоская, здания — призмы по контурам кадастра.
+// Этап 1 (docs/sitges-plan.md): рельеф и море; здания — призмы по контурам кадастра.
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
-//   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); sitgesPlanMinimap
-//   (js/maps/sitges/minimap.js).
+//   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); sitgesPlanTerrain
+//   (js/maps/sitges/terrain.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -52,12 +53,13 @@ const sitgesHeight = floors => SITGES_FLOOR.ground + (floors - 1) * SITGES_FLOOR
 function sitgesData() {
   const C = {};
   sitgesPlanBase(C);
+  sitgesPlanTerrain(C);
   sitgesPlanMinimap(C);
-  const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg } = C;
+  const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
   const roadSegs = [];
   for (const r of drive) for (let i = 1; i < r.pts.length; i++) roadSegs.push({ x0: r.pts[i - 1][0], z0: r.pts[i - 1][1], x1: r.pts[i][0], z1: r.pts[i][1] });
-  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, roadSegs, C };
+  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt, roadSegs, C };
 }
 
 function sitgesPlanBase(C) {
@@ -81,8 +83,7 @@ function sitgesPlanBase(C) {
     layer: r[4], width: r[5] / 10, lanes: r[6], name: r[7] ? O.roadNames[r[7] - 1] : '', pts: rp[i],
   }));
   // проезжие улицы (без тротуаров, тропинок и лестниц)
-  const DRIVE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service']);
-  const drive = roads.filter(r => DRIVE.has(r.cls) && !r.tunnel);
+  const drive = roads.filter(r => SITGES_DRIVE.has(r.cls) && !r.tunnel);
   const railM = rows(O.rails.m, 2), railP = sitgesPts(O.rails.p, railM.map(r => r[1]));
   const rails = railM.map((r, i) => ({ bridge: !!(r[0] & 1), tunnel: !!(r[0] & 2), siding: !!(r[0] & 4), pts: railP[i] }));
   const coast = sitgesPts(O.coast.p, sitgesDec(O.coast.m));
@@ -109,7 +110,7 @@ function sitgesPlanBase(C) {
   let ri = 0;
   for (const b of blds) for (const p of b.parts) { p.rings = bp.slice(ri, ri + p.nr); ri += p.nr; delete p.nr; }
 
-  // рельеф (в игре пока не используется — земля плоская; этап 1): высота в узлах сетки и билинейная выборка
+  // рельеф ICGC: высота в узлах сетки и билинейная выборка (мини-карта); игровая сетка — js/maps/sitges/terrain.js
   const H = new Float32Array(T.nx * T.nz);
   {
     const r = sitgesDec(T.h), q = new Int32Array(T.nx * T.nz);
@@ -124,5 +125,6 @@ function sitgesPlanBase(C) {
     return (H[k] * (1 - tx) + H[k + 1] * tx) * (1 - tz) + (H[k + T.nx] * (1 - tx) + H[k + T.nx + 1] * tx) * tz;
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
-  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, terrainAt, pois });
+  const dtm = { H, nx: T.nx, nz: T.nz, x0: T.x0, z0: T.z0, step: T.step };
+  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, terrainAt, dtm, pois });
 }

@@ -1,13 +1,14 @@
-// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этап 0 (docs/sitges-plan.md): плоская земля с картинкой
-// мини-карты вместо текстуры, здания — призмы по контурам кадастра, столкновения с ними.
+// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этап 1 (docs/sitges-plan.md): рельеф ICGC, море, пляжи,
+// волнорезы, понтоны марины, холмы-фон; здания — призмы по контурам кадастра на рельефе, столкновения с ними.
 // Этапы получают общий контекст K (деструктуризацией) и отдают новое через Object.assign(K, …):
 //   sitgesBuildKit (здесь)       группа, сетка коллизий
-//   sitgesBuildGround (здесь)    земля: прямоугольник с картинкой мини-карты, вокруг — море и суша цветом
+//   sitgesBuildGround            земля, море, волнорезы, понтоны, фон (js/maps/sitges/ground.js)
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
-// Определяет: SITGES_LANE, buildSitges, sitgesBuildKit, sitgesBuildGround, sitgesBuildWorld.
-// Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); SITGES_MM
-//   (js/maps/sitges/minimap.js); sitgesBuildBuildings (js/maps/sitges/buildings.js).
+// Определяет: SITGES_LANE, buildSitges, sitgesBuildKit, sitgesBuildWorld.
+// Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
+//   (js/maps/city/textures.js); SITGES_MM (js/maps/sitges/minimap.js); sitgesBuildGround, SITGES_G
+//   (js/maps/sitges/ground.js); sitgesBuildBuildings (js/maps/sitges/buildings.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -26,38 +27,8 @@ function sitgesBuildKit(K) {
   Object.assign(K, { group: new THREE.Group(), grid: new StaticGrid(10) });
 }
 
-function sitgesBuildGround(K) {
-  const { D, group } = K, E = D.mmExt, EZ = D.mmExtZ, FAR = 6000;
-  // картинка мини-карты на плоскости: px = 0 — x = +E, верх картинки — z = +EZ (поворот на 180° вокруг вертикали)
-  const tex = new THREE.CanvasTexture(D.minimap);
-  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(2 * E, 2 * EZ), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
-  plane.rotation.set(-Math.PI / 2, 0, Math.PI); plane.receiveShadow = true; plane.userData.keep = true;
-  group.add(plane);
-  // вокруг — без наложения: юг — море, север — суша, по бокам — море ниже линии берега у края картинки
-  const sea = D.C.areas.find(a => a.kind === 'sea');
-  const coastAt = side => {
-    if (!sea) return -EZ;
-    const xe = side > 0 ? Math.max(...sea.ring.map(p => p[0])) : Math.min(...sea.ring.map(p => p[0]));
-    return Math.max(-EZ, Math.min(EZ, Math.max(...sea.ring.filter(p => Math.abs(p[0] - xe) < 1).map(p => p[1]))));
-  };
-  const seaMat = new THREE.MeshStandardMaterial({ color: SITGES_MM.sea, roughness: 0.3 });
-  const landMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...SITGES_MM.land.map(v => v / 255), THREE.SRGBColorSpace), roughness: 1 });
-  const quad = (x0, x1, z0, z1, mat) => {
-    if (x1 <= x0 || z1 <= z0) return;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), mat);
-    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); m.receiveShadow = true;
-    group.add(m);
-  };
-  quad(-FAR, FAR, -FAR, -EZ, seaMat); quad(-FAR, FAR, EZ, FAR, landMat);
-  for (const s of [1, -1]) {
-    const zc = coastAt(s), [x0, x1] = s > 0 ? [E, FAR] : [-FAR, -E];
-    quad(x0, x1, -EZ, zc, seaMat); quad(x0, x1, zc, EZ, landMat);
-  }
-}
-
 function sitgesBuildWorld(K) {
-  const { D, group, grid } = K;
+  const { D, group, grid, decks, landLod, rockLod, seaMesh } = K, T = D.C.terra;
   optimizeStatic(group);
   buildShadowProxies(group);
 
@@ -99,9 +70,19 @@ function sitgesBuildWorld(K) {
   const fw = (church.x - s0.x) * s0.tx + (church.z - s0.z) * s0.tz >= 0 ? 1 : -1, hs = Math.atan2(s0.tx * fw, s0.tz * fw);
   const spawns = [1, -1].map(s => [s0.x - s0.tz * 1.9 * s, s0.z + s0.tx * 1.9 * s, hs]);
 
+  // покрытие под колёсами (js/effects.js, js/audio-env.js): море и кромка — мокро, пляж — песок, гряда — камень и грунт;
+  // остальное пока асфальт (покрытия улиц — этап 2)
+  const surfaceKind = (x, z) => {
+    if (!T.inGrid(x, z)) return 'asphalt';
+    const k = T.cell(x, z);
+    if (T.sea[k] || (T.H[k] < 1.5 && T.dSea[k] < 4 && !T.thin[k])) return 'wet';
+    if (T.thin[k]) return 'dirt';
+    return T.beach[k] ? 'sand' : 'asphalt';
+  };
   return {
-    id: 'sitges', group, grid, barrels: [], ground: () => 0, water: null,
-    bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: 10,
+    id: 'sitges', group, grid, decks, barrels: [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
+    surface: (x, z, y = Infinity) => Math.max(D.ground(x, z), decks.surface(x, z, y)),
+    bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
     coinCount: 80, spawns,
     // ближайшая точка улицы; направление — вдоль улицы
@@ -116,9 +97,18 @@ function sitgesBuildWorld(K) {
       return [q.x - q.tz * o, q.z + q.tx * o];
     },
     // камера не уходит в стены узких улиц (js/match.js)
-    occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.h && inPoly(x, z, o.poly)); },
+    occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg,
     reset() {},
-    update() {},
+    update(dt, t) { seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; },
+    // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
+    cullView(x, z) {
+      for (const L of landLod) {
+        const d = Math.hypot(L.x - x, L.z - z) - L.r;
+        let on = 0; for (let q = 0; q < L.lods.length; q++) if (d > L.lods[q].from) on = q;
+        for (let q = 0; q < L.lods.length; q++) L.lods[q].mesh.visible = q === on;
+      }
+      for (const R of rockLod) R.mesh.visible = Math.hypot(R.x - x, R.z - z) - R.r < SITGES_G.rockFar;
+    },
   };
 }

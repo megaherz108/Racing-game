@@ -1,5 +1,6 @@
 // Ситжес — ПОСТРОЙКА: здания — призмы по контурам частей кадастра высотой по этажности (sitgesHeight()).
-// Этап 0: без крыш и фасадов — стены и плоская крыша одним цветом на часть; дворы-дыры — внутренние стены.
+// Без крыш и фасадов — стены и плоская крыша одним цветом на часть; дворы-дыры — внутренние стены. На рельефе стены
+// уходят в землю под самой низкой точкой контура.
 // Геометрия склеена по квадратам SITGES_BCHUNK м (отсечение по пирамиде видимости), цвет — в вершинах.
 // В сетку коллизий каждая часть идёт многоугольником (StaticGrid.addPoly → призма Rapier, js/physics.js).
 // Определяет: SITGES_BCHUNK, SITGES_BCOLORS, sitgesBuildBuildings.
@@ -27,7 +28,10 @@ function sitgesBuildBuildings(K) {
   D.blds.forEach((b, bi) => {
     const pal = SITGES_BCOLORS[b.use] || SITGES_BCOLORS['1_residential'];
     for (const p of b.parts) {
-      const outer = p.rings[0], h = p.h;
+      // на рельефе: низ стен — под самой низкой точкой контура, крыша — над серединой между низкой и высокой
+      // (на склоне дом со стороны горы ниже), но не ниже 2,6 м над самой высокой
+      const outer = p.rings[0], gs = outer.map(([x, z]) => D.ground(x, z)), g0 = Math.min(...gs), g1 = Math.max(...gs);
+      const y0 = g0 - 0.5, h = Math.max((g0 + g1) / 2 + p.h, g1 + 2.6);
       // цвет: по зданию из палитры назначения, части чуть различаются
       col.setHex(pal[(bi * 7 + 3) % pal.length]).offsetHSL(0, 0, ((bi * 13 + p.floors * 5) % 7 - 3) * 0.008);
       roofC.copy(col).multiplyScalar(0.82);
@@ -36,8 +40,8 @@ function sitgesBuildBuildings(K) {
       // стены: внешнее кольцо против часовой (в осях x, z), дыры — по часовой → нормаль наружу от толщи здания
       for (const r of p.rings) for (let i = 0; i < r.length; i++) {
         const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length];
-        push(ax, 0, az, col); push(bx, h, bz, col); push(bx, 0, bz, col);
-        push(ax, 0, az, col); push(ax, h, az, col); push(bx, h, bz, col);
+        push(ax, y0, az, col); push(bx, h, bz, col); push(bx, y0, bz, col);
+        push(ax, y0, az, col); push(ax, h, az, col); push(bx, h, bz, col);
         tris += 2;
       }
       // крыша
@@ -51,7 +55,8 @@ function sitgesBuildBuildings(K) {
         if (flip) { push(cc[0], h, cc[1], roofC); push(bb[0], h, bb[1], roofC); } else { push(bb[0], h, bb[1], roofC); push(cc[0], h, cc[1], roofC); }
         tris++;
       }
-      grid.addPoly(outer, h);
+      // коллайдер (js/physics.js): от y0 до y1 — те же высоты, что у меша
+      Object.assign(grid.addPoly(outer, p.h), { y0: g0 - 1.5, y1: h });
       parts++;
     }
   });

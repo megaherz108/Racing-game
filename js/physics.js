@@ -108,9 +108,10 @@ function buildPhysics() {
     if (seen.has(o)) continue; seen.add(o);
     if (o.poly) {
       // контур здания (реальная карта): выпуклый — выпуклая оболочка призмы; невыпуклый — призма из треугольников
-      // (стены и обе крышки). Начало коллайдера — в первой вершине: float32 на краю карты в 2 км точнее
-      const P = o.poly, n = P.length, gs = P.map(([x, z]) => world.ground(x, z));
-      const [ox, oz] = P[0], y0 = Math.min(...gs) - 1.5, y1 = Math.max(...gs) + Math.min(o.h, 300);
+      // (стены и обе крышки). Начало коллайдера — в первой вершине: float32 на краю карты в 2 км точнее.
+      // Высоты низа и крыши — o.y0 / o.y1, если карта их задала (как у меша), иначе от земли под контуром
+      const P = o.poly, n = P.length, gs = o.y1 === undefined ? P.map(([x, z]) => world.ground(x, z)) : null;
+      const [ox, oz] = P[0], y0 = gs ? Math.min(...gs) - 1.5 : o.y0, y1 = gs ? Math.max(...gs) + Math.min(o.h, 300) : o.y1;
       const v = new Float32Array(n * 6);
       P.forEach(([x, z], i) => v.set([x - ox, y0, z - oz, x - ox, y1, z - oz], i * 6));
       let convex = true;
@@ -455,7 +456,7 @@ class Car {
       Sound.splash(this.p);
       notify(this.p, 'В ВОДЕ! Возврат через 5 с', 'bad');
       for (let k = 0; k < 24; k++) smoke.spawn(this.x + rand(-1.5, 1.5), wl + 0.3, this.z + rand(-1.5, 1.5), rand(-3, 3), rand(2, 6), rand(-3, 3), 0.8, 2.6, 0.9, 0xe8f4ff, 0.8, 6);
-    } else if (world.waterAt && wl !== null && this.drown <= 0 && this.grounded && this.y < wl + 1.2) this.wade(dt, wl - world.ground(this.x, this.z));
+    } else if (world.waterAt && wl !== null && this.drown <= 0 && this.grounded && this.y < wl + 1.2) this.wade(dt, wl - surfaceAt(this.x, this.z, this.y));   // на настиле над водой (понтон) — сухо
     else this.wadeD = 0;
     if (this.drown > 0) {
       this.drown -= dt;
