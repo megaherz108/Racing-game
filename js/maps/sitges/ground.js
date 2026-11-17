@@ -39,7 +39,7 @@ function sitgesBuildGround(K) {
   cv.width = Math.round((X1 - X0) * G.ppm); cv.height = Math.round((Z1 - Z0) * G.ppm);
   const ctx = cv.getContext('2d'), X = x => (x - X0) * G.ppm, Z = z => (z - Z0) * G.ppm;
   ctx.fillStyle = `rgb(${G.land.join(',')})`; ctx.fillRect(0, 0, cv.width, cv.height);
-  sitgesPaint(ctx, X, Z, G.ppm, C, { sea: G.seabed, thin: false, area: G.area });
+  sitgesPaint(ctx, X, Z, G.ppm, { areas: C.areas, rails: [], roads: [] }, { sea: G.seabed, thin: false, area: G.area });   // улицы и пути — 3D (js/maps/sitges/roads3d.js)
   // волнорезы: камень пятнами по клеткам гряды; берег без пляжа (молы, мыс, скалы) — каменная кромка у воды
   const rng = mulberry32(9), [rr, rg, rb] = G.rock, { beach } = T;
   for (let k = 0; k < H.length; k++) if (thin[k] || (!sea[k] && !beach[k] && dSea[k] <= G.rockShore)) {

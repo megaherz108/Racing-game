@@ -1,24 +1,29 @@
-// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этап 1 (docs/sitges-plan.md): рельеф ICGC, море, пляжи,
-// волнорезы, понтоны марины, холмы-фон; здания — призмы по контурам кадастра на рельефе, столкновения с ними.
+// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этапы 1–2 (docs/sitges-plan.md): рельеф ICGC, море, пляжи,
+// волнорезы, понтоны марины, холмы-фон; улицы с тротуарами, мосты, ж/д; здания — призмы по контурам кадастра.
 // Этапы получают общий контекст K (деструктуризацией) и отдают новое через Object.assign(K, …):
 //   sitgesBuildKit (здесь)       группа, сетка коллизий
 //   sitgesBuildGround            земля, море, волнорезы, понтоны, фон (js/maps/sitges/ground.js)
+//   sitgesBuildRoads             улицы, тротуары, мосты, ж/д, стены по границе (js/maps/sitges/roads3d.js)
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
-// Определяет: SITGES_LANE, buildSitges, sitgesBuildKit, sitgesBuildWorld.
+// Определяет: SITGES_LANE, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
-//   (js/maps/city/textures.js); SITGES_MM (js/maps/sitges/minimap.js); sitgesBuildGround, SITGES_G
-//   (js/maps/sitges/ground.js); sitgesBuildBuildings (js/maps/sitges/buildings.js).
+//   (js/maps/city/textures.js); sitgesRaster (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G
+//   (js/maps/sitges/ground.js); sitgesBuildRoads (js/maps/sitges/roads3d.js); sitgesBuildBuildings
+//   (js/maps/sitges/buildings.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
 // смещение машины от оси улицы при респауне, м
 const SITGES_LANE = 1.6;
+// площадные объекты с травой (покрытие под колёсами)
+const SITGES_GREEN = new Set(['park', 'garden', 'grass', 'golf', 'pitch', 'playground', 'cemetery', 'wood', 'scrub', 'farmland']);
 
 function buildSitges(D) {
   const K = { D };
   sitgesBuildKit(K);
   sitgesBuildGround(K);
+  sitgesBuildRoads(K);
   sitgesBuildBuildings(K);
   return sitgesBuildWorld(K);
 }
@@ -28,7 +33,7 @@ function sitgesBuildKit(K) {
 }
 
 function sitgesBuildWorld(K) {
-  const { D, group, grid, decks, landLod, rockLod, seaMesh } = K, T = D.C.terra;
+  const { D, group, grid, decks, landLod, rockLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
   optimizeStatic(group);
   buildShadowProxies(group);
 
@@ -49,17 +54,17 @@ function sitgesBuildWorld(K) {
   const blocked = (x, z, m = 0) => grid.query(x - m, x + m, z - m, z + m).some(o => o.poly && (inPoly(x, z, o.poly) || (m > 0 && nearEdge(x, z, o.poly, m))));
 
   // точки проезжих улиц через ~4 м (без служебных проездов): респаун, монеты
-  const W = SITGES_MM.road, pts = [];
-  for (const r of D.drive) {
-    if (r.cls === 'service') continue;
-    const hw = (r.width || W[r.cls][0]) / 2;
-    for (let i = 1; i < r.pts.length; i++) {
-      const [ax, az] = r.pts[i - 1], [bx, bz] = r.pts[i], L = Math.hypot(bx - ax, bz - az);
+  const pts = [];
+  for (const st of C.streets) {
+    if (!st.drive || st.cls === 'service') continue;
+    const v = st.v;
+    for (let i = 0; i + 1 < v.length; i++) {
+      const a = v[i], b = v[i + 1], L = b.s - a.s;
       if (L < 0.01) continue;
-      const tx = (bx - ax) / L, tz = (bz - az) / L;
+      const tx = (b.x - a.x) / L, tz = (b.z - a.z) / L;
       for (let s = 0; s < L; s += 4) {
-        const x = ax + tx * s, z = az + tz * s;
-        if (D.inside(x, z) && !blocked(x, z, 1.2)) pts.push({ x, z, tx, tz, hw, r });
+        const x = a.x + tx * s, z = a.z + tz * s;
+        if (D.inside(x, z) && !blocked(x, z, 1.2)) pts.push({ x, z, tx, tz, hw: a.hw, r: st });
       }
     }
   }
@@ -70,18 +75,23 @@ function sitgesBuildWorld(K) {
   const fw = (church.x - s0.x) * s0.tx + (church.z - s0.z) * s0.tz >= 0 ? 1 : -1, hs = Math.atan2(s0.tx * fw, s0.tz * fw);
   const spawns = [1, -1].map(s => [s0.x - s0.tz * 1.9 * s, s0.z + s0.tx * 1.9 * s, hs]);
 
-  // покрытие под колёсами (js/effects.js, js/audio-env.js): море и кромка — мокро, пляж — песок, гряда — камень и грунт;
-  // остальное пока асфальт (покрытия улиц — этап 2)
+  // покрытие под колёсами (js/effects.js, js/audio-env.js): море и кромка — мокро; улица — её покрытие, тротуар —
+  // плитка; пляж — песок, гряда — камень и грунт; парки — трава, остальная земля — грунт
+  const green = sitgesRaster(C.areas.filter(a => SITGES_GREEN.has(a.kind)).map(a => a.ring), T.X0, T.Z0, T.S, T.NX, T.NZ);
   const surfaceKind = (x, z) => {
-    if (!T.inGrid(x, z)) return 'asphalt';
+    if (!T.inGrid(x, z)) return 'dirt';
     const k = T.cell(x, z);
     if (T.sea[k] || (T.H[k] < 1.5 && T.dSea[k] < 4 && !T.thin[k])) return 'wet';
+    const c = C.carriageAt(x, z);
+    if (c) return K.roadSurf(c.st);
+    if (walkAt(x, z) > -Infinity) return 'paving';
     if (T.thin[k]) return 'dirt';
-    return T.beach[k] ? 'sand' : 'asphalt';
+    if (T.beach[k]) return 'sand';
+    return green[k] ? 'grass' : 'dirt';
   };
   return {
-    id: 'sitges', group, grid, decks, barrels: [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
-    surface: (x, z, y = Infinity) => Math.max(D.ground(x, z), decks.surface(x, z, y)),
+    id: 'sitges', group, grid, decks, meshColliders, barrels: [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
+    surface: (x, z, y = Infinity) => { const w = walkAt(x, z); return Math.max(D.ground(x, z), decks.surface(x, z, y), w <= y ? w : -Infinity); },
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
     coinCount: 80, spawns,

@@ -181,7 +181,7 @@ const JUMP = {
 // capture — захват точек (js/capture.js); bomb — горячая бомба (js/bomb.js)
 const MODES = ['free', 'solo', 'race', 'capture', 'bomb'];
 // карты, которые можно выбрать на экране режима (остальные — для отладки)
-const PLAY_MAPS = ['city', 'coast'];
+const PLAY_MAPS = ['city', 'coast', 'sitges'];
 const PLAY_MAP = 'city';
 // у некоторых режимов карта своя: гонке нужен дорожный граф (только город), захвату — зоны world.zones (только Побережье)
 const MODE_MAP = { race: 'city', capture: 'coast' };

@@ -319,7 +319,7 @@ function setWeather(v) { save.rain = !!v; persist(); renderWeather(); }
 function renderTraffic() {
   $('trafficLine').innerHTML = `Трафик: ${TRAFFIC_LEVELS.map(([id, label]) =>
     `<button class="tsel ${id === save.traffic ? 'on' : ''}" data-traffic="${id}">${label}</button>`).join('')}
-    <span class="thint">↑ / ↓</span>`;
+    <span class="thint">↑ / ↓${playMap('free') === 'sitges' ? ' · на Ситжесе трафика пока нет' : ''}</span>`;
 }
 function setTraffic(id) { save.traffic = id; persist(); renderTraffic(); }
 function stepTraffic(d) {

@@ -98,6 +98,9 @@ function buildPhysics() {
       .setTranslation(d.center.x, d.center.y, d.center.z).setRotation({ x: d.quat.x, y: d.quat.y, z: d.quat.z, w: d.quat.w }), kind);
   }
 
+  // сетки треугольников карты (тротуары с бордюрами «Ситжеса»): { v: Float32Array xyz, i: Uint32Array }
+  if (world.meshColliders) for (const m of world.meshColliders) addStatic(R.ColliderDesc.trimesh(m.v, m.i), 'deck');
+
   // невидимые стены по краю карты
   for (const [x, z, hx, hz] of [[BX + 2, 0, 2, BZ + 4], [-BX - 2, 0, 2, BZ + 4], [0, BZ + 2, BX + 4, 2], [0, -BZ - 2, BX + 4, 2]])
     addStatic(R.ColliderDesc.cuboid(hx, 120, hz).setTranslation(x, 0, z));

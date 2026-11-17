@@ -3,13 +3,15 @@
 // кадастра и рельефа ICGC — здесь их только распаковываем; случайностей в раскладке нет.
 //   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, рельеф ICGC, ориентиры
 //   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
+//   sitgesPlanRoads              ширины улиц, тротуары, путепроводы и выемки под ними (js/maps/sitges/roads.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
-// Этап 1 (docs/sitges-plan.md): рельеф и море; здания — призмы по контурам кадастра.
+// Этапы 1–2 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания — призмы по контурам кадастра.
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
 //   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); sitgesPlanTerrain
-//   (js/maps/sitges/terrain.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js).
+//   (js/maps/sitges/terrain.js); sitgesPlanRoads (js/maps/sitges/roads.js); sitgesPlanMinimap, SITGES_DRIVE
+//   (js/maps/sitges/minimap.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -54,11 +56,12 @@ function sitgesData() {
   const C = {};
   sitgesPlanBase(C);
   sitgesPlanTerrain(C);
+  sitgesPlanRoads(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
   const roadSegs = [];
-  for (const r of drive) for (let i = 1; i < r.pts.length; i++) roadSegs.push({ x0: r.pts[i - 1][0], z0: r.pts[i - 1][1], x1: r.pts[i][0], z1: r.pts[i][1] });
+  for (const st of C.streets) if (st.drive) for (let i = 1; i < st.v.length; i++) roadSegs.push({ x0: st.v[i - 1].x, z0: st.v[i - 1].z, x1: st.v[i].x, z1: st.v[i].z });
   return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt, roadSegs, C };
 }
 
