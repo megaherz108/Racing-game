@@ -1,5 +1,6 @@
-// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этапы 1–2 (docs/sitges-plan.md): рельеф ICGC, море, пляжи,
-// волнорезы, понтоны марины, холмы-фон; улицы с тротуарами, мосты, ж/д; здания — призмы по контурам кадастра.
+// Ситжес — ПОСТРОЙКА: порядок этапов и объект мира. Этапы 1–3 (docs/sitges-plan.md): рельеф ICGC, море, пляжи,
+// волнорезы, понтоны марины, холмы-фон; улицы с тротуарами, мосты, ж/д; здания по контурам и этажности кадастра
+// (этап 3: общие стены, фасад по этажам, проезды под домами).
 // Этапы получают общий контекст K (деструктуризацией) и отдают новое через Object.assign(K, …):
 //   sitgesBuildKit (здесь)       группа, сетка коллизий
 //   sitgesBuildGround            земля, море, волнорезы, понтоны, фон (js/maps/sitges/ground.js)
@@ -107,7 +108,7 @@ function sitgesBuildWorld(K) {
       return [q.x - q.tz * o, q.z + q.tx * o];
     },
     // камера не уходит в стены узких улиц (js/match.js)
-    occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && inPoly(x, z, o.poly)); },
+    occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg,
     reset() {},
     update(dt, t) { seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; },

@@ -4,14 +4,15 @@
 //   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, рельеф ICGC, ориентиры
 //   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
 //   sitgesPlanRoads              ширины улиц, тротуары, путепроводы и выемки под ними (js/maps/sitges/roads.js)
+//   sitgesPlanHouses             высоты домов на рельефе, общие стены, фасады к улице, проезды (js/maps/sitges/houses.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
-// Этапы 1–2 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания — призмы по контурам кадастра.
+// Этапы 1–3 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания по контурам и этажности кадастра.
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
 //   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); sitgesPlanTerrain
 //   (js/maps/sitges/terrain.js); sitgesPlanRoads (js/maps/sitges/roads.js); sitgesPlanMinimap, SITGES_DRIVE
-//   (js/maps/sitges/minimap.js).
+//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -57,6 +58,7 @@ function sitgesData() {
   sitgesPlanBase(C);
   sitgesPlanTerrain(C);
   sitgesPlanRoads(C);
+  sitgesPlanHouses(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
