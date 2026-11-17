@@ -65,14 +65,21 @@ function topDefs(src) {
 // локальные объявления (с отступом) — скрывают глобалы с тем же именем
 const localDecls = src => new Set([...strip(src).matchAll(/^[ \t]+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]));
 
+// Файлы данных реальных карт (js/maps/*/data-*.js, их пишут скрипты из tools/): сотни КБ чисел и строк.
+// Разбирать их как код незачем (а «//» внутри base64 сбил бы strip) — берём только имена верхнего уровня,
+// использований в них не ищем.
+const isData = f => /(^|\/)data-[^/]*\.js$/.test(f);
+const dataDefs = src => [...src.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
+
 function build() {
   const owner = Object.create(null), map = {};
   for (const f of FILES) {
-    const defs = topDefs(read(f));
+    const src = read(f), defs = isData(f) ? dataDefs(src) : topDefs(src);
     map[f] = { defs, uses: {} };
     for (const n of defs) if (!n.includes('.') && !owner[n]) owner[n] = f;
   }
   for (const f of FILES) {
+    if (isData(f)) continue;
     const src = read(f), code = strip(src).replace(/\.\.\./g, ' '), local = localDecls(src), own = new Set(map[f].defs);
     const ids = new Set();
     for (const m of code.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])(?!\s*:(?!:))/g)) ids.add(m[1]);
