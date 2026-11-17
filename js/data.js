@@ -163,7 +163,7 @@ const PLAYER_COLORS = [0x38c8ff, 0xff8a2a];
    ===================================================================== */
 // У каждого игрока свой кошелёк и свой гараж
 const SAVE_KEY = 'steel_duel_save_v2', OLD_SAVE_KEY = 'steel_duel_save_v1';
-const MAP_IDS = ['city', 'forest', 'arena', 'coast'];
+const MAP_IDS = ['city', 'forest', 'arena', 'coast', 'sitges'];
 const KO_REWARD = 5;
 const FLIP_REWARD = 5;   // за переворот соперника (js/physics.js, Car.sync())
 // длинные прыжки (js/jumps.js), только свободная и одиночная езда. Длина — по горизонтали от точки отрыва до

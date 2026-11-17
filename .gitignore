@@ -1,2 +1,5 @@
 .claude/
 /1
+
+# сырые данные карты «Ситжес» (скачиваются tools/sitges/download.js)
+tools/sitges/raw/

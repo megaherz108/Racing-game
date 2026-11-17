@@ -106,7 +106,29 @@ function buildPhysics() {
   const seen = new Set();
   for (const cell of world.grid.cells.values()) for (const o of cell) {
     if (seen.has(o)) continue; seen.add(o);
-    if (o.obb) {
+    if (o.poly) {
+      // контур здания (реальная карта): выпуклый — выпуклая оболочка призмы; невыпуклый — призма из треугольников
+      // (стены и обе крышки). Начало коллайдера — в первой вершине: float32 на краю карты в 2 км точнее
+      const P = o.poly, n = P.length, gs = P.map(([x, z]) => world.ground(x, z));
+      const [ox, oz] = P[0], y0 = Math.min(...gs) - 1.5, y1 = Math.max(...gs) + Math.min(o.h, 300);
+      const v = new Float32Array(n * 6);
+      P.forEach(([x, z], i) => v.set([x - ox, y0, z - oz, x - ox, y1, z - oz], i * 6));
+      let convex = true;
+      for (let i = 0, sg = 0; i < n && convex; i++) {
+        const a = P[i], b = P[(i + 1) % n], c = P[(i + 2) % n];
+        const cr = Math.sign((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]));
+        if (cr) { if (sg && cr !== sg) convex = false; sg = cr; }
+      }
+      let desc = convex ? R.ColliderDesc.convexHull(v) : null;
+      if (!desc) {
+        const idx = [];
+        for (let i = 0; i < n; i++) { const a = 2 * i, b = 2 * ((i + 1) % n); idx.push(a, b, b + 1, a, b + 1, a + 1); }
+        for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(P.map(([x, z]) => new THREE.Vector2(x, z)), []))
+          idx.push(2 * i + 1, 2 * j + 1, 2 * k + 1, 2 * i, 2 * k, 2 * j);
+        desc = R.ColliderDesc.trimesh(v, new Uint32Array(idx));
+      }
+      addStatic(desc.setTranslation(ox, 0, oz));
+    } else if (o.obb) {
       // повёрнутый прямоугольник (дома деревни на побережье): кубоид, повёрнутый вокруг вертикали
       const { x, z, w, d, rot } = o.obb, c = Math.cos(rot), s = Math.sin(rot);
       const gs = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => world.ground(x + a * w / 2 * c + b * d / 2 * s, z - a * w / 2 * s + b * d / 2 * c));

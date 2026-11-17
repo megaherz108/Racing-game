@@ -107,6 +107,13 @@ class StaticGrid {
   }
   addBox(minX, maxX, minZ, maxZ, h = 99) { return this.insert({ box: true, minX, maxX, minZ, maxZ, h, q: 0 }, minX, maxX, minZ, maxZ); }
   addCircle(x, z, r, h = 99) { return this.insert({ box: false, x, z, r, h, q: 0 }, x - r, x + r, z - r, z + r); }
+  // многоугольник pts = [[x, z], …] высотой h (контур здания реальной карты). Для поиска и простых проверок —
+  // габаритный прямоугольник, коллайдер Rapier — точная призма (js/physics.js)
+  addPoly(pts, h = 99) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x, z] of pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+    return this.insert({ box: true, minX, maxX, minZ, maxZ, h, q: 0, poly: pts }, minX, maxX, minZ, maxZ);
+  }
   // повёрнутый прямоугольник w × d с центром (x, z), поворот rot — как rotation.y у меша. Для поиска и простых
   // проверок — его габаритный прямоугольник (minX…maxZ), коллайдер Rapier — точный (obb)
   addOBB(x, z, w, d, rot, h = 99) {
@@ -306,16 +313,18 @@ class Breakables {
   }
 }
 
-// Канвас мини-карты: +X рисуется слева (как видит камера, смотрящая вдоль +Z), +Z — вверх
-function mmCanvas(ext, size = 512) {
-  const c = document.createElement('canvas'); c.width = c.height = size;
+// Канвас мини-карты: +X рисуется слева (как видит камера, смотрящая вдоль +Z), +Z — вверх.
+// Картинка охватывает x и z от −ext до ext; у вытянутой карты по z можно взять меньше — extZ (канвас тогда
+// ниже ширины, а мир отдаёт его как world.mmExtZ; по умолчанию квадрат)
+function mmCanvas(ext, size = 512, extZ = ext) {
+  const c = document.createElement('canvas'); c.width = size; c.height = Math.round(size * extZ / ext);
   const ctx = c.getContext('2d'), sc = size / (2 * ext);
-  const X = x => (ext - x) * sc, Z = z => (ext - z) * sc;
+  const X = x => (ext - x) * sc, Z = z => (extZ - z) * sc;
   return {
-    c, ctx, sc, ext, X, Z,
+    c, ctx, sc, ext, extZ, X, Z,
     rect: (minX, maxX, minZ, maxZ) => ctx.fillRect(X(maxX), Z(maxZ), (maxX - minX) * sc, (maxZ - minZ) * sc),
     dot: (x, z, r) => { ctx.beginPath(); ctx.arc(X(x), Z(z), r, 0, Math.PI * 2); ctx.fill(); },
-    world: (px, py) => [ext - (px + 0.5) / sc, ext - (py + 0.5) / sc],
+    world: (px, py) => [ext - (px + 0.5) / sc, extZ - (py + 0.5) / sc],
   };
 }
 

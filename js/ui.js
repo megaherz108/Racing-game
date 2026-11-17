@@ -100,28 +100,28 @@ const MM_R = 173;                        // радиус обзора, м (бо�
 const PCSS = ['#38c8ff', '#ff8a2a'];
 function drawMinimap(p) {
   const { mm, mmx: ctx } = HUD[p], S = mm.width, c = cars[p], o = cars[1 - p];
-  const img = world.minimap, ext = world.mmExt, sc = img.width / (2 * ext), k = S / (2 * MM_R);
+  const img = world.minimap, ext = world.mmExt, extZ = world.mmExtZ ?? ext, sc = img.width / (2 * ext), k = S / (2 * MM_R);
   ctx.clearRect(0, 0, S, S);
   ctx.save();
   ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - 1, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = world.mmBg; ctx.fillRect(0, 0, S, S);
   ctx.translate(S / 2, S / 2); ctx.rotate(c.h); ctx.scale(k / sc, k / sc);
-  ctx.translate(-(ext - c.x) * sc, -(ext - c.z) * sc);
+  ctx.translate(-(ext - c.x) * sc, -(extZ - c.z) * sc);
   ctx.drawImage(img, 0, 0);
   const u = sc / k;   // пикселей картинки на пиксель мини-карты
   ctx.fillStyle = '#ffd23a';
   for (const cn of coins) {
     if (!cn.active || Math.abs(cn.x - c.x) > MM_R * 1.5 || Math.abs(cn.z - c.z) > MM_R * 1.5) continue;
-    ctx.beginPath(); ctx.arc((ext - cn.x) * sc, (ext - cn.z) * sc, 2.6 * u, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc((ext - cn.x) * sc, (extZ - cn.z) * sc, 2.6 * u, 0, Math.PI * 2); ctx.fill();
   }
   ctx.fillStyle = '#e9e6dc';
   for (const tc of Traffic.list) {
     if (tc.dead || Math.abs(tc.x - c.x) > MM_R * 1.5 || Math.abs(tc.z - c.z) > MM_R * 1.5) continue;
-    ctx.beginPath(); ctx.arc((ext - tc.x) * sc, (ext - tc.z) * sc, (tc.L > 6 ? 2.6 : 1.8) * u, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc((ext - tc.x) * sc, (extZ - tc.z) * sc, (tc.L > 6 ? 2.6 : 1.8) * u, 0, Math.PI * 2); ctx.fill();
   }
   if (o) {                                    // соперник (в одиночной езде его нет)
     ctx.fillStyle = PCSS[1 - p]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * u;
-    ctx.beginPath(); ctx.arc((ext - o.x) * sc, (ext - o.z) * sc, 5 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc((ext - o.x) * sc, (extZ - o.z) * sc, 5 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
   ctx.restore();
   ctx.save(); ctx.translate(S / 2, S / 2);
@@ -192,10 +192,12 @@ const MODE_INFO = {
 };
 function drawModePreview(cv, mode) {
   const ctx = cv.getContext('2d'), D = getData(playMap(mode)), S = cv.width, sc = S / (2 * D.mmExt);
+  // вытянутая карта (mmExtZ < mmExt): картинка ниже квадрата, по центру по вертикали
+  const extZ = D.mmExtZ ?? D.mmExt, oy = (D.mmExt - extZ) * sc;
   ctx.fillStyle = D.mmBg; ctx.fillRect(0, 0, S, S);
-  ctx.drawImage(D.minimap, 0, 0, S, S);
+  ctx.drawImage(D.minimap, 0, oy, S, 2 * extZ * sc);
   ctx.fillStyle = 'rgba(8,12,18,.35)'; ctx.fillRect(0, 0, S, S);
-  const P = (x, z) => [(D.mmExt - x) * sc, (D.mmExt - z) * sc];
+  const P = (x, z) => [(D.mmExt - x) * sc, (extZ - z) * sc + oy];
   const rng = mulberry32(mode === 'race' ? 7 : mode === 'solo' ? 5 : 3);
   if (mode === 'capture') {                        // пять зон с номерами
     ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
