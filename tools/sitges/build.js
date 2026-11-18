@@ -9,13 +9,14 @@
 //   3. здания кадастра (части с этажностью) внутри границы, упрощение контуров, тип и название из OSM;
 //   4. улицы, ж/д, берег и море, площадные объекты, ориентиры из OSM;
 //   5. рельеф ICGC на сетке 10 м в локальных координатах (с запасом за границей — фон);
-//   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js.
+//   5а. участки кадастра (INSPIRE CP) у игровой области: внешние контуры, упрощённые — линия заборов;
+//   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
 const U = require('./util');
 const { readOSM, ROAD_CLASSES, SURFACES, AREA_KINDS, LINE_KINDS } = require('./read-osm');
-const { readCatastro, USES } = require('./read-catastro');
+const { readCatastro, readParcels, USES } = require('./read-catastro');
 const { readDTM } = require('./read-dtm');
 
 const CFG = {
@@ -28,6 +29,8 @@ const CFG = {
   dataPad: 200,      // площадные объекты и берег — с запасом за границей (фон)
   dtmPad: 500, dtmStep: 10, dtmQ: 0.2,   // рельеф: запас, шаг сетки, квант высоты, м
   minPartArea: 4,    // части зданий меньше (м²) — выбросить
+  parcelPad: 40,     // участки — с вершиной не дальше стольких метров от игровой области
+  parcelSimp: { minD: 0.6, tol: 0.3, angDeg: 10 },   // упрощение контура участка
 };
 const STREET_MAX = ROAD_CLASSES.indexOf('living_street');   // по каким улицам может идти граница (без автострад)
 
@@ -250,10 +253,32 @@ for (let j = 0; j < TNZ; j++) for (let i = 0; i < TNX; i++) {
 }
 
 /* =====================================================================
+   5а. УЧАСТКИ КАДАСТРА
+   ===================================================================== */
+const pcl = readParcels();
+const pStat = { v0: 0, v1: 0, holes: 0, outside: 0, rustic: 0 };
+const parcels = [];
+for (const p of pcl.parcels) {
+  const ring = p.rings[0].map(loc);
+  pStat.holes += p.rings.length - 1;                 // дыры не нужны: их края — края соседних участков
+  if (!ring.some(q => inside(q[0], q[1], CFG.parcelPad))) { pStat.outside++; continue; }
+  pStat.v0 += ring.length;
+  // огромные сельские участки — по прямоугольнику данных
+  let s = U.clipPolyRect(ring, RECT);
+  s = s && U.simplifyRing(s, CFG.parcelSimp);
+  if (!s) continue;
+  if (U.area(s) < 0) s = s.reverse();
+  pStat.v1 += s.length;
+  if (p.rustic) pStat.rustic++;
+  parcels.push({ ring: s.map(q => [r1(q[0]), r1(q[1])]), rustic: p.rustic, c: U.centroid(s) });
+}
+parcels.sort((a, b) => morton(...a.c) - morton(...b.c));
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
-const dOSM = date('osm.json'), dCat = date('catastro.zip'), dDTM = date('dtm5.asc');
+const dOSM = date('osm.json'), dCat = date('catastro.zip'), dDTM = date('dtm5.asc'), dPcl = date('parcels.zip');
 const LIC_OSM = `// © участники OpenStreetMap (www.openstreetmap.org/copyright), лицензия ODbL 1.0 — этот файл данных остаётся открытым.`;
 const LIC_CAT = `// Fuente: Dirección General del Catastro (INSPIRE Buildings, муниципалитет 08270 Sitges).`;
 const LIC_ICGC = `// Institut Cartogràfic i Geològic de Catalunya (ICGC), CC BY 4.0.`;
@@ -341,6 +366,18 @@ write('data-terrain.js', [
 };
 `);
 
+write('data-parcels.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: участки кадастра (внешние контуры) у игровой области — линия заборов и ширина улиц.',
+  `// Источник: кадастр Испании INSPIRE CP (ATOM, архив обновлён ${dPcl}).`, LIC_CAT.replace('INSPIRE Buildings', 'INSPIRE Cadastral Parcels'),
+  '// SITGES_PCL: n — участков; m — поток целых: на участок [точек, флаги (1 — сельский)];',
+  '//   p — точки контуров (против часовой в осях x, z), без дыр; сельские участки-дороги (номер ≥ 9000) выброшены.',
+], 'SITGES_PCL', `const SITGES_PCL = {
+  n: ${parcels.length},
+  m: '${U.enc(parcels.flatMap(p => [p.ring.length, p.rustic ? 1 : 0]))}',
+  p: '${U.encPoints(parcels.map(p => p.ring))}',
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -352,6 +389,7 @@ console.log(`  на карте: зданий ${blds.length}, частей ${nPar
 const fl = {}; for (const b of blds) for (const p of b.parts) fl[p.floors] = (fl[p.floors] || 0) + 1;
 console.log('  этажность частей:', Object.entries(fl).map(([k, v]) => k + ':' + v).join(' '));
 console.log(`OSM: улиц ${roads.length} (${km(roadLen)} км), ж/д ${rails.length}, берег ${coast.length}, площадных ${areas.length}${sea ? ' (с морем)' : ' (МОРЕ НЕ ПОСТРОЕНО)'}, линий ${lines.length}, ориентиров ${pois.length}`);
+console.log(`Участки кадастра: ${pcl.stat.all} (дорог и ручьёв сельского кадастра ${pcl.stat.publicRustic}, вне области ${pStat.outside}); на карте ${parcels.length} (сельских ${pStat.rustic}), дыр выброшено ${pStat.holes}; вершин было ${pStat.v0}, стало ${pStat.v1}`);
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 

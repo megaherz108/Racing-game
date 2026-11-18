@@ -1,7 +1,7 @@
 // Ситжес — РАСКЛАДКА: распаковка данных карты и порядок этапов. Реальный город Ситжес (Каталония) от гольфа
 // Террамар до марины Айгуадольс. Данные (js/maps/sitges/data-*.js) готовит конвейер tools/sitges/ из OSM,
 // кадастра и рельефа ICGC — здесь их только распаковываем; случайностей в раскладке нет.
-//   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, рельеф ICGC, ориентиры
+//   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, участки, рельеф ICGC, ориентиры
 //   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
 //   sitgesPlanRoads              ширины улиц, тротуары, путепроводы и выемки под ними (js/maps/sitges/roads.js)
 //   sitgesPlanHouses             высоты домов на рельефе, общие стены, фасады к улице, проезды (js/maps/sitges/houses.js)
@@ -10,9 +10,10 @@
 // Этапы 1–3 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания по контурам и этажности кадастра.
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
-//   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); sitgesPlanTerrain
-//   (js/maps/sitges/terrain.js); sitgesPlanRoads (js/maps/sitges/roads.js); sitgesPlanMinimap, SITGES_DRIVE
-//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js).
+//   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); SITGES_PCL
+//   (js/maps/sitges/data-parcels.js); sitgesPlanTerrain (js/maps/sitges/terrain.js); sitgesPlanRoads
+//   (js/maps/sitges/roads.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
+//   (js/maps/sitges/houses.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -68,7 +69,7 @@ function sitgesData() {
 }
 
 function sitgesPlanBase(C) {
-  const G = SITGES_GEO, O = SITGES_OSM, B = SITGES_BLD, T = SITGES_DTM;
+  const G = SITGES_GEO, O = SITGES_OSM, B = SITGES_BLD, T = SITGES_DTM, PL = SITGES_PCL;
   const rect = G.rect, HX = Math.max(-rect[0], rect[1]), HZ = Math.max(-rect[2], rect[3]);
   // граница на севере: z(x) по точкам через step м
   const north = [];
@@ -115,6 +116,10 @@ function sitgesPlanBase(C) {
   let ri = 0;
   for (const b of blds) for (const p of b.parts) { p.rings = bp.slice(ri, ri + p.nr); ri += p.nr; delete p.nr; }
 
+  // участки кадастра: внешний контур (против часовой), сельский ли
+  const pm = rows(PL.m, 2), pp = sitgesPts(PL.p, pm.map(r => r[0]));
+  const parcels = pm.map((r, i) => ({ ring: pp[i], rustic: !!(r[1] & 1) }));
+
   // рельеф ICGC: высота в узлах сетки и билинейная выборка (мини-карта); игровая сетка — js/maps/sitges/terrain.js
   const H = new Float32Array(T.nx * T.nz);
   {
@@ -131,5 +136,5 @@ function sitgesPlanBase(C) {
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
   const dtm = { H, nx: T.nx, nz: T.nz, x0: T.x0, z0: T.z0, step: T.step };
-  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, terrainAt, dtm, pois });
+  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, parcels, terrainAt, dtm, pois });
 }

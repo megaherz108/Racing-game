@@ -6,6 +6,8 @@
 //                     парки, землепользование, названия (© участники OpenStreetMap, ODbL)
 //   catastro/       — кадастр INSPIRE BU по муниципалитету 08270 Ситжес (ATOM-лента провинции 08): контуры
 //                     зданий и их частей с этажностью (Fuente: Dirección General del Catastro)
+//   parcels/        — кадастр INSPIRE CP (участки) по тому же муниципалитету: границы участков — линия заборов,
+//                     промежуток между ними — ширина улицы «от забора до забора»
 //   dtm5.asc        — рельеф ICGC MET 5 × 5 м (WCS icc:met5, ARCGRID, EPSG:25831) на прямоугольник BBOX
 //                     (Institut Cartogràfic i Geològic de Catalunya, CC BY 4.0)
 // Печатает только сводку: что скачано и сколько весит.
@@ -63,16 +65,20 @@ out geom;`;
 }
 
 /* ---------- кадастр ---------- */
-const CAT_FEED = 'https://www.catastro.hacienda.gob.es/INSPIRE/buildings/08/ES.SDGC.bu.atom_08.xml';
-async function catastro() {
-  const dir = path.join(RAW, 'catastro'), zip = path.join(RAW, 'catastro.zip');
+// INSPIRE BU (здания) и CP (участки) — ATOM-ленты провинции 08, архив муниципалитета 08270
+const CAT = {
+  bu: { feed: 'https://www.catastro.hacienda.gob.es/INSPIRE/buildings/08/ES.SDGC.bu.atom_08.xml', dir: 'catastro', zip: 'catastro.zip', what: 'здания' },
+  cp: { feed: 'https://www.catastro.hacienda.gob.es/INSPIRE/CadastralParcels/08/ES.SDGC.CP.atom_08.xml', dir: 'parcels', zip: 'parcels.zip', what: 'участки' },
+};
+async function catastro({ feed, dir: d, zip: z, what }) {
+  const dir = path.join(RAW, d), zip = path.join(RAW, z);
   const gml = () => fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => n.endsWith('.gml')) : [];
-  if (!FORCE && gml().length) return console.log('catastro/ — уже есть:', gml().join(', '));
+  if (!FORCE && gml().length) return console.log(d + '/ — уже есть:', gml().join(', '));
   if (!have(zip)) {
-    console.log('Кадастр: ATOM-лента провинции 08…');
-    const feed = (await get(CAT_FEED)).toString('utf8');
-    // запись муниципалитета: <title> 08270-SITGES buildings</title> … <link rel="enclosure" href="….zip">
-    const entry = feed.split('<entry>').find(e => /<title>\s*08270-SITGES/i.test(e));
+    console.log(`Кадастр (${what}): ATOM-лента провинции 08…`);
+    const xml = (await get(feed)).toString('utf8');
+    // запись муниципалитета: <title> 08270-SITGES …</title> … <link rel="enclosure" href="….zip">
+    const entry = xml.split('<entry>').find(e => /<title>\s*08270-SITGES/i.test(e));
     if (!entry) throw new Error('в ленте нет муниципалитета 08270-SITGES');
     const url = entry.match(/rel="enclosure"\s+href="([^"]+\.zip)"/)[1];
     const upd = (entry.match(/<updated>([^<]+)</) || [])[1];
@@ -83,7 +89,7 @@ async function catastro() {
   // штатный tar Windows (bsdtar) умеет zip; в Git Bash первым в PATH стоит GNU tar, который zip не знает
   const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
   execFileSync(tar, ['-xf', zip, '-C', dir]);
-  for (const n of gml()) console.log('  catastro/' + n, '—', mb(path.join(dir, n)));
+  for (const n of gml()) console.log(`  ${d}/` + n, '—', mb(path.join(dir, n)));
 }
 
 /* ---------- рельеф ICGC ---------- */
@@ -107,6 +113,7 @@ async function dtm() {
 (async () => {
   fs.mkdirSync(RAW, { recursive: true });
   await osm();
-  await catastro();
+  await catastro(CAT.bu);
+  await catastro(CAT.cp);
   await dtm();
 })().catch(e => { console.error('Ошибка:', e.message); process.exit(1); });

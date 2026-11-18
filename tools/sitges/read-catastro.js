@@ -2,6 +2,8 @@
 // Координаты в файлах — уже EPSG:25831 (E N парами в gml:posList).
 //   parts     — части зданий (buildingpart.gml): { bid, rings: [внешнее, …дыры], floors, below }
 //   buildings — здания (building.gml): Map bid → { use, year, dwellings }
+// readParcels() — участки INSPIRE CP (raw/parcels/*.cadastralparcel.gml): [{ ref, rings: [внешнее, …дыры], rustic }];
+//   сельские участки с номером ≥ 9000 (дороги, ручьи — общественные земли) выброшены: это не «забор», а сама дорога
 const fs = require('fs');
 const path = require('path');
 const { RAW } = require('./geo');
@@ -9,8 +11,8 @@ const { RAW } = require('./geo');
 // назначение здания (currentUse) → код
 const USES = ['1_residential', '2_agriculture', '3_industrial', '4_1_office', '4_2_retail', '4_3_publicServices'];
 
-function gmlFile(suffix) {
-  const dir = path.join(RAW, 'catastro');
+function gmlFile(suffix, sub = 'catastro') {
+  const dir = path.join(RAW, sub);
   const f = fs.readdirSync(dir).find(n => n.endsWith(suffix));
   if (!f) throw new Error('нет файла *' + suffix + ' — сначала node tools/sitges/download.js');
   return fs.readFileSync(path.join(dir, f), 'utf8');
@@ -56,4 +58,21 @@ function readCatastro() {
   return { parts, buildings };
 }
 
-module.exports = { readCatastro, USES };
+function readParcels() {
+  const out = [], stat = { all: 0, publicRustic: 0 };
+  const g = gmlFile('.cadastralparcel.gml', 'parcels');
+  for (const m of g.matchAll(/<cp:CadastralParcel gml:id="ES\.SDGC\.CP\.([^"]+)">([\s\S]*?)<\/cp:CadastralParcel>/g)) {
+    stat.all++;
+    // сельский участок: 08270 A ППП NNNNN (полигон, номер); номера 9000+ — дороги и ручьи
+    const ref = m[1], rustic = /^\d{5}[A-Z]/.test(ref);
+    if (rustic && +ref.slice(9, 14) >= 9000) { stat.publicRustic++; continue; }
+    let cur = null;
+    for (const r of rings(m[2])) {
+      if (r.outer) out.push(cur = { ref, rings: [r.pts], rustic });
+      else if (cur) cur.rings.push(r.pts);
+    }
+  }
+  return { parcels: out, stat };
+}
+
+module.exports = { readCatastro, readParcels, USES };

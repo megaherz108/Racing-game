@@ -2,9 +2,12 @@
 //   Полотно — лента по точкам улицы чуть выше рельефа, текстура в мировых координатах (на перекрёстках ленты
 //     перекрываются без шва): асфальт, плитка, брусчатка, бетон, грунт; велодорожки — красноватый асфальт.
 //   Тротуары — приподнятые на бордюр полосы плитки «панот» с гранитной кромкой; на перекрёстках обрезаны по проезжей
-//     части другой улицы (край ищется делением пополам — косые углы ровные). Верх и бордюр — сетка столкновений
+//     части другой улицы (край ищется делением пополам — косые углы ровные), у скруглённых углов (C.corners) — по
+//     точке касания (по длине дуги улицы): дальше угловой кусок по дуге, его концы — точно сечения полос (стык без
+//     ступеньки); наружный край — дуга или острый угол до дома; асфальт угла — веером до дуги. Верх и бордюр — сетка столкновений
 //     Rapier (world.meshColliders, js/physics.js): колесо на бордюре подпрыгивает.
-//   Разметка — прерывистая ось двусторонних улиц (кроме перекрёстков), «зебры» у концов улиц с тротуарами.
+//   Разметка — прерывистая ось двусторонних улиц (кроме перекрёстков), «зебры» у концов улиц с тротуарами (за точками
+//     касания скруглённых углов).
 //   Мосты и путепроводы — настил (Decks) с парапетами (выемки с откосами под ними — в раскладке).
 //   Ж/д — балласт со шпалами, рельсы, ограда вдоль путей (кроме промежутков между соседними путями).
 //   Граница игровой области на суше — каменная стена; где через неё уходит улица — бетонные блоки.
@@ -202,13 +205,44 @@ function sitgesBuildRoads(K) {
   }
 
   /* ---------- тротуары: полоса между проезжей частью и фасадом, на бордюре ---------- */
-  // точка внутри проезжей части другой улицы
-  // (только среди отрезков cand — соседей текущего отрезка тротуара)
-  let cand = [];
-  const inOther = (st, x, z) => {
+  // точка внутри проезжей части другой улицы или в зоне скруглённого угла этой стороны улицы (до касания — там
+  // тротуар угла); только среди cand / candC — соседей текущего отрезка тротуара
+  let cand = [], candC = [], curSide = 0;
+  const cornersNear = (x0, x1, z0, z1) => {
+    const out = new Set();
+    for (let ci = Math.floor(x0 / 16); ci <= Math.floor(x1 / 16); ci++)
+      for (let cj = Math.floor(z0 / 16); cj <= Math.floor(z1 / 16); cj++) for (const c of C.cornersAt(ci * 16 + 1, cj * 16 + 1)) out.add(c);
+    return [...out];
+  };
+  // зона угла — по длине дуги улицы: от узла (и чуть за него) до касания X.s; угловой кусок начинается ровно там же
+  // (его концы — сечения полосы при X.s), поэтому стык без ступеньки и торцевой стенки
+  const inZone = (st, s) => {
+    for (const c of candC) for (const X of [c.a, c.b]) {
+      // рукав без тротуара угла (w = 0) полосу не режет: её обрезает проезжая часть другой улицы
+      if (X.st !== st || X.side !== curSide || X.w <= 0) continue;
+      const sJ = st.v[X.i].s, al = (s - sJ) * X.dir;
+      if (al >= (X.s - sJ) * X.dir) continue;
+      // за узел — на wz + 1,5 м (огрызки полосы у перекрёстка), но не на рукав с другим углом этой же стороны
+      if (al >= 0) return true;
+      const twin = candC.some(c2 => [c2.a, c2.b].some(Y => Y !== X && Y.st === st && Y.side === curSide && Y.i === X.i && Y.dir === -X.dir && Y.w > 0));
+      if (!twin && al >= -(X.wz + 1.5)) return true;
+    }
+    return false;
+  };
+  // граница зоны угла рядом с s (для точной обрезки и без торца) — её s, иначе null
+  const zoneEdge = (st, s) => {
+    for (const c of candC) for (const X of [c.a, c.b]) if (X.st === st && X.side === curSide && X.w > 0 && Math.abs(s - X.s) < 0.05) return X.s;
+    return null;
+  };
+  const inOther = (st, x, z, s) => {
+    if (candC.length && inZone(st, s)) return true;
     for (const [o, i] of cand) {
       const a = o.v[i], b = o.v[i + 1], dx = b.x - a.x, dz = b.z - a.z, LL = dx * dx + dz * dz || 1;
-      const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / LL, 0, 1), ex = x - a.x - dx * t, ez = z - a.z - dz * t, hw = a.hw + (b.hw - a.hw) * t;
+      const t0 = ((x - a.x) * dx + (z - a.z) * dz) / LL;
+      // конец улицы обрезан поперёк, без полукруга: иначе широкая улица (пешеходная, hw 4 м), кончающаяся в узле,
+      // откусывает край тротуара соседней
+      if ((t0 < 0 && i === 0) || (t0 > 1 && i === o.v.length - 2)) continue;
+      const t = clamp(t0, 0, 1), ex = x - a.x - dx * t, ez = z - a.z - dz * t, hw = a.hw + (b.hw - a.hw) * t;
       if (ex * ex + ez * ez < hw * hw) return true;
     }
     return false;
@@ -219,6 +253,7 @@ function sitgesBuildRoads(K) {
     const v = st.v, lift = P.lift.drive;
     for (const side of [0, 1]) {
       const sg = side ? -1 : 1;
+      curSide = side;
       // точки внутреннего (у бордюра) и внешнего края на отрезке i при параметре t
       const edge = (i, t, outer) => {
         const a = v[i], b = v[i + 1];
@@ -230,32 +265,60 @@ function sitgesBuildRoads(K) {
         const [ax, az] = offs(a, sg * (a.hw + w * 0.5)), [bx, bz] = offs(b, sg * (b.hw + w * 0.5));
         return [ax + (bx - ax) * t, az + (bz - az) * t];
       };
-      // граница «свободно / занято» между t0 (свободно) и t1 — делением пополам по краю outer
+      const sAt = (i, t) => v[i].s + (v[i + 1].s - v[i].s) * t;
+      // граница «свободно / занято» между t0 (свободно) и t1 — делением пополам по краю outer; у границы зоны угла —
+      // точно по её s
       const cutT = (i, t0, t1, outer) => {
-        const free0 = !inOther(st, ...edge(i, t0, outer)), free1 = !inOther(st, ...edge(i, t1, outer));
+        const free0 = !inOther(st, ...edge(i, t0, outer), sAt(i, t0)), free1 = !inOther(st, ...edge(i, t1, outer), sAt(i, t1));
         if (free0 === free1) return free0 ? t1 : t0;
         let lo = t0, hi = t1;
-        for (let k = 0; k < 7; k++) { const m = (lo + hi) / 2; if (!inOther(st, ...edge(i, m, outer)) === free0) lo = m; else hi = m; }
-        return (lo + hi) / 2;
+        for (let k = 0; k < 9; k++) { const m = (lo + hi) / 2; if (!inOther(st, ...edge(i, m, outer), sAt(i, m)) === free0) lo = m; else hi = m; }
+        const t = (lo + hi) / 2, sz = candC.length ? zoneEdge(st, sAt(i, t)) : null;
+        return sz === null ? t : clamp((sz - v[i].s) / Math.max(1e-6, v[i + 1].s - v[i].s), 0, 1);
       };
       let cont = -1;                                       // отрезок, на котором полоса дошла до конца без обрезки
       for (let i = 0; i + 1 < v.length; i++) {
         const a = v[i], b = v[i + 1];
         if (a.sw[side] <= 0 && b.sw[side] <= 0) continue;
         const [p0x, p0z] = offs(a, sg * (a.hw + a.sw[side])), [p1x, p1z] = offs(b, sg * (b.hw + b.sw[side]));
-        cand = C.carriageNear(Math.min(a.x, b.x, p0x, p1x), Math.max(a.x, b.x, p0x, p1x), Math.min(a.z, b.z, p0z, p1z), Math.max(a.z, b.z, p0z, p1z), st);
-        const L = Math.hypot(b.x - a.x, b.z - a.z), n = cand.length ? Math.max(1, Math.ceil(L)) : 1;
-        // свободные куски по 1 м (по середине полосы)
-        const free = []; for (let k = 0; k < n; k++) free.push(!inOther(st, ...mid(i, (k + 0.5) / n)));
+        const bx0 = Math.min(a.x, b.x, p0x, p1x), bx1 = Math.max(a.x, b.x, p0x, p1x), bz0 = Math.min(a.z, b.z, p0z, p1z), bz1 = Math.max(a.z, b.z, p0z, p1z);
+        cand = C.carriageNear(bx0, bx1, bz0, bz1, st);
+        candC = cornersNear(bx0, bx1, bz0, bz1).filter(c => (c.a.st === st && c.a.side === side) || (c.b.st === st && c.b.side === side));
+        const L = Math.hypot(b.x - a.x, b.z - a.z), n0 = cand.length || candC.length ? Math.max(1, Math.ceil(L)) : 1;
+        // куски по ≈ 1 м; границы зон углов (касания) — тоже границы кусков: иначе короткий свободный кусок у вершины
+        // улицы (касание в 0,3 м от неё) проверялся бы по середине занятого куска и пропадал — щель у стыка
+        const br = []; for (let k = 0; k <= n0; k++) br.push(k / n0);
+        for (const c of candC) for (const X of [c.a, c.b]) {
+          if (X.st !== st || X.side !== side || X.w <= 0) continue;
+          const t = (X.s - a.s) / Math.max(1e-6, b.s - a.s);
+          if (t > 1e-3 && t < 1 - 1e-3) br.push(t);
+        }
+        br.sort((p, q) => p - q);
+        for (let k = br.length - 1; k > 0; k--) if (br[k] - br[k - 1] < 1e-4) br.splice(k, 1);
+        const n = br.length - 1, md = k => (br[k] + br[k + 1]) / 2;
+        // свободные куски (по середине полосы)
+        const free = []; for (let k = 0; k < n; k++) free.push(!inOther(st, ...mid(i, md(k)), sAt(i, md(k))));
         for (let k = 0; k < n;) {
           if (!free[k]) { k++; continue; }
           let e = k; while (e < n && free[e]) e++;
-          // отрезок свободен от k/n до e/n; края уточнить по внутренней и внешней кромке отдельно
-          const tI0 = k ? cutT(i, k / n, (k - 1) / n, false) : 0, tO0 = k ? cutT(i, k / n, (k - 1) / n, true) : 0;
-          const tI1 = e < n ? cutT(i, (e - 1) / n, e / n, false) : 1, tO1 = e < n ? cutT(i, (e - 1) / n, e / n, true) : 1;
-          const nx2 = v[i + 2], cutStart = k > 0 || cont !== i - 1, cutEnd = e < n || !nx2 || (b.sw[side] <= 0 && nx2.sw[side] <= 0);
-          if (e === n) cont = i;
+          // отрезок свободен от br[k] до br[e]; края уточнить по внутренней и внешней кромке отдельно — от середины
+          // крайнего свободного куска до конца соседнего занятого (граница может лежать и в том, и в другом); конец
+          // отрезка внутри зоны угла (граница — в крайнем куске до его середины) — тоже искать
+          const z0 = k === 0 && candC.length > 0 && inZone(st, a.s), z1 = e === n && candC.length > 0 && inZone(st, b.s);
+          const tI0 = k ? cutT(i, md(k), br[k - 1], false) : z0 ? cutT(i, md(0), 0, false) : 0;
+          const tO0 = k ? cutT(i, md(k), br[k - 1], true) : z0 ? cutT(i, md(0), 0, true) : 0;
+          const tI1 = e < n ? cutT(i, md(e - 1), br[e + 1], false) : z1 ? cutT(i, md(n - 1), 1, false) : 1;
+          const tO1 = e < n ? cutT(i, md(e - 1), br[e + 1], true) : z1 ? cutT(i, md(n - 1), 1, true) : 1;
+          const nx2 = v[i + 2];
+          // торец — где полоса обрезана, кроме стыка с угловым куском
+          const atC = t => candC.length > 0 && zoneEdge(st, sAt(i, t)) !== null;
+          const cutStart = (k > 0 || z0 || cont !== i - 1) && !atC(tI0), cutEnd = (e < n || z1 || !nx2 || (b.sw[side] <= 0 && nx2.sw[side] <= 0)) && !atC(tI1);
+          const k0 = k;
+          if (e === n && !z1) cont = i;
           k = e;
+          // обрезок короче 1,6 м, зажатый между проезжими частями с обеих сторон, — не тротуар (островок на развилке);
+          // кусок между двумя углами (короткий рукав) — тротуар
+          if (k0 > 0 && e < n && (br[e] - br[k0]) * L < 1.6 && !atC(tI0) && !atC(tI1)) continue;
           // углы: внутренний / внешний край в начале и в конце
           const I0 = edge(i, tI0, false), O0 = edge(i, tO0, true), I1 = edge(i, tI1, false), O1 = edge(i, tO1, true);
           // гранитная кромка у бордюра и плитка за ней
@@ -294,6 +357,88 @@ function sitgesBuildRoads(K) {
     }
   }
 
+  /* ---------- скруглённые углы: асфальт до дуги, тротуар полосой между дугами r и r − w ---------- */
+  let nCorner = 0;
+  for (const c of C.corners) {
+    const [mat, tint] = surfOf(c.a.st), lift = mat === 'asphalt' ? P.lift.drive : P.lift.paved, lw = P.lift.drive;
+    const N = Math.max(3, Math.ceil(Math.abs(c.da) * c.r / 0.8));
+    // асфальт угла заходит на 0,4 м внутрь проезжих частей (лента улицы у узла не точно по бордюрной линии)
+    const m = 0.4, Kx = [c.K[0] - (c.a.n[0] + c.b.n[0]) * m, c.K[1] - (c.a.n[1] + c.b.n[1]) * m];
+    const yK = g(Kx[0], Kx[1]) + lift, nn = gn(c.K[0], c.K[1]);
+    const v3a = p => [p[0], g(p[0], p[1]) + lift, p[1]];
+    // концы углового куска — точно сечения прямых полос тротуара при s касания (как edge() у полос): дуга
+    // подправляется сдвигом, плавно меняющимся от одного конца к другому
+    const endOf = X => {
+      const v = X.st.v, sg = X.side ? -1 : 1;
+      let i = 0; while (i < v.length - 2 && v[i + 1].s < X.s) i++;
+      const a = v[i], b = v[i + 1], t = clamp((X.s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
+      const L2 = (p, q) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      // наружный край — по ширине угла X.w (у полосы там та же ширина; рукав без полосы за касанием — 0)
+      return { I: L2(offs(a, sg * (a.hw + 0.05)), offs(b, sg * (b.hw + 0.05))), O: L2(offs(a, sg * (a.hw + X.w)), offs(b, sg * (b.hw + X.w))) };
+    };
+    const EA = endOf(c.a), EB = endOf(c.b);
+    const arcAt = (k, rr) => { const an = c.a0 + c.da * k / N; return [c.O[0] + Math.cos(an) * rr, c.O[1] + Math.sin(an) * rr]; };
+    const sub = (p, q) => [p[0] - q[0], p[1] - q[1]];
+    const dIa = sub(EA.I, arcAt(0, c.r)), dIb = sub(EB.I, arcAt(N, c.r));
+    const dOa = sub(EA.O, arcAt(0, Math.max(0, c.r - c.a.w))), dOb = sub(EB.O, arcAt(N, Math.max(0, c.r - c.b.w)));
+    // острый наружный угол: пересечение наружных краёв полос (по направлениям рукавов), вершина Q — на своём кольце
+    let Q = null, kq = 0;
+    if (c.sharp) {
+      const den = c.a.u[0] * c.b.u[1] - c.a.u[1] * c.b.u[0];
+      Q = c.sharp;
+      if (Math.abs(den) > 1e-6) {
+        const t = ((EB.O[0] - EA.O[0]) * c.b.u[1] - (EB.O[1] - EA.O[1]) * c.b.u[0]) / den, q = [EA.O[0] + c.a.u[0] * t, EA.O[1] + c.a.u[1] * t];
+        if (Math.hypot(q[0] - c.sharp[0], q[1] - c.sharp[1]) < 1.5) Q = q;
+      }
+      const L1 = Math.hypot(Q[0] - EA.O[0], Q[1] - EA.O[1]), L2 = Math.hypot(EB.O[0] - Q[0], EB.O[1] - Q[1]);
+      kq = clamp(Math.round(N * L1 / Math.max(1e-6, L1 + L2)), 1, N - 1);
+    }
+    const TA_ = X => [X.T[0] - X.n[0] * m, X.T[1] - X.n[1] * m];
+    const dA = Math.hypot(EA.O[0] - EA.I[0], EA.O[1] - EA.I[1]), dB = Math.hypot(EB.O[0] - EB.I[0], EB.O[1] - EB.I[1]);
+    quad(mat, [v3a(Kx), v3a(TA_(c.a)), v3a(EA.I), v3a(Kx)], nn, tint);
+    quad(mat, [v3a(Kx), v3a(EB.I), v3a(TA_(c.b)), v3a(Kx)], nn, tint);
+    const ring = k => {
+      const f = k / N, an = c.a0 + c.da * f, e = [Math.cos(an), Math.sin(an)], w = c.a.w + (c.b.w - c.a.w) * f;
+      const ai = arcAt(k, c.r), I = [ai[0] + dIa[0] + (dIb[0] - dIa[0]) * f, ai[1] + dIa[1] + (dIb[1] - dIa[1]) * f];
+      let Ou;
+      if (Q) Ou = k <= kq ? [EA.O[0] + (Q[0] - EA.O[0]) * k / kq, EA.O[1] + (Q[1] - EA.O[1]) * k / kq]
+        : [Q[0] + (EB.O[0] - Q[0]) * (k - kq) / (N - kq), Q[1] + (EB.O[1] - Q[1]) * (k - kq) / (N - kq)];
+      else { const ao = arcAt(k, Math.max(0, c.r - w)); Ou = [ao[0] + dOa[0] + (dOb[0] - dOa[0]) * f, ao[1] + dOa[1] + (dOb[1] - dOa[1]) * f]; }
+      // гранитная кромка — как у полос (P.edge от ширины тротуара), у острого угла шире пропорционально
+      const dist = Math.hypot(Ou[0] - I[0], Ou[1] - I[1]), dEnd = dA + (dB - dA) * f;
+      const fe = Math.min(1, P.edge / Math.max(0.2, w * dist / Math.max(1e-3, dEnd)));
+      const E = [I[0] + (Ou[0] - I[0]) * fe, I[1] + (Ou[1] - I[1]) * fe];
+      const yI = g(I[0], I[1]) + lw, yO = clamp(g(Ou[0], Ou[1]) + lw, yI, yI + 0.15 * Math.max(0.5, w));
+      return { e, w, I, Ou, E, yI, yO, yE: yI + (yO - yI) * fe };
+    };
+    const v3 = (p, y) => [p[0], y, p[1]], T = P.curb;
+    let A = ring(0);
+    for (let k = 1; k <= N; k++) {
+      const B = ring(k), em = [(A.e[0] + B.e[0]) / 2, (A.e[1] + B.e[1]) / 2];
+      // асфальт: веер из K, поперёк — через ≤ 2,5 м по рельефу (крупный треугольник уходит под рельеф)
+      const M = Math.max(1, Math.ceil(Math.max(Math.hypot(A.I[0] - Kx[0], A.I[1] - Kx[1]), Math.hypot(B.I[0] - Kx[0], B.I[1] - Kx[1])) / 2.5));
+      const fan = (P2, f) => { const x = Kx[0] + (P2[0] - Kx[0]) * f, z = Kx[1] + (P2[1] - Kx[1]) * f; return [x, f ? g(x, z) + lift : yK, z]; };
+      for (let j = 0; j < M; j++) {
+        const f0 = j / M, f1 = (j + 1) / M;
+        quad(mat, j ? [fan(A.I, f0), fan(A.I, f1), fan(B.I, f1), fan(B.I, f0)] : [fan(A.I, 0), fan(A.I, f1), fan(B.I, f1), fan(A.I, 0)], nn, tint);
+      }
+      // нет тротуара на обоих концах куска — только асфальт (без бордюра)
+      if (A.w < 0.05 && B.w < 0.05) { A = B; continue; }
+      // верх: гранитная кромка у бордюра и плитка
+      quad('panot', [v3(A.I, A.yI + T), v3(B.I, B.yI + T), v3(B.E, B.yE + T), v3(A.E, A.yE + T)], nn, 0xdedad2);
+      quad('panot', [v3(A.E, A.yE + T), v3(B.E, B.yE + T), v3(B.Ou, B.yO + T), v3(A.Ou, A.yO + T)], nn, 0xffffff);
+      // бордюр по дуге — лицом к дороге (от центра); наружный край — к кварталу
+      wallQuad('panot', A.I[0], A.I[1], A.yI - 0.02, A.yI + T, B.I[0], B.I[1], B.yI - 0.02, B.yI + T, em[0], em[1], 0xd6d2ca);
+      if (Q || c.r - Math.max(c.a.w, c.b.w) > 0.3) wallQuad('panot', A.Ou[0], A.Ou[1], A.yO - 0.3, A.yO + T, B.Ou[0], B.Ou[1], B.yO - 0.3, B.yO + T, -em[0], -em[1], 0xb8b4ac);
+      // столкновения: верх и бордюр
+      cquad(v3(A.I, A.yI + T), v3(B.I, B.yI + T), v3(B.Ou, B.yO + T), v3(A.Ou, A.yO + T));
+      cquad(v3(A.I, A.yI - 0.1), v3(B.I, B.yI - 0.1), v3(B.I, B.yI + T), v3(A.I, A.yI + T));
+      addWalk([A.I, B.I, B.Ou, A.Ou], A.yI + T);
+      A = B;
+    }
+    nCorner++;
+  }
+
   /* ---------- разметка: ось двусторонних улиц, «зебры» у перекрёстков ---------- */
   let nDash = 0, nZebra = 0;
   const AXIS = new Set(['secondary', 'tertiary', 'unclassified', 'residential']);
@@ -328,11 +473,21 @@ function sitgesBuildRoads(K) {
       const dir = [(q0.x - E.x), (q0.z - E.z)], dl = Math.hypot(...dir), ux = dir[0] / dl, uz = dir[1] / dl;
       let s = 0;
       while (s < 25 && C.carriageAt(E.x + ux * s, E.z + uz * s, st, margin)) s += 0.5;
+      // скруглённые углы у этого конца: переход — сразу за точками касания (между прямыми участками бордюра)
+      const ei = end ? v.length - 1 : 0;
+      for (const c of C.cornersAt(E.x, E.z)) for (const X of [c.a, c.b]) if (X.st === st && X.i === ei) s = Math.max(s, end ? st.len - X.s : X.s);
       if (s >= 25 || s + 4 > st.len / 2) continue;
-      const Z = P.zebra, x0 = E.x + ux * (s + 0.6), z0 = E.z + uz * (s + 0.6), hw = E.hw - 0.4;
+      // переход — поперёк оси улицы в её точке на середине полос (ось у узла изгибается: сдвиг к середине между
+      // границами), ширина — по этой точке
+      const Z = P.zebra, sm = s + 0.6 + Z.len / 2, sa = end ? st.len - sm : sm;
+      let j = 0; while (j < v.length - 2 && v[j + 1].s < sa) j++;
+      const qa = v[j], qb = v[j + 1], tq = clamp((sa - qa.s) / Math.max(1e-6, qb.s - qa.s), 0, 1);
+      const tl = Math.hypot(qb.x - qa.x, qb.z - qa.z) || 1, sgn = end ? -1 : 1;
+      const zx = (qb.x - qa.x) / tl * sgn, zz = (qb.z - qa.z) / tl * sgn;
+      const x0 = qa.x + (qb.x - qa.x) * tq - zx * Z.len / 2, z0 = qa.z + (qb.z - qa.z) * tq - zz * Z.len / 2, hw = qa.hw + (qb.hw - qa.hw) * tq - 0.4;
       for (let c = -hw + Z.stripe / 2; c <= hw - Z.stripe / 2; c += Z.step) {
-        const cx = x0 - uz * c, cz = z0 + ux * c, w = Z.stripe / 2;
-        const p = (f, o) => { const x = cx + ux * f - uz * o, z = cz + uz * f + ux * o; return [x, g(x, z) + P.lift.drive + 0.012, z]; };
+        const cx = x0 - zz * c, cz = z0 + zx * c, w = Z.stripe / 2;
+        const p = (f, o) => { const x = cx + zx * f - zz * o, z = cz + zz * f + zx * o; return [x, g(x, z) + P.lift.drive + 0.012, z]; };
         quad('white', [p(0, -w), p(Z.len, -w), p(Z.len, w), p(0, w)], UP, 0xeeeae0, [[0, 0], [0, 0], [0, 0], [0, 0]]);
       }
       nZebra++;
@@ -544,6 +699,6 @@ function sitgesBuildRoads(K) {
   };
   Object.assign(K, {
     meshColliders, walkAt, roadSurf: st => surfOf(st)[2],
-    roadsStats: { ribbon: nRibbon, walk: nWalk, dash: nDash, zebra: nZebra, deck: nDeck, fence: nFence, wall: nWall, blocks: blocks.length, bollards: bollards.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
+    roadsStats: { ribbon: nRibbon, walk: nWalk, corner: nCorner, dash: nDash, zebra: nZebra, deck: nDeck, fence: nFence, wall: nWall, blocks: blocks.length, bollards: bollards.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
   });
 }
