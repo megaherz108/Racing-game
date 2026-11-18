@@ -8,9 +8,11 @@
 //   Пересечения с ж/д: в одном уровне — переезд; мост / тоннель (по OSM) — путепровод: верхняя линия на пролёте —
 //     настил по прямой между высотами краёв, нижняя опускается под него (просвет clear) с уклоном grade; в рельефе
 //     под ней — выемка с откосами (bank). Рельеф игровой сетки меняется здесь, до домов.
+//   Ровное полотно (sitgesEvenRoads) — до профилей: рельеф сетки под улицами и путями сглажен (горбы лидара убраны).
 //   carriageAt(x, z) — проезжая часть под точкой: покрытие, обрезка тротуаров на перекрёстках, монеты.
-// Определяет: SITGES_R, sitgesPlanRoads.
-// Использует: clamp (js/core.js); SITGES_DRIVE (js/maps/sitges/minimap.js).
+// Определяет: SITGES_R, sitgesPlanRoads, sitgesEvenRoads.
+// Использует: clamp (js/core.js); smooth01 (js/world.js); SITGES_T (js/maps/sitges/terrain.js); SITGES_DRIVE
+//   (js/maps/sitges/minimap.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -52,6 +54,14 @@ const SITGES_R = {
   railHalf: 2.4,      // полуширина выемки под путь, м
   span: 3,            // настил шире нижней линии на столько метров с каждой стороны
   bank: 0.9,          // откос выемки, м на м
+  // подходы к мостам OSM: плечо — пока рельеф к краю моста поднимается круче rise м на м, не дальше ext м;
+  // насыпь под подходом — откос fillBank м на м
+  approach: { rise: 0.04, ext: 25, fillBank: 0.35 },
+  // ровное полотно: рельеф под улицами (проезжая часть и тротуары) и путями сглажен — в лидаре 10 м горбы 0,2–1,4 м
+  // на 10–20 м, настоящий асфальт ровный. Среднее по узлам полотна в круге rad·sigma м (вес — Гаусс sigma м,
+  // соседи выше / ниже на range м и больше не берутся: улица уровнем выше на склоне не тянет к себе); за краем
+  // полотна — переход к рельефу на edge м; passes — сколько раз
+  even: { sigma: 6, rad: 2, range: 4, edge: 4, passes: 2 },
 };
 
 function sitgesPlanRoads(C) {
@@ -272,15 +282,31 @@ function sitgesPlanRoads(C) {
     .map(r => ({ pts: r.pts, sb: r.pts.slice(1).map(() => r.bridge), st: r.pts.slice(1).map(() => false), a: { siding: r.siding, oneway: 0 } }));
   const tracks = chainUp(railWays, (a, b) => a.siding === b.siding).map(w => ({ siding: w.a.siding, v: resample(w), len: plen(w.pts) }));
 
-  /* ---------- профили: высота по рельефу, мосты OSM — по прямой между краями ---------- */
-  const { ground } = C;
+  /* ---------- ровное полотно: рельеф игровой сетки под улицами и путями сглажен ---------- */
+  sitgesEvenRoads(C, streets, tracks);
+
+  /* ---------- профили: высота по рельефу, мосты OSM — по прямой между «плечами» подходов ---------- */
+  // концы моста OSM в рельефе 10 м лежат уже на склоне балки / выемки под ним: настил по ним провисал на 1–4 м.
+  // Плечо — от конца моста наружу, пока рельеф поднимается круче approach.rise (не дальше approach.ext м); настил —
+  // по прямой между плечами, подходы ниже этой прямой — насыпь (q.fill, рельеф поднимается ниже, после выемок)
+  const { ground } = C, AP = P.approach;
   const profile = line => {
     const v = line.v;
-    for (const q of v) { q.y = ground(q.x, q.z); q.deck = false; }
+    for (const q of v) { q.y = ground(q.x, q.z); q.deck = false; q.fill = false; }
     for (let i = 0; i < v.length - 1;) {
       if (!v[i].br) { i++; continue; }
       let j = i; while (j < v.length - 1 && v[j].br) j++;
-      for (let k = i; k <= j; k++) { v[k].y = v[i].y + (v[j].y - v[i].y) * (v[k].s - v[i].s) / Math.max(1e-6, v[j].s - v[i].s); v[k].deck = k < j; }
+      let a = i, b = j;
+      while (a > 0 && !v[a - 1].br && !v[a - 1].deck && v[i].s - v[a - 1].s <= AP.ext &&
+        v[a - 1].y - v[a].y > AP.rise * (v[a].s - v[a - 1].s)) a--;
+      while (b < v.length - 1 && !v[b].br && v[b + 1].s - v[j].s <= AP.ext &&
+        v[b + 1].y - v[b].y > AP.rise * (v[b + 1].s - v[b].s)) b++;
+      const ya = v[a].y, yb = v[b].y, L = Math.max(1e-6, v[b].s - v[a].s);
+      for (let k = a; k <= b; k++) {
+        const y = ya + (yb - ya) * (v[k].s - v[a].s) / L;
+        if (k >= i && k < j) { v[k].y = y; v[k].deck = true; }
+        else if (y > v[k].y + 0.02) { v[k].y = y; v[k].fill = true; }
+      }
       i = j;
     }
   };
@@ -384,6 +410,28 @@ function sitgesPlanRoads(C) {
 
   /* ---------- выемки: рельеф игровой сетки опускается под нижние линии ---------- */
   const { X0, Z0, NX, NZ, S, H } = T, cuts = [];
+  // насыпи подходов к мостам (до выемок: выемка под путепроводом сильнее насыпи): рельеф поднимается до полотна,
+  // за краем — откос fillBank
+  const fill = (line, halfAt) => {
+    const v = line.v, FB = P.approach.fillBank;
+    for (let i = 0; i + 1 < v.length; i++) {
+      const a = v[i], b = v[i + 1];
+      if (a.deck || (!a.fill && !b.fill)) continue;
+      const ha = halfAt(a), hb = halfAt(b), up = Math.max(a.y - ground(a.x, a.z), b.y - ground(b.x, b.z), 0);
+      const hm = Math.max(ha, hb) + 0.3 + up / FB + S;
+      const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - hm - X0) / S)), i1 = Math.min(NX - 1, Math.ceil((Math.max(a.x, b.x) + hm - X0) / S));
+      const j0 = Math.max(0, Math.floor((Math.min(a.z, b.z) - hm - Z0) / S)), j1 = Math.min(NZ - 1, Math.ceil((Math.max(a.z, b.z) + hm - Z0) / S));
+      const dx = b.x - a.x, dz = b.z - a.z, LL = dx * dx + dz * dz || 1;
+      for (let jj = j0; jj <= j1; jj++) for (let ii = i0; ii <= i1; ii++) {
+        const x = X0 + ii * S, z = Z0 + jj * S, t = clamp(((x - a.x) * dx + (z - a.z) * dz) / LL, 0, 1);
+        const d = Math.hypot(x - a.x - dx * t, z - a.z - dz * t), hh = ha + (hb - ha) * t;
+        const k = jj * NX + ii, y = a.y + (b.y - a.y) * t - Math.max(0, d - hh - 0.3) * FB;
+        if (y > H[k]) H[k] = y;
+      }
+    }
+  };
+  for (const st of streets) if (st.v.some(q => q.fill)) fill(st, q => q.hw + Math.max(q.sw[0], q.sw[1]));
+  for (const tr of tracks) if (tr.v.some(q => q.fill)) fill(tr, () => P.railHalf);
   const carve = (line, halfAt) => {
     const v = line.v;
     for (let i = 0; i + 1 < v.length; i++) {
@@ -402,10 +450,23 @@ function sitgesPlanRoads(C) {
         if (y < H[k]) H[k] = y;
       }
     }
-    cuts.push(line);
+    if (!cuts.includes(line)) cuts.push(line);
   };
   for (const st of streets) if (st.v.some(q => q.cut)) carve(st, q => q.hw + Math.max(q.sw[0], q.sw[1]));
   for (const tr of tracks) if (tr.v.some(q => q.cut)) carve(tr, () => P.railHalf);
+  // настил продлевается, пока под концом рельеф ниже полотна (выемка улицы под коротким мостом шире него вместе
+  // с откосами): конец настила — снова на рельефе; не дальше approach.ext м с каждой стороны
+  const sinks = q => ground(q.x, q.z) < q.y - 0.15;
+  for (const line of [...streets, ...tracks]) {
+    const v = line.v;
+    for (let i = 0; i < v.length - 1; i++) {
+      if (!v[i].deck || (i > 0 && v[i - 1].deck)) continue;
+      let j = i; while (j < v.length - 1 && v[j].deck) j++;
+      for (let k = i; k > 0 && sinks(v[k]) && v[i].s - v[k - 1].s <= P.approach.ext; k--) v[k - 1].deck = true;
+      for (let k = j; k < v.length - 1 && sinks(v[k]) && v[k + 1].s - v[j].s <= P.approach.ext; k++) v[k].deck = true;
+      while (i < v.length - 1 && v[i].deck) i++;
+    }
+  }
   // после выемок — высоты точек на рельефе заново (кроме настилов)
   for (const line of [...streets, ...tracks]) for (const q of line.v) if (!q.deck) q.y = ground(q.x, q.z);
 
@@ -809,4 +870,67 @@ function sitgesPlanRoads(C) {
 
   Object.assign(C, { streets, tracks, xings, unders, cuts, corners, cornersAt, carriageAt, carriageNear,
     roadStats: { width: wst, streets: streets.length, tracks: tracks.length, xings: xings.length, unders: unders.length, dips: unders.map(U => +U.dip.toFixed(1)) } });
+}
+
+// Ровное полотно (SITGES_R.even): рельеф игровой сетки C.terra.H под улицами (проезжими и пешеходными, кроме тропинок
+// и лестниц) и путями сглаживается до профилей, мостов и выемок — по нему потом лягут полотно, тротуары и физика.
+// Узел «полотна» — не дальше полуширины с тротуарами от оси отрезка (мосты OSM — нет: под ними свой рельеф);
+// новое значение — взвешенное среднее узлов полотна вокруг (Гаусс по расстоянию × вес по разнице высот), за краем
+// полотна — плавно к старому рельефу. Море и волнорезы не трогаем, суша у воды — не ниже берега (как в terrain.js).
+function sitgesEvenRoads(C, streets, tracks) {
+  const { X0, Z0, NX, NZ, S, H, sea, thin, dSea } = C.terra, E = SITGES_R.even, T = SITGES_T, N = NX * NZ;
+  const t0 = performance.now(), core = new Uint8Array(N), wt = new Float32Array(N);
+  const mark = (a, b, half) => {
+    const hm = half + E.edge;
+    const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - hm - X0) / S)), i1 = Math.min(NX - 1, Math.ceil((Math.max(a.x, b.x) + hm - X0) / S));
+    const j0 = Math.max(0, Math.floor((Math.min(a.z, b.z) - hm - Z0) / S)), j1 = Math.min(NZ - 1, Math.ceil((Math.max(a.z, b.z) + hm - Z0) / S));
+    const dx = b.x - a.x, dz = b.z - a.z, LL = dx * dx + dz * dz || 1, h2 = half * half, m2 = hm * hm;
+    for (let j = j0; j <= j1; j++) for (let i = i0, k = j * NX + i0; i <= i1; i++, k++) {
+      if (core[k]) continue;
+      const px = X0 + i * S - a.x, pz = Z0 + j * S - a.z, t = clamp((px * dx + pz * dz) / LL, 0, 1);
+      const ex = px - dx * t, ez = pz - dz * t, d2 = ex * ex + ez * ez;
+      if (d2 <= h2) { core[k] = 1; wt[k] = 1; } else if (d2 < m2) wt[k] = Math.max(wt[k], smooth01(1 - (Math.sqrt(d2) - half) / E.edge));
+    }
+  };
+  for (const st of streets) {
+    if ((!st.drive && st.cls !== 'pedestrian') || st.flat) continue;
+    const v = st.v;
+    for (let i = 0; i + 1 < v.length; i++) {
+      if (v[i].br) continue;
+      const a = v[i], b = v[i + 1];
+      mark(a, b, Math.max(a.hw + Math.max(a.sw[0], a.sw[1]), b.hw + Math.max(b.sw[0], b.sw[1])));
+    }
+  }
+  for (const tr of tracks) for (let i = 0; i + 1 < tr.v.length; i++) if (!tr.v[i].br) mark(tr.v[i], tr.v[i + 1], SITGES_R.railHalf);
+  for (let k = 0; k < N; k++) if (sea[k] || thin[k]) { core[k] = 0; wt[k] = 0; }
+  // ядро: веса Гаусса по смещению (di, dj) в круге
+  const R = Math.ceil(E.rad * E.sigma / S), offs = [], gw = [];
+  for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
+    const d2 = (di * di + dj * dj) * S * S;
+    if (d2 > (E.rad * E.sigma) ** 2) continue;
+    offs.push(dj * NX + di); gw.push(Math.exp(-d2 / (2 * E.sigma * E.sigma)));
+  }
+  const lo = Int32Array.from(offs), gwf = Float32Array.from(gw), M = lo.length;
+  // узлы ближе R к краю сетки (это запас за игровым прямоугольником) не трогаем — без проверок границ в цикле
+  const list = [];
+  for (let j = R; j < NZ - R; j++) for (let i = R, k = j * NX + R; i < NX - R; i++, k++) if (wt[k] > 0) list.push(k);
+  const out = new Float32Array(list.length), ir2 = 1 / (E.range * E.range);
+  for (let pass = 0; pass < E.passes; pass++) {
+    for (let n = 0; n < list.length; n++) {
+      const k = list[n], h0 = H[k];
+      let sw = 0, sh = 0;
+      for (let m = 0; m < M; m++) {
+        const q = k + lo[m];
+        if (!core[q]) continue;
+        const hq = H[q], dh = hq - h0, f = 1 - dh * dh * ir2;
+        if (f <= 0) continue;
+        const w = gwf[m] * f * f;
+        sw += w; sh += w * hq;
+      }
+      out[n] = sw > 0 ? h0 + (sh / sw - h0) * wt[k] : h0;
+    }
+    for (let n = 0; n < list.length; n++) H[list[n]] = out[n];
+  }
+  for (const k of list) H[k] = Math.max(H[k], Math.min(T.shoreMax, T.shore0 + T.shoreRise * dSea[k]));
+  C.evenStats = { ms: Math.round(performance.now() - t0), nodes: list.length, core: core.reduce((s, c) => s + c, 0), taps: gw.length };
 }
