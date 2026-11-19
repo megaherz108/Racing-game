@@ -1,7 +1,7 @@
-// Ситжес — ПОСТРОЙКА: железная дорога, тумбы на лестницах, граница игровой области (набор K.rk — roads3d.js).
+// Ситжес — ПОСТРОЙКА: железная дорога, граница игровой области (набор K.rk — roads3d.js).
 //   Ж/д — балласт со шпалами, рельсы, на путепроводах настил и парапеты; ограда вдоль путей, кроме промежутков между
-//   соседними путями, проезжей части и воды. Лестницы перекрыты тумбами (rk.bollards). Граница на суше — каменная
-//   стена; где через неё уходит улица — бетонные блоки (rk.blocks). Меши тумб и блоков — в sitgesBuildRoadMeshes().
+//   соседними путями, проезжей части и воды. Граница на суше — каменная стена; где через неё уходит улица — бетонные
+//   блоки (rk.blocks). Меши блоков — в sitgesBuildRoadMeshes().
 // Определяет: sitgesBuildRail.
 // Использует: MAT (js/core.js); SITGES_GEO (js/maps/sitges/data-geo.js); sitgesCells, sitgesSeg
 //   (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js); SITGES_RB (js/maps/sitges/roads3d.js).
@@ -10,7 +10,7 @@
 
 function sitgesBuildRail(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
-  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   const DK = P.deck;
   /* ---------- железная дорога ---------- */
   const RL = P.rail;
@@ -71,17 +71,6 @@ function sitgesBuildRail(K) {
         if (L > 0.2) grid.addOBB(mx, mz, 0.2, L, Math.atan2(xb - xa, zb - za), RL.fenceH + Math.max(ga, gb) - g(mx, mz));
         cnt.fence++;
       }
-    }
-  }
-
-  /* ---------- лестницы: тумбы на концах ---------- */
-  for (const st of C.streets) {
-    if (st.cls !== 'steps') continue;
-    const v = st.v;
-    for (const end of [0, 1]) {
-      const E = end ? v[v.length - 1] : v[0], N = end ? v[v.length - 2] : v[1], L = Math.hypot(N.x - E.x, N.z - E.z) || 1;
-      const ux = (N.x - E.x) / L, uz = (N.z - E.z) / L, d = Math.min(0.8, L / 2);
-      for (const c of [-0.8, 0, 0.8]) bollards.push([E.x + ux * d - uz * c, E.z + uz * d + ux * c]);
     }
   }
 

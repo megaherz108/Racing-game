@@ -4,7 +4,7 @@
 //     чуть выше рельефа, текстура в мировых координатах (на перекрёстках ленты перекрываются без шва).
 //   sitgesBuildMarks — разметка (ось двусторонних улиц, «зебры» за точками касания углов), мосты и путепроводы улиц
 //     (настил Decks с парапетами).
-//   sitgesBuildRoadMeshes — меши из копилки, тумбы и блоки, сетка столкновений (world.meshColliders), walkAt.
+//   sitgesBuildRoadMeshes — меши из копилки, блоки, сетка столкновений (world.meshColliders), walkAt.
 // Между ними — тротуары (walks3d.js) и ж/д с границей (rail3d.js); порядок — в buildSitges() (js/maps/sitges/build.js):
 // от него зависит порядок вершин в мешах (отпечаток мира).
 // Определяет: SITGES_RB, sitgesRoadTextures, SITGES_RB_TILE, sitgesBuildRoads, sitgesBuildMarks,
@@ -182,7 +182,7 @@ function sitgesBuildRoads(K) {
   };
 
   const cnt = { ribbon: 0, walk: 0, corner: 0, dash: 0, zebra: 0, deck: 0, fence: 0, wall: 0 };
-  K.rk = { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards: [], blocks: [] };
+  K.rk = { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks: [] };
 
   /* ---------- полотно улиц ---------- */
   for (const st of C.streets) {
@@ -212,7 +212,7 @@ function sitgesBuildRoads(K) {
 // разметка (ось, «зебры»), мосты и путепроводы улиц — после тротуаров (порядок геометрии в копилке)
 function sitgesBuildMarks(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
-  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   /* ---------- разметка: ось двусторонних улиц, «зебры» у перекрёстков ---------- */
   const AXIS = new Set(['secondary', 'tertiary', 'unclassified', 'residential']);
   for (const st of C.streets) {
@@ -288,10 +288,10 @@ function sitgesBuildMarks(K) {
   }
 }
 
-// меши из копилки, тумбы и блоки, сетка столкновений тротуаров, walkAt
+// меши из копилки, блоки, сетка столкновений тротуаров, walkAt
 function sitgesBuildRoadMeshes(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
-  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   /* ---------- меши ---------- */
   let tris = 0;
   for (const b of buckets.values()) {
@@ -307,14 +307,6 @@ function sitgesBuildRoadMeshes(K) {
     mesh.userData.keep = true;
     group.add(mesh);
     tris += b.pos.length / 9;
-  }
-  // тумбы: один InstancedMesh, столкновения — круги
-  if (bollards.length) {
-    const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.11, 0.13, 0.9, 8), new THREE.MeshStandardMaterial({ color: 0x3a3c3e, roughness: 0.6, metalness: 0.4 }), bollards.length);
-    const m4 = new THREE.Matrix4();
-    bollards.forEach(([x, z], k) => { im.setMatrixAt(k, m4.makeTranslation(x, g(x, z) + 0.45, z)); grid.addCircle(x, z, 0.13, 0.9); });
-    im.castShadow = im.receiveShadow = true; im.userData.keep = true; im.computeBoundingSphere();
-    group.add(im);
   }
   // бетонные блоки (New Jersey) поперёк улиц на границе
   if (blocks.length) {
@@ -354,6 +346,6 @@ function sitgesBuildRoadMeshes(K) {
   };
   Object.assign(K, {
     meshColliders, walkAt, roadSurf: st => surfOf(st)[2],
-    roadsStats: { ...cnt, blocks: blocks.length, bollards: bollards.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
+    roadsStats: { ...cnt, blocks: blocks.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
   });
 }

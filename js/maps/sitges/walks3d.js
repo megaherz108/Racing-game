@@ -11,7 +11,7 @@
 
 function sitgesBuildWalks(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
-  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   /* ---------- тротуары: полосы по C.walks (обрезка — в раскладке, js/maps/sitges/walks.js), на бордюре ---------- */
   const lift = P.lift.drive;
   for (const W of C.walks) {
