@@ -140,7 +140,19 @@ const KINDS = [
       for (const r of roadPts) if (!best || dist(r.p, q) < dist(best.p, q)) best = r;
       return best && { ...best, id: `steep ${x},${z}`, at: `${x}, ${z}` };
     }).filter(Boolean) },
+  // этап 4а.0: цели — из sv/targets.json ({ kind, id, p: UTM, xz: координаты игры }; пишет проба заборов в игре)
+  { name: 'fence2',  what: 'случайные точки заборов 3б — вид забора, высота, ворота и калитки рядом', k: 15, type: 'point',
+    pick: () => targets('fence2') },
+  { name: 'gate',    what: 'ворота-кандидаты по ортофото (окно 3,5 м на участок) — есть ли там ворота', k: 15, type: 'point',
+    pick: () => targets('gate') },
+  { name: 'wicket',  what: 'входы кадастра у линии забора — есть ли там калитка', k: 10, type: 'point',
+    pick: () => targets('wicket') },
 ];
+function targets(kind) {
+  const f = path.join(DIR, 'targets.json');
+  if (!fs.existsSync(f)) return [];
+  return JSON.parse(fs.readFileSync(f, 'utf8')).filter(t => t.kind === kind).map(t => ({ id: t.id, p: t.p, name: `${kind} ${t.xz.join(' ')}` }));
+}
 
 /* ---------- запросы ---------- */
 function key() {
@@ -183,7 +195,7 @@ const link = (pano, h, p, f) => `https://www.google.com/maps/@?api=1&map_action=
     let n = 0;
     for (const c of k.list) {
       const ll = wgs(...c.p);
-      const m = await meta(ll[0], ll[1], k.type === 'facade' ? 35 : 20, K);
+      const m = await meta(ll[0], ll[1], k.type === 'facade' ? 35 : k.type === 'point' ? 25 : 20, K);
       if (!m || panos.has(m.pano_id)) { skip++; continue; }
       panos.add(m.pano_id);
       const cam = [m.location.lat, m.location.lng], camU = G.utm(...cam);
@@ -197,6 +209,11 @@ const link = (pano, h, p, f) => `https://www.google.com/maps/@?api=1&map_action=
         // наклон — к трети высоты: снизу в кадр попадают цоколь и тротуар, сверху — карниз, неба меньше
         const pitch = Math.max(0, Math.min(20, Math.atan((Math.max(c.floors, 1) * 3.2 * 0.35 - 2.5) / td) * 180 / Math.PI));
         views.push({ h: bearing(cam, wgs(...tq)), p: pitch, f: fov });
+      } else if (k.type === 'point') {
+        // взгляд прямо на точку забора; угол обзора — под ≈ 14 м забора
+        const td = dist(camU, c.p);
+        if (td > 30 || td < 2) { skip++; continue; }
+        views.push({ h: bearing(cam, wgs(...c.p)), p: 0, f: Math.max(55, Math.min(100, 2 * Math.atan(7 / td) * 180 / Math.PI)) });
       } else {
         let u = c.u;
         if (k.uphill && c.slope < 0) u = [-u[0], -u[1]];
