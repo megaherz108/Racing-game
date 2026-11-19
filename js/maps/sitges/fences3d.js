@@ -4,12 +4,19 @@
 //   (walks3d.js; отрезок кромки — те же массивы концов, что в C.fenceLine), у края проезжей части — рельеф + подъём.
 //   Вид один: белый оштукатуренный цоколь h0 с серой шапкой, над ним тёмная решётка до h1 (текстура с альфой, столбы
 //   в текстуре через 2,5 м; настройки SITGES_FENCE — в fences.js). Геометрия — в копилку улиц (K.rk: quad, склейка
-//   по квадратам), столкновения — стенки высотой h1 с двух сторон цоколя в сетке тротуаров (cquad).
-// Определяет: sitgesFenceTextures, sitgesBuildFences.
+//   по квадратам), столкновения — стенки высотой h1 с двух сторон цоколя в сетке тротуаров (cquad). Забор разрезан
+//   по участкам (cut): на разрезе торца нет, текстура идёт дальше (f.s). Стиль участка (f.style, fencestyle.js) пока
+//   не рисуется (виды — этап 4а.4); отладка — страница с ?fences: цоколь цветом вида верха (SITGES_FENCE_DBG),
+//   высоты h0 / h1 стиля, у глухой и низкой стенки без решётки; столкновения те же.
+// Определяет: SITGES_FENCE_DBG, sitgesFenceTextures, sitgesBuildFences.
 // Использует: MAT (js/core.js); canvasTex (js/maps/city/textures.js); SITGES_FENCE (js/maps/sitges/fences.js);
 //   SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
+
+// отладочный цвет цоколя по виду верха (?fences): вереск — охра, изгородь — зелёный, ламели — синий, сетка — бирюза,
+// решётка — чёрный, глухая стена — белый, низкая стенка — жёлтый
+const SITGES_FENCE_DBG = { heath: 0xb08040, hedge: 0x3f9a3a, slats: 0x4a6ab8, mesh: 0x2ab0b0, grille: 0x303030, wall: 0xffffff, low: 0xe8c838 };
 
 function sitgesFenceTextures() {
   // решётка 2,5 × 1 м: рама, вертикальные прутья через 12 см, столб у левого края (прозрачность — alphaTest)
@@ -51,15 +58,17 @@ function sitgesBuildFences(K) {
   if (lost) console.error(`Ситжес, заборы: у ${lost} отрезков кромки нет высоты тротуара (rk.edges)`);
 
   /* ---------- постройка ---------- */
-  const H0 = F.h0, H1 = F.h1, T = F.t;
+  const T = F.t, dbg = typeof location !== 'undefined' && /[?&]fences\b/.test(location.search);
   cnt.yard = 0;
   for (const f of C.fences) buildRun(f);
 
-  function buildRun({ P, N, at }) {
+  function buildRun({ P, N, at, cut, s, style }) {
     // высота верха тротуара в точках ломаной
     const Y = at.map(([e, t]) => ys[e][0] + (ys[e][1] - ys[e][0]) * t);
     const off = (k, d) => [P[k][0] + N[k][0] * d, P[k][1] + N[k][1] * d];
-    let u = 0;
+    const H0 = dbg ? style.h0 : F.h0, H1 = F.h1, HG = dbg ? style.h1 : F.h1, top = HG > H0 + 0.05;
+    const cf = dbg ? SITGES_FENCE_DBG[style.top] : 0xffffff, cb = dbg ? cf : 0xf2efe8, ce = dbg ? cf : 0xe8e4dc;
+    let u = s || 0;
     for (let k = 0; k + 1 < P.length; k++) {
       const a = P[k], b = P[k + 1], ya = Y[k], yb = Y[k + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (L < 1e-3) continue;
@@ -68,9 +77,9 @@ function sitgesBuildFences(K) {
       const gbA = Math.min(ya, g(ab[0], ab[1])) - 0.3, gbB = Math.min(yb, g(bb[0], bb[1])) - 0.3;
       const u0 = u / 2, u1 = (u + L) / 2;
       // цоколь: лицевая сторона (к улице), задняя (к участку), шапка
-      quad('plaster', [[a[0], ya - 0.05, a[1]], [b[0], yb - 0.05, b[1]], [b[0], yb + H0, b[1]], [a[0], ya + H0, a[1]]], nf, 0xffffff,
+      quad('plaster', [[a[0], ya - 0.05, a[1]], [b[0], yb - 0.05, b[1]], [b[0], yb + H0, b[1]], [a[0], ya + H0, a[1]]], nf, cf,
         [[u0, 0], [u1, 0], [u1, (H0 + 0.05) / 2], [u0, (H0 + 0.05) / 2]]);
-      quad('plaster', [[ab[0], gbA, ab[1]], [bb[0], gbB, bb[1]], [bb[0], yb + H0, bb[1]], [ab[0], ya + H0, ab[1]]], nb, 0xf2efe8,
+      quad('plaster', [[ab[0], gbA, ab[1]], [bb[0], gbB, bb[1]], [bb[0], yb + H0, bb[1]], [ab[0], ya + H0, ab[1]]], nb, cb,
         [[u0, 0], [u1, 0], [u1, (yb + H0 - gbB) / 2], [u0, (ya + H0 - gbA) / 2]]);
       const cA = off(k, -F.cap), cB = off(k + 1, -F.cap), dA = off(k, T + F.cap), dB = off(k + 1, T + F.cap), yc = 0.05;
       quad('plaster', [[cA[0], ya + H0 + yc, cA[1]], [cB[0], yb + H0 + yc, cB[1]], [dB[0], yb + H0 + yc, dB[1]], [dA[0], ya + H0 + yc, dA[1]]], UP, 0xb8b2a8,
@@ -78,19 +87,20 @@ function sitgesBuildFences(K) {
       quad('plaster', [[cA[0], ya + H0 - 0.01, cA[1]], [cB[0], yb + H0 - 0.01, cB[1]], [cB[0], yb + H0 + yc, cB[1]], [cA[0], ya + H0 + yc, cA[1]]], nf, 0xc8c2b8,
         [[u0, 0], [u1, 0], [u1, 0.03], [u0, 0.03]]);
       // решётка над цоколем (по середине толщины), пролёт — F.bay
-      quad('grille', [[am[0], ya + H0 + yc, am[1]], [bm[0], yb + H0 + yc, bm[1]], [bm[0], yb + H1, bm[1]], [am[0], ya + H1, am[1]]], nf, 0xffffff,
-        [[u / F.bay, 0], [(u + L) / F.bay, 0], [(u + L) / F.bay, 1], [u / F.bay, 1]]);
+      if (top) quad('grille', [[am[0], ya + H0 + yc, am[1]], [bm[0], yb + H0 + yc, bm[1]], [bm[0], yb + HG, bm[1]], [am[0], ya + HG, am[1]]], nf, 0xffffff,
+        [[u / F.bay, 0], [(u + L) / F.bay, 0], [(u + L) / F.bay, (HG - H0 - yc) / (F.h1 - F.h0 - yc)], [u / F.bay, (HG - H0 - yc) / (F.h1 - F.h0 - yc)]]);
       // столкновения: стенки высотой h1 с двух сторон цоколя
       cquad([a[0], ya - 0.1, a[1]], [b[0], yb - 0.1, b[1]], [b[0], yb + H1, b[1]], [a[0], ya + H1, a[1]]);
       cquad([ab[0], gbA, ab[1]], [bb[0], gbB, bb[1]], [bb[0], yb + H1, bb[1]], [ab[0], ya + H1, ab[1]]);
       u += L;
       cnt.yard++;
     }
-    // торцы цоколя
+    // торцы цоколя (на разрезе по участкам — нет: забор продолжается соседним куском)
     for (const k of [0, P.length - 1]) {
+      if (cut && cut[k ? 1 : 0] && !dbg) continue;
       const k2 = k ? k - 1 : 1, tx = P[k][0] - P[k2][0], tz = P[k][1] - P[k2][1], l = Math.hypot(tx, tz) || 1, nn = [tx / l, 0, tz / l];
       const a = P[k], b = off(k, T), y = Y[k], gb = Math.min(y, g(b[0], b[1])) - 0.3;
-      quad('plaster', [[a[0], y - 0.05, a[1]], [b[0], gb, b[1]], [b[0], y + H0, b[1]], [a[0], y + H0, a[1]]], nn, 0xe8e4dc,
+      quad('plaster', [[a[0], y - 0.05, a[1]], [b[0], gb, b[1]], [b[0], y + H0, b[1]], [a[0], y + H0, a[1]]], nn, ce,
         [[0, 0], [T / 2, 0], [T / 2, 0.5], [0, 0.5]]);
       cquad([a[0], y - 0.1, a[1]], [b[0], gb, b[1]], [b[0], y + H1, b[1]], [a[0], y + H1, a[1]]);
     }

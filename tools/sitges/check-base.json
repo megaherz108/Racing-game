@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1210,
-  "world": 2155,
-  "even": 137,
+  "data": 1531,
+  "world": 1858,
+  "even": 133,
   "fresh": true
  },
  "counts": {
@@ -19,14 +19,14 @@
   "blind": 14523,
   "streetWalls": 5553,
   "passes": 5,
-  "roadTris": 809220,
-  "roadMeshes": 438,
-  "walkColliderTris": 194476,
+  "roadTris": 780628,
+  "roadMeshes": 420,
+  "walkColliderTris": 182240,
   "walkPieces": 21721,
   "zebras": 543,
   "evenNodes": 210102,
-  "fenceKm": 55.125,
-  "fenceRuns": 1440
+  "fenceKm": 44.386,
+  "fenceRuns": 1107
  },
  "roofs": {
   "flat": 5762,
@@ -164,5 +164,67 @@
     "street": "Avinguda de Josep Miró i Argenter"
    }
   ]
+ },
+ "fences": {
+  "km": 44.386,
+  "runs": 1107,
+  "pieces": 1909,
+  "lots": 1079,
+  "clusters": 991,
+  "joined": 88,
+  "bare": {
+   "green": [
+    56,
+    4.408
+   ],
+   "rail": [
+    7,
+    1.057
+   ],
+   "vacant": [
+    67,
+    4.314
+   ]
+  },
+  "front": 1208,
+  "top": {
+   "wall": 4.34,
+   "slats": 5.577,
+   "hedge": 14.746,
+   "mesh": 3.04,
+   "grille": 4.991,
+   "low": 2.103,
+   "heath": 9.589
+  },
+  "base": {
+   "cream": 9.431,
+   "white": 22.045,
+   "tile": 2.66,
+   "rubble": 6.692,
+   "concrete": 1.404,
+   "brick": 2.153
+  },
+  "cls": {
+   "villa": 12.78,
+   "block": 19.086,
+   "oldvilla": 1.661,
+   "modern": 10.565,
+   "old": 0.294
+  },
+  "zone": {
+   "marina": 4.073,
+   "east": 5.598,
+   "centre": 5.621,
+   "vinyet": 14.461,
+   "terramar": 14.633
+  },
+  "at": {
+   "balmes-39": "heath / white 0.5–1.8 м, столбы plaster, участок 801, 0.2 м",
+   "arcadi-mas-21": "hedge / tile 0.4–2.5 м, столбы none, участок 1021, 0.8 м",
+   "valencia-2": "heath / white 0.7–1.9 м, столбы plaster, участок 2613, 1.2 м",
+   "vinyet-57": "heath / rubble 0.7–1.8 м, столбы stone, участок 2793, 0.4 м",
+   "corral-fal-6": "wall / cream 2.2–2.2 м, столбы none, участок 892, 1.1 м",
+   "pere-pau-sagarra-19": "hedge / rubble 0.4–1.8 м, столбы stone, участок 3114, 0.7 м"
+  }
  }
 }

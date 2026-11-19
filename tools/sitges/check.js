@@ -19,6 +19,10 @@
 //              профиля (Гаусс σ 8 м) — медиана / 90 / 99 %, см; излом уклона на базе 4 м, 90 %, см/м; поперёк
 //              (середина против краёв в 0,3 м от бордюра), 90 %, см
 //   steep    — места круче 25 % на базе 10 м (слиты в радиусе 30 м): число и список с названиями улиц
+//   fences   — заборы (4а.2, C.fenceStats и C.fenceStyleStats): км, сплошных, кусков по участкам, участков, комплексов
+//              (joined — склеено соседей), снято с участков без домов (bare: [участков, км] — зелень OSM, ж/д, пустырь),
+//              кусков 1 м перед домами от 3 этажей (front); км по видам верха (top) и цоколя (base), по классам участка
+//              (cls) и районам (zone); at — стиль у мест с фото (FENCE_AT, строки — не сравниваются)
 // __sitgesShots({ w, h, only }) → { png: { имя: dataURL } } — кадры контрольных мест (PLACES ниже) с высоты;
 //   tools/cdp.js --dir папка пишет их в файлы. Тени — вокруг каждой точки (aimSun), время суток — из меню.
 (() => {
@@ -154,7 +158,34 @@
         kink90: r(q(kink, 0.9), 2), cross90: r(q(cross, 0.9), 2) };
       out.steep = { count: steep.length, places: steep.map(s => ({ at: [Math.round(s.x), Math.round(s.z)], pct: Math.round(s.gr * 100), street: s.name })) };
     }
+
+    /* ---------- заборы: участки и стили (4а.2) ---------- */
+    {
+      const FS = C.fenceStats, SS = C.fenceStyleStats || {}, at = {};
+      for (const [name, [x, z]] of Object.entries(FENCE_AT)) {
+        const f = nearFence(C, x, z);
+        at[name] = f ? `${f.f.style.top} / ${f.f.style.base} ${f.f.style.h0}–${f.f.style.h1} м, столбы ${f.f.style.posts}, участок ${f.f.lot}, ${f.d.toFixed(1)} м` : 'нет забора';
+      }
+      out.fences = { km: FS.km, runs: FS.runs, pieces: FS.pieces, lots: FS.lots, clusters: SS.clusters, joined: SS.joined,
+        bare: FS.bare, front: FS.no.front, top: SS.top, base: SS.base, cls: SS.cls, zone: SS.zone, at };
+    }
     return out;
+  };
+
+  // места заборов с фото (sv/fence, docs/sitges/photos.md): координаты игры
+  const FENCE_AT = { 'balmes-39': [1377, -133], 'arcadi-mas-21': [-934, 27], 'valencia-2': [283, 229], 'vinyet-57': [708, 71],
+    'corral-fal-6': [-1750, 129], 'pere-pau-sagarra-19': [1135, 86] };
+  // ближайший к точке забор: { f, d, x, z, n } (n — нормаль к участку)
+  const nearFence = (C, x, z) => {
+    let best = null;
+    for (const f of C.fences) for (let k = 0; k + 1 < f.P.length; k++) {
+      const a = f.P[k], b = f.P[k + 1], d = sitgesSeg(x, z, a[0], a[1], b[0], b[1]);
+      if (d < 25 && (!best || d < best.d)) {
+        const t = SITGES_SEG.t;
+        best = { f, d, x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, n: f.N[k] };
+      }
+    }
+    return best;
   };
 
   /* ---------- кадры контрольных мест ---------- */
@@ -181,6 +212,11 @@
       'vilanova-bridge': deckOf(/Passeig de Vilanova/),
       church: poi(/Bartomeu/),
       marina: poi(/Aiguadol/) || { x: -1559, z: -392 },
+      // заборы у мест с фото: камера на улице перед забором (near)
+      ...Object.fromEntries(Object.entries(FENCE_AT).map(([k, [x, z]]) => {
+        const f = nearFence(C, x, z);
+        return ['fence-' + k, f ? { x: f.x, z: f.z, near: f.n } : null];
+      })),
     };
   };
   window.__sitgesShots = async function ({ w = 1280, h = 720, only = null } = {}) {
@@ -194,8 +230,9 @@
       if (only && !only.includes(name)) continue;
       if (!P) { missing.push(name); continue; }
       const y = g(P.x, P.z), tx = P.tx ?? 0.6, tz = P.tz ?? 0.8;
-      // сзади по улице 26 м, сбоку 10 м, выше 16 м
-      cam.position.set(P.x - tx * 26 - tz * 10, y + 16, P.z - tz * 26 + tx * 10);
+      // сзади по улице 26 м, сбоку 10 м, выше 16 м; у забора (near — нормаль к участку) — с улицы в 11 м, наискось, 4 м
+      if (P.near) cam.position.set(P.x - P.near[0] * 11 + P.near[1] * 5, y + 4, P.z - P.near[1] * 11 - P.near[0] * 5);
+      else cam.position.set(P.x - tx * 26 - tz * 10, y + 16, P.z - tz * 26 + tx * 10);
       cam.lookAt(P.x, y + 1, P.z);
       cam.updateMatrixWorld();
       aimSun(P.x, y, P.z);

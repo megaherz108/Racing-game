@@ -5,8 +5,9 @@
 //   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
 //   sitgesPlanRoads              ширины улиц, тротуары, путепроводы и выемки под ними (js/maps/sitges/roads.js)
 //   sitgesPlanHouses             высоты домов на рельефе, крыши, общие стены, фасады к улице, проезды (js/maps/sitges/houses.js)
-//   sitgesPlanFences             где забор: линия по кромке тротуаров, решение кусками, цепочки (js/maps/sitges/fences.js)
 //   sitgesPlanStyles             стили фасадов по году, этажности и району (js/maps/sitges/styles.js)
+//   sitgesPlanFences             где забор: линия по кромке тротуаров, решение кусками, цепочки, участки (js/maps/sitges/fences.js)
+//   sitgesPlanFenceStyles        стиль забора по участку, году дома и району (js/maps/sitges/fencestyle.js)
 //   sitgesPlanFacades            балконы по sitgesBalcony() и карнизы (js/maps/sitges/styles.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
@@ -20,7 +21,8 @@
 //   (js/maps/sitges/levels.js); sitgesPlanCorners (js/maps/sitges/corners.js); sitgesPlanCarriage
 //   (js/maps/sitges/carriage.js); sitgesPlanWalks (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE
 //   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js); sitgesPlanFences
-//   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js).
+//   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
+//   (js/maps/sitges/fencestyle.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -72,8 +74,9 @@ function sitgesData() {
   sitgesPlanCarriage(C);
   sitgesPlanWalks(C);
   sitgesPlanHouses(C);
-  sitgesPlanFences(C);
   sitgesPlanStyles(C);
+  sitgesPlanFences(C);
+  sitgesPlanFenceStyles(C);
   sitgesPlanFacades(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
