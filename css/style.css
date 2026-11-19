@@ -79,6 +79,22 @@ button{font:inherit;cursor:pointer;color:inherit}
 .paints .sw:hover{background:rgba(255,255,255,.08)}
 .paints .sw.on{border-color:var(--pc);background:rgba(255,255,255,.1)}
 .paints .sw.on small{color:#fff}
+.blist{display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;margin:9px 0 5px;font-size:11.5px;line-height:16px}
+.blist b{font-weight:500;color:var(--mut)}
+.blist .bg{display:inline-flex;align-items:center;gap:4px}
+.blist .bg.locked{color:var(--mut)}
+.blist .bg.locked svg{opacity:.4;filter:grayscale(1)}
+.bspots{display:flex;gap:3px}
+.bspots .bs{flex:1 1 0;min-width:0;padding:4px 0 3px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+  display:flex;flex-direction:column;align-items:center;gap:2px}
+.bspots .bs i{width:22px;height:22px;border-radius:50%;border:1px dashed rgba(255,255,255,.3);box-sizing:border-box}
+.bspots .bs small{font-size:9.5px;line-height:11px;color:var(--mut);white-space:nowrap}
+.bspots .bs:not(:disabled):hover{background:rgba(255,255,255,.1)}
+.bspots .bs:disabled{opacity:.4;cursor:default}
+.bspots .bs.on{border-color:var(--pc);background:rgba(255,255,255,.1)}
+.bspots .bs.on small{color:#fff}
+.bspots .bs.on svg{filter:drop-shadow(0 0 3px rgba(255,255,255,.4))}
+svg.badge{display:block;flex:none}
 .lockline{display:flex;justify-content:center;gap:6px;color:#ffb7a0;font-size:13px;margin-bottom:8px}
 #garage .bottombar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px}
 #garage .bottombar .row{display:flex;gap:12px}

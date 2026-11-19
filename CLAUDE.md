@@ -17,6 +17,7 @@
 | `js/envprobe.js` | `EnvProbe`: подмена куска шейдера Three.js — свет окружения матовых поверхностей из шести цветов |
 | `js/breeze.js` | `Breeze`: тени облаков (кусок шейдера всех материалов с освещением, включает `world.clouds`) и качание крон `Breeze.sway()` |
 | `js/car-models.js` | модели машин игроков из примитивов, стили `STYLE` |
+| `js/badges.js` | значки за достижения на машинах (список `BADGES` — в `data.js`): места лучами по модели `badgeAnchors()`, `fitBadges()`, свечение, `unlockBadge()` |
 | `js/showroom.js` | 3D-фон меню и гаража |
 | `js/world.js` | сцена, шум, `StaticGrid` (коллизии), `Breakables`, мини-карта, инстансы, чанки, `optimizeStatic`, `Decks` (мосты), шейдер фасадов |
 | `js/sky.js`, `js/weather.js` | время суток, небо, свет, фары; дождь и мокрые поверхности |

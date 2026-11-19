@@ -2,8 +2,9 @@
 // отражения, ночные огни (окна — шейдер зданий в js/world.js, фонари — buildCity(), фары игроков — здесь).
 // Погода (дождь) делает небо пасмурным: js/weather.js.
 // Определяет: glowTexture, tileFbm, dataCanvasTex, NOISE, Sky.
-// Использует: envTex, pmrem, clamp, renderer (js/core.js); EnvProbe (js/envprobe.js); mulberry32, smooth01, scene,
-//   sun, SUN_OFFSET, hemi, NIGHT_U (js/world.js); Weather (js/weather.js); cars (js/physics.js); cams (js/match.js).
+// Использует: envTex, pmrem, clamp, renderer (js/core.js); EnvProbe (js/envprobe.js); badgeNight (js/badges.js);
+//   mulberry32, smooth01, scene, sun, SUN_OFFSET, hemi, NIGHT_U (js/world.js); Weather (js/weather.js); cars
+//   (js/physics.js); cams (js/match.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -262,6 +263,7 @@ const Sky = (() => {
     for (const L of heads) L.visible = P.night > 0;
     mats.bulb.color.setHex(P.night > 0 ? 0xfff0d0 : 0xb9bdc4);
     mats.halo.opacity = P.night * 0.9; mats.pool.opacity = P.night * 0.9;
+    badgeNight(P.night);                  // ореолы значков на машинах (js/badges.js)
     if (w.setNight) w.setNight(P.night);
     Weather.apply(rain);
   }

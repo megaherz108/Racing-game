@@ -1,7 +1,8 @@
 // Данные машин, характеристики → физика, сохранение
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
 //   PLAYER_COLORS, PAINTS, PAINT_FREE, paintDef, hasPaint, paintOf, paintBuy, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS,
-//   KO_REWARD, FLIP_REWARD, JUMP, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap, RACE_CPS, RACE_REWARD,
+//   KO_REWARD, FLIP_REWARD, JUMP, BADGE_FLYER_D, BADGE_RACER_T, badgeChevron, BADGES, BADGE_SPOTS, badgeDef,
+//   hasBadge, badgeGive, fitOf, fitSet, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap, RACE_CPS, RACE_REWARD,
 //   RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN, BOMB_CFG, BOMB_REWARD,
 //   BOMB_ROUND_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave,
 //   cleanJumps, cleanPlayer, loadSave, save, persist, carIndex, browse, paintView.
@@ -219,6 +220,47 @@ const JUMP = {
   settle: 1,          // столько секунд после приземления машина должна остаться на колёсах
   modes: ['free', 'solo'],
 };
+// значки за достижения (js/badges.js): светятся в темноте, ставятся на машину в места BADGE_SPOTS (один значок —
+// в сколько угодно мест). Открыты у каждого игрока свои; расстановка — своя для каждой машины. Новый значок — строка
+// здесь и вызов unlockBadge(p, id) там, где выполнено условие. pic — рисунок в круге радиуса 1 (y — вверх; кружок
+// значка — до 0,8): многоугольники { pts: [[x, y], …], c: [цвет вверху, цвет внизу] }; rim — цвет ободка.
+const BADGE_FLYER_D = JUMP.tiers[JUMP.tiers.length - 1][0];   // «Лётчик»: легендарный прыжок (js/jumps.js)
+const BADGE_RACER_T = 120;                                   // «Гонщик»: гонка за столько секунд или быстрее (js/race.js)
+const badgeChevron = dy => ({ pts: [[-0.5, dy - 0.2], [0, dy + 0.2], [0.5, dy - 0.2], [0.5, dy - 0.44], [0, dy - 0.04], [-0.5, dy - 0.44]],
+  c: [0xd2ff4a, 0x86e000] });
+const BADGES = [
+  { id: 'flyer', name: 'Лётчик', how: `прыжок от ${BADGE_FLYER_D} м`, rim: 0x9cff2e, pic: [badgeChevron(0.35), badgeChevron(-0.11)] },
+  { id: 'racer', name: 'Гонщик', how: `гонка за ${BADGE_RACER_T / 60}:00 или быстрее`, rim: 0xffa61f,
+    pic: [{ pts: [[0.16, 0.68], [-0.38, -0.02], [-0.04, -0.02], [-0.2, -0.68], [0.4, 0.09], [0.06, 0.09], [0.34, 0.68]], c: [0xffe63a, 0xff6a00] }] },
+];
+// места на машине: колёса — сразу все четыре (значок на ступице крутится с колесом); бамперы отрываются вместе со значком
+// [id, название, коротко — для кнопки в гараже]
+const BADGE_SPOTS = [['hood', 'Капот', 'Капот'], ['lip', 'Передняя кромка капота', 'Кромка'], ['front', 'Передний бампер', 'Бампер П'],
+  ['rear', 'Задний бампер', 'Бампер З'], ['wheels', 'Колёса (все четыре)', 'Колёса']];
+const badgeDef = id => BADGES.find(b => b.id === id) || null;
+const hasBadge = (pl, id) => pl.badges.includes(id);
+// открыть значок id игроку pl: true — открыт только что. Сохранение — на вызывающем (persist())
+function badgeGive(pl, id) {
+  if (!badgeDef(id) || hasBadge(pl, id)) return false;
+  pl.badges.push(id);
+  return true;
+}
+// расстановка значков на машине carId: { место: определение значка } — только открытые значки
+function fitOf(pl, carId) {
+  const out = {}, f = pl.fit[carId] || {};
+  for (const [s] of BADGE_SPOTS) if (f[s] && hasBadge(pl, f[s])) out[s] = badgeDef(f[s]);
+  return out;
+}
+// поставить значок id (null — снять) на место spot машины carId. Возвращает '' или причину отказа
+function fitSet(pl, carId, spot, id) {
+  if (!pl.owned.includes(carId)) return 'сначала купите машину';
+  if (!BADGE_SPOTS.some(s => s[0] === spot)) return 'нет такого места';
+  const f = pl.fit[carId] || (pl.fit[carId] = {});
+  if (!id) { delete f[spot]; if (!Object.keys(f).length) delete pl.fit[carId]; return ''; }
+  if (!hasBadge(pl, id)) return 'значок ещё не открыт';
+  f[spot] = id;
+  return '';
+}
 // режимы игры; solo — свободная езда одного игрока на весь экран (машина и кошелёк Игрока 1);
 // capture — захват точек (js/capture.js); bomb — горячая бомба (js/bomb.js)
 const MODES = ['free', 'solo', 'race', 'capture', 'bomb'];
@@ -261,8 +303,8 @@ const QUALITY = {
   min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350 } };
 const cleanQuality = q => QUALITY[q] ? q : 'high';
 // paints — купленные цвета { машина: [id цветов] } (белый не пишется, он есть всегда); paint — выбранный цвет
-// { машина: id }, нет записи — белый
-const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla', paints: {}, paint: {} });
+// { машина: id }, нет записи — белый. badges — открытые значки [id]; fit — расстановка { машина: { место: id } }
+const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla', paints: {}, paint: {}, badges: [], fit: {} });
 const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high', jumps: {}, addr: false });
 // таблицы рекордов прыжков: { карта: [{ d: метров, p: игрок 0/1, car: короткое имя машины }] } — по убыванию d
 function cleanJumps(j) {
@@ -288,7 +330,14 @@ function cleanPlayer(p) {
     const s = p.paint && p.paint[id];
     if (ok.includes(s)) paint[id] = s;
   }
-  return { coins: Math.max(0, Math.floor(+p.coins || 0)), owned, sel: owned.includes(p.sel) ? p.sel : 'corolla', paints, paint };
+  // значки — только известные; расстановка — у купленных машин, на известных местах, только открытые значки
+  const badges = BADGES.filter(b => Array.isArray(p.badges) && p.badges.includes(b.id)).map(b => b.id), fit = {};
+  for (const id of owned) {
+    const f = p.fit && p.fit[id], ok = {};
+    if (f && typeof f === 'object') for (const [s] of BADGE_SPOTS) if (badges.includes(f[s])) ok[s] = f[s];
+    if (Object.keys(ok).length) fit[id] = ok;
+  }
+  return { coins: Math.max(0, Math.floor(+p.coins || 0)), owned, sel: owned.includes(p.sel) ? p.sel : 'corolla', paints, paint, badges, fit };
 }
 function loadSave() {
   try {

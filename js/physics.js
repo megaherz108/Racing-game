@@ -4,11 +4,12 @@
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
 //   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, FLIP_ROOF, FLIP_SIDE, FLIP_WALL, PUSH, hitZone, flipKick,
 //   contactPoint, rivalKnock, pushContacts, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
-// Использует: derive, paintOf, save, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD (js/data.js);
-//   QUAL, MAT, lerp, clamp, rand (js/core.js); buildCarModel, paintCar, disposeTree (js/car-models.js); scene,
-//   shadowProxyOf, smooth01, waterLevel, dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks,
-//   wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown
-//   (js/match.js); addCoins, notify, keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
+// Использует: derive, paintOf, save, fitOf, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD
+//   (js/data.js); QUAL, MAT, lerp, clamp, rand (js/core.js); buildCarModel, paintCar, disposeTree (js/car-models.js);
+//   fitBadges (js/badges.js); scene, shadowProxyOf, smooth01, waterLevel, dropShadowProxy (js/world.js); world
+//   (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic
+//   (js/traffic/traffic.js); countdown (js/match.js); addCoins, notify, keys (js/ui.js); Feel (js/feel.js); Stunts
+//   (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -201,6 +202,7 @@ class Car {
     const span = g.L - g.W; this.cOff = [-span / 2, 0, span / 2];
     this.model = buildCarModel(def, 0xffffff, { lacquer: QUAL.lacquer, bumpers: true });   // лак (кроме «Минимума») и отрываемые бамперы
     paintCar(this.model.paint, paintOf(save.players[p], def.id));                          // цвет, выбранный игроком в гараже
+    fitBadges(this.model, def, fitOf(save.players[p], def.id));                            // значки за достижения (js/badges.js)
     scene.add(this.model.root);
     // свои задние фонари: стоп-сигналы разгораются при торможении (общий MAT.tail — у трафика)
     this.tailMat = MAT.tail.clone(); this.tailMat.userData = {};

@@ -3,9 +3,10 @@
 // Видна только следующая арка (и в 3D, и на мини-карте).
 // 3D-стрелка вверху половины экрана (js/arrow.js) показывает на следующий чекпоинт.
 // Определяет: CP_R, CP_COL, CP_FIN, CP_LAYER, Race.
-// Использует: RACE_CPS, RACE_CP_REWARD, RACE_REWARD (js/data.js); rand (js/core.js); waterLevel, scene (js/world.js);
-//   world (js/maps/registry.js); sparks (js/effects.js); Sound (js/audio.js); cars (js/physics.js); countdown, cams,
-//   paused (js/match.js); $, HUD, addCoins, notify, keys (js/ui.js); TargetArrow (js/arrow.js).
+// Использует: RACE_CPS, RACE_CP_REWARD, BADGE_RACER_T, RACE_REWARD (js/data.js); rand (js/core.js); unlockBadge
+//   (js/badges.js); waterLevel, scene (js/world.js); world (js/maps/registry.js); sparks (js/effects.js); Sound
+//   (js/audio.js); cars (js/physics.js); countdown, cams, paused (js/match.js); $, HUD, addCoins, notify, keys
+//   (js/ui.js); TargetArrow (js/arrow.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -140,6 +141,7 @@ const Race = (() => {
       return;
     }
     st.fin[p] = st.time;
+    if (st.time <= BADGE_RACER_T) unlockBadge(p, 'racer');   // значок «Гонщик» (js/badges.js)
     if (st.winner < 0) {
       st.winner = p; st.endT = st.time;
       addCoins(p, RACE_REWARD);

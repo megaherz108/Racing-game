@@ -3,8 +3,9 @@
 // раз в JUMP.cooldown с; лучшие прыжки каждой карты пишутся в таблицу save.jumps, первое место — монеты порога ещё раз.
 // Прыжок засчитывается, если машина села на колёса и простояла на них JUMP.settle с (не перевернулась, не утонула).
 // Определяет: jumpTable, Jumps.
-// Использует: save, JUMP, persist (js/data.js); world (js/maps/registry.js); Sound (js/audio.js); cars, simTime
-//   (js/physics.js); matchMode, countdown (js/match.js); notify, addCoins (js/ui.js); Feel (js/feel.js).
+// Использует: save, JUMP, BADGE_FLYER_D, persist (js/data.js); unlockBadge (js/badges.js); world
+//   (js/maps/registry.js); Sound (js/audio.js); cars, simTime (js/physics.js); matchMode, countdown (js/match.js);
+//   notify, addCoins (js/ui.js); Feel (js/feel.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -23,6 +24,7 @@ const Jumps = (() => {
     let tier = null;
     for (const t of JUMP.tiers) if (d >= t[0]) tier = t;
     if (!tier) return;                            // короткий — только «ПОЛЁТ» с нитро (js/stunts.js)
+    if (d >= BADGE_FLYER_D) unlockBadge(p, 'flyer');   // значок «Лётчик» (js/badges.js) — и на «остывшем» трамплине
     const hot = s.spots.some(q => Math.hypot(q.x - x0, q.z - z0) < JUMP.spotR && simTime - q.t < JUMP.cooldown);
     if (hot) notify(p, `${tier[2]} · ${m} м <b>· трамплин остывает</b>`, 'trick');
     else {
@@ -75,5 +77,6 @@ const Jumps = (() => {
     update(dt) { if (countdown > 0) return; for (let p = 0; p < cars.length; p++) updateCar(p, dt); },
     // длина текущего (или только что закончившегося) прыжка игрока p, м
     dist(p) { return S[p].d; },
+    land,                                         // засчитать прыжок сразу (проверка значков в js/selftest.js)
   };
 })();

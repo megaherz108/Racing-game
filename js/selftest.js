@@ -1,10 +1,12 @@
 // Самопроверка: дешёвая текстовая проверка игры для разработчика и ИИ-ассистента (без скриншотов).
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
-// Использует: cleanPlayer, save, PAINTS, paintOf, PAINT_FREE, paintBuy, hasPaint, FLIP_REWARD, persist (js/data.js);
-//   getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js);
-//   Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins (js/ui.js); Capture
-//   (js/capture.js); Bomb (js/bomb.js).
+// Использует: cleanPlayer, save, PAINTS, paintOf, PAINT_FREE, paintBuy, hasPaint, FLIP_REWARD, persist, fitSet,
+//   badgeGive, fitOf, hasBadge, CARS, BADGE_SPOTS, BADGES, BADGE_FLYER_D, RACE_CPS, BADGE_RACER_T (js/data.js);
+//   buildCarModel, disposeTree (js/car-models.js); badgeAnchors, fitBadges (js/badges.js); getData, getWorld,
+//   MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js); Traffic
+//   (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins (js/ui.js); Race
+//   (js/race.js); Capture (js/capture.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -275,6 +277,74 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
       } finally {
         if (cars.length) endMatch('menu');
         save.players.forEach((p, i) => p.coins = coins0[i]); persist(); updateCoins();
+      }
+    }
+    // значки (js/badges.js): места на всех машинах, открытие по условию в игре, расстановка, сохранение.
+    // Сохранение игроков (кошельки, значки, рекорды прыжков) в конце возвращается как было
+    if (mode === 'free') {
+      const backup = JSON.stringify(save);
+      try {
+        // данные — на копии игрока
+        const pl = cleanPlayer({ owned: ['corolla'] });
+        if (fitSet(pl, 'corolla', 'hood', 'flyer') !== 'значок ещё не открыт') errors.push('значок: поставился неоткрытый');
+        if (!badgeGive(pl, 'flyer') || badgeGive(pl, 'flyer') || badgeGive(pl, 'gold')) errors.push('значок: открытие не по правилам');
+        if (fitSet(pl, 'niva', 'hood', 'flyer') === '') errors.push('значок: поставился на некупленную машину');
+        fitSet(pl, 'corolla', 'hood', 'flyer'); fitSet(pl, 'corolla', 'wheels', 'flyer');
+        const back = cleanPlayer(JSON.parse(JSON.stringify(pl)));     // как после перезагрузки страницы
+        if (Object.keys(fitOf(back, 'corolla')).join() !== 'hood,wheels' || !hasBadge(back, 'flyer')) errors.push('значок: расстановка не сохранилась');
+        const junk = cleanPlayer({ owned: ['corolla'], badges: ['racer', 'gold'], fit: { corolla: { hood: 'flyer', lip: 'racer', roof: 'racer' }, niva: { hood: 'racer' } } });
+        if (JSON.stringify(junk.badges) !== '["racer"]' || JSON.stringify(junk.fit) !== '{"corolla":{"lip":"racer"}}') errors.push('значок: мусор в сохранении не отброшен ' + JSON.stringify(junk.fit));
+        if (cleanPlayer({ coins: 3, owned: ['corolla'], sel: 'corolla' }).badges.length !== 0) errors.push('значок: старое сохранение без значков');
+        // места на кузове всех машин: нашлись, лежат на поверхности (не утоплены и не висят), бамперные — целиком на бампере
+        const bad = [];
+        for (const def of CARS) {
+          const A = badgeAnchors(def);
+          for (const [s] of BADGE_SPOTS) {
+            if (s === 'wheels') continue;
+            const a = A[s];
+            if (!a) { bad.push(`${def.short} ${s}: место не найдено`); continue; }
+            if (a.lift > 0.03) bad.push(`${def.short} ${s}: приподнят на ${(a.lift * 100).toFixed(1)} см над изгибом`);
+            if ((s === 'hood' || s === 'lip') && a.n[1] < 0.6) bad.push(`${def.short} ${s}: не сверху (n.y ${a.n[1].toFixed(2)})`);
+            if ((s === 'front' || s === 'rear') && a.flat < 10) bad.push(`${def.short} ${s}: не целиком на бампере (${a.flat}/12)`);
+          }
+          const m = buildCarModel(def, 0xffffff, { bumpers: true });
+          fitBadges(m, def, Object.fromEntries(BADGE_SPOTS.map(([s], i) => [s, BADGES[i % BADGES.length]])));
+          // кузов (капот + кромка), два бампера, четыре колеса — по мешу значков и мешу ореолов
+          if (m.badges.length !== 14) bad.push(`${def.short}: мешей значков ${m.badges.length}, ждали 14`);
+          disposeTree(m.root);
+        }
+        errors.push(...bad.map(t => 'значок: ' + t));
+        // в игре: прыжок от BADGE_FLYER_D м открывает «Лётчика», короче — нет
+        cars = [];
+        startMatch('free', 'city');
+        for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
+        if (cars.length < 2) throw new Error('заезд на двоих не запустился');
+        countdown = 0;
+        save.players.forEach(p => { p.badges = []; p.fit = {}; });
+        Jumps.land(0, BADGE_FLYER_D + 4, 0, 0); Jumps.land(1, BADGE_FLYER_D - 1, 500, 500);
+        if (!hasBadge(save.players[0], 'flyer') || hasBadge(save.players[1], 'flyer')) errors.push(`значок «Лётчик»: открыт у ${save.players.map(p => hasBadge(p, 'flyer'))}`);
+        if (fitSet(save.players[0], cars[0].def.id, 'hood', 'flyer') || fitSet(save.players[0], cars[0].def.id, 'wheels', 'flyer')) errors.push('значок: не ставится открытый');
+        fitBadges(cars[0].model, cars[0].def, fitOf(save.players[0], cars[0].def.id));
+        if (cars[0].model.badges.length !== 2 + 4 * 2) errors.push(`значок: на машине ${cars[0].model.badges.length} мешей, ждали 10`);
+        endMatch('menu');
+        // гонка: финиш за BADGE_RACER_T с открывает «Гонщика», медленнее — нет
+        cars = [];
+        startMatch('race', 'city');
+        for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
+        if (!Race.on) throw new Error('гонка не включилась');
+        countdown = 0;
+        const st = Race.st, fin = st.cps[RACE_CPS - 1];
+        const finish = (p, t) => { st.prog[p] = RACE_CPS - 1; st.time = t; cars[p].fullReset(fin.x, fin.z, 0); stepWorld(FIXED); Race.update(0, simTime); };
+        finish(0, BADGE_RACER_T - 1); finish(1, BADGE_RACER_T + 10);
+        if (st.fin[0] === null || st.fin[1] === null) errors.push('значок «Гонщик»: финиш не засчитан');
+        if (!hasBadge(save.players[0], 'racer') || hasBadge(save.players[1], 'racer')) errors.push(`значок «Гонщик»: открыт у ${save.players.map(p => hasBadge(p, 'racer'))}`);
+        lines.push(`значки: ${BADGES.length} (${BADGES.map(b => b.name).join(', ')}), места на ${CARS.length} машинах найдены, открываются прыжком и гонкой`);
+      } catch (e) {
+        errors.push('значки: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
+      } finally {
+        if (cars.length) endMatch('menu');
+        save = JSON.parse(backup); persist(); updateCoins();
+        if (JSON.stringify(save) !== backup) errors.push('значки: проверка изменила сохранение');
       }
     }
   } finally {
