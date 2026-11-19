@@ -7,7 +7,8 @@
 
 | Файл | Что |
 |---|---|
-| `js/maps/sitges/fences3d.js` | `sitgesBuildFences(K)`: линия, решение «забор / нет», цепочки, геометрия, столкновения; настройки `SITGES_FENCE` |
+| `js/maps/sitges/fences.js` | (с 4а.1) раскладка `sitgesPlanFences(C)`: линия, решение «забор / нет», цепочки → `C.fences`, `C.fenceLine`, `C.fenceStats`; настройки `SITGES_FENCE` |
+| `js/maps/sitges/fences3d.js` | `sitgesBuildFences(K)`: геометрия и столкновения по `C.fences` (до 4а.1 — всё, включая линию и решение) |
 | `js/maps/sitges/walks3d.js` | наружная кромка полос и углов → `K.rk.edges` ({ A, B, ya, yb, n, st, deck }) |
 | `js/maps/sitges/roads3d.js` | копилка: `rk.lod` — материал мелкими квадратами со скрытием вдали; `K.roadLod` |
 | `js/maps/sitges/build.js` | `sitgesBuildFences` после `sitgesBuildWalks`; скрытие дальних квадратов в `cullView` |

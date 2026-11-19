@@ -5,7 +5,7 @@
 //   sitgesBuildKit (здесь)       группа, сетка коллизий
 //   sitgesBuildGround            земля, море, волнорезы, понтоны, фон (js/maps/sitges/ground.js)
 //   sitgesBuildRoads             улицы, тротуары, мосты, ж/д, стены по границе (js/maps/sitges/roads3d.js)
-//   (после тротуаров)            простые заборы по кромке тротуаров (js/maps/sitges/fences3d.js)
+//   (после тротуаров)            простые заборы по C.fences раскладки (js/maps/sitges/fences3d.js)
 //   sitgesBuildFacades           балконы и карнизы (js/maps/sitges/facades3d.js) — в ту же копилку K.rk
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты

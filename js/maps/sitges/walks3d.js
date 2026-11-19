@@ -5,7 +5,8 @@
 //     точно сечения полос.
 //   Верх и бордюр — сетка столкновений Rapier (набор K.rk: cquad), верх — поиск тротуаров (addWalk → world.walkAt).
 //   Наружная кромка (полосы и углы) — в K.rk.edges: { A, B, ya, yb, n, st, deck } — отрезок [x, z], высота верха
-//     тротуара на концах, нормаль к кварталу; по ней ставит заборы fences3d.js.
+//     тротуара на концах, нормаль к кварталу; концы A, B — те же массивы, что в раскладке (O0 / O1 полос, Ou колец
+//     C.cornerWalks): по ним fences3d.js находит высоту для отрезков C.fenceLine.
 // Определяет: sitgesBuildWalks.
 // Использует: MAT, clamp (js/core.js); SITGES_R (js/maps/sitges/roads.js); SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -54,51 +55,20 @@ function sitgesBuildWalks(K) {
   }
 
   /* ---------- скруглённые углы: асфальт до дуги, тротуар полосой между дугами r и r − w ---------- */
-  for (const c of C.corners) {
+  C.corners.forEach((c, ci) => {
     const [mat, tint] = surfOf(c.a.st), lift = mat === 'asphalt' ? P.lift.drive : P.lift.paved, lw = P.lift.drive;
-    const N = Math.max(3, Math.ceil(Math.abs(c.da) * c.r / 0.8));
+    // точки колец (бордюр, наружный край), концы и вершина острого угла — из раскладки (js/maps/sitges/walks.js)
+    const { N, EA, EB, Q, ring: RG } = C.cornerWalks[ci];
     // асфальт угла заходит на 0,4 м внутрь проезжих частей (лента улицы у узла не точно по бордюрной линии)
     const m = 0.4, Kx = [c.K[0] - (c.a.n[0] + c.b.n[0]) * m, c.K[1] - (c.a.n[1] + c.b.n[1]) * m];
     const yK = g(Kx[0], Kx[1]) + lift, nn = gn(c.K[0], c.K[1]);
     const v3a = p => [p[0], g(p[0], p[1]) + lift, p[1]];
-    // концы углового куска — точно сечения прямых полос тротуара при s касания (как edge() у полос): дуга
-    // подправляется сдвигом, плавно меняющимся от одного конца к другому
-    const endOf = X => {
-      const v = X.st.v, sg = X.side ? -1 : 1;
-      let i = 0; while (i < v.length - 2 && v[i + 1].s < X.s) i++;
-      const a = v[i], b = v[i + 1], t = clamp((X.s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
-      const L2 = (p, q) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
-      // наружный край — по ширине угла X.w (у полосы там та же ширина; рукав без полосы за касанием — 0)
-      return { I: L2(offs(a, sg * (a.hw + 0.05)), offs(b, sg * (b.hw + 0.05))), O: L2(offs(a, sg * (a.hw + X.w)), offs(b, sg * (b.hw + X.w))) };
-    };
-    const EA = endOf(c.a), EB = endOf(c.b);
-    const arcAt = (k, rr) => { const an = c.a0 + c.da * k / N; return [c.O[0] + Math.cos(an) * rr, c.O[1] + Math.sin(an) * rr]; };
-    const sub = (p, q) => [p[0] - q[0], p[1] - q[1]];
-    const dIa = sub(EA.I, arcAt(0, c.r)), dIb = sub(EB.I, arcAt(N, c.r));
-    const dOa = sub(EA.O, arcAt(0, Math.max(0, c.r - c.a.w))), dOb = sub(EB.O, arcAt(N, Math.max(0, c.r - c.b.w)));
-    // острый наружный угол: пересечение наружных краёв полос (по направлениям рукавов), вершина Q — на своём кольце
-    let Q = null, kq = 0;
-    if (c.sharp) {
-      const den = c.a.u[0] * c.b.u[1] - c.a.u[1] * c.b.u[0];
-      Q = c.sharp;
-      if (Math.abs(den) > 1e-6) {
-        const t = ((EB.O[0] - EA.O[0]) * c.b.u[1] - (EB.O[1] - EA.O[1]) * c.b.u[0]) / den, q = [EA.O[0] + c.a.u[0] * t, EA.O[1] + c.a.u[1] * t];
-        if (Math.hypot(q[0] - c.sharp[0], q[1] - c.sharp[1]) < 1.5) Q = q;
-      }
-      const L1 = Math.hypot(Q[0] - EA.O[0], Q[1] - EA.O[1]), L2 = Math.hypot(EB.O[0] - Q[0], EB.O[1] - Q[1]);
-      kq = clamp(Math.round(N * L1 / Math.max(1e-6, L1 + L2)), 1, N - 1);
-    }
     const TA_ = X => [X.T[0] - X.n[0] * m, X.T[1] - X.n[1] * m];
     const dA = Math.hypot(EA.O[0] - EA.I[0], EA.O[1] - EA.I[1]), dB = Math.hypot(EB.O[0] - EB.I[0], EB.O[1] - EB.I[1]);
     quad(mat, [v3a(Kx), v3a(TA_(c.a)), v3a(EA.I), v3a(Kx)], nn, tint);
     quad(mat, [v3a(Kx), v3a(EB.I), v3a(TA_(c.b)), v3a(Kx)], nn, tint);
     const ring = k => {
-      const f = k / N, an = c.a0 + c.da * f, e = [Math.cos(an), Math.sin(an)], w = c.a.w + (c.b.w - c.a.w) * f;
-      const ai = arcAt(k, c.r), I = [ai[0] + dIa[0] + (dIb[0] - dIa[0]) * f, ai[1] + dIa[1] + (dIb[1] - dIa[1]) * f];
-      let Ou;
-      if (Q) Ou = k <= kq ? [EA.O[0] + (Q[0] - EA.O[0]) * k / kq, EA.O[1] + (Q[1] - EA.O[1]) * k / kq]
-        : [Q[0] + (EB.O[0] - Q[0]) * (k - kq) / (N - kq), Q[1] + (EB.O[1] - Q[1]) * (k - kq) / (N - kq)];
-      else { const ao = arcAt(k, Math.max(0, c.r - w)); Ou = [ao[0] + dOa[0] + (dOb[0] - dOa[0]) * f, ao[1] + dOa[1] + (dOb[1] - dOa[1]) * f]; }
+      const { f, e, w, I, Ou } = RG[k];
       // гранитная кромка — как у полос (P.edge от ширины тротуара), у острого угла шире пропорционально
       const dist = Math.hypot(Ou[0] - I[0], Ou[1] - I[1]), dEnd = dA + (dB - dA) * f;
       const fe = Math.min(1, P.edge / Math.max(0.2, w * dist / Math.max(1e-3, dEnd)));
@@ -133,5 +103,5 @@ function sitgesBuildWalks(K) {
       A = B;
     }
     cnt.corner++;
-  }
+  });
 }

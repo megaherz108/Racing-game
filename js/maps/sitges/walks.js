@@ -5,7 +5,8 @@
 // строит walks3d.js), стык без ступеньки и торца. Обрезок короче 1,6 м между двумя проезжими частями — не тротуар.
 // C.walks — куски полос: { st, side, i, I0, I1, O0, O1, cutStart, cutEnd }: улица, сторона (0 — левая), отрезок
 //   оси i…i+1, внутренний (у бордюра) и наружный край в начале и в конце ([x, z]), торец в начале / в конце.
-//   Наружный край — линия будущего забора; вместе с наружной дугой углов (C.corners) — вся кромка тротуаров.
+//   Наружный край — линия забора; вместе с наружным краем углов (C.cornerWalks) — вся кромка тротуаров.
+// C.cornerWalks — тротуары скруглённых углов (точки колец, концы — сечения полос), параллельно C.corners.
 // Определяет: sitgesPlanWalks.
 // Использует: clamp (js/core.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -135,4 +136,51 @@ function sitgesPlanWalks(C) {
     }
   }
   C.walks = walks;
+
+  /* ---------- скруглённые углы: тротуар между дугами (точки колец; строит walks3d.js) ---------- */
+  // C.cornerWalks[i] — для угла C.corners[i]: { N, EA, EB, Q, ring } — число кусков дуги; концы (бордюр I и наружный
+  //   край O) — точно сечения прямых полос при s касания; вершина острого наружного угла Q (или null); ring[k],
+  //   k = 0…N — { f, e, w, I, Ou }: доля дуги, направление от центра, ширина тротуара, бордюр и наружный край
+  //   (вместе с O0–O1 полос — кромка тротуаров, линия забора: js/maps/sitges/fences.js)
+  const cornerWalk = c => {
+    const N = Math.max(3, Math.ceil(Math.abs(c.da) * c.r / 0.8));
+    // дуга подправляется сдвигом, плавно меняющимся от одного конца к другому
+    const endOf = X => {
+      const v = X.st.v, sg = X.side ? -1 : 1;
+      let i = 0; while (i < v.length - 2 && v[i + 1].s < X.s) i++;
+      const a = v[i], b = v[i + 1], t = clamp((X.s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
+      const L2 = (p, q) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      // наружный край — по ширине угла X.w (у полосы там та же ширина; рукав без полосы за касанием — 0)
+      return { I: L2(offs(a, sg * (a.hw + 0.05)), offs(b, sg * (b.hw + 0.05))), O: L2(offs(a, sg * (a.hw + X.w)), offs(b, sg * (b.hw + X.w))) };
+    };
+    const EA = endOf(c.a), EB = endOf(c.b);
+    const arcAt = (k, rr) => { const an = c.a0 + c.da * k / N; return [c.O[0] + Math.cos(an) * rr, c.O[1] + Math.sin(an) * rr]; };
+    const sub = (p, q) => [p[0] - q[0], p[1] - q[1]];
+    const dIa = sub(EA.I, arcAt(0, c.r)), dIb = sub(EB.I, arcAt(N, c.r));
+    const dOa = sub(EA.O, arcAt(0, Math.max(0, c.r - c.a.w))), dOb = sub(EB.O, arcAt(N, Math.max(0, c.r - c.b.w)));
+    // острый наружный угол: пересечение наружных краёв полос (по направлениям рукавов), вершина Q — на своём кольце
+    let Q = null, kq = 0;
+    if (c.sharp) {
+      const den = c.a.u[0] * c.b.u[1] - c.a.u[1] * c.b.u[0];
+      Q = c.sharp;
+      if (Math.abs(den) > 1e-6) {
+        const t = ((EB.O[0] - EA.O[0]) * c.b.u[1] - (EB.O[1] - EA.O[1]) * c.b.u[0]) / den, q = [EA.O[0] + c.a.u[0] * t, EA.O[1] + c.a.u[1] * t];
+        if (Math.hypot(q[0] - c.sharp[0], q[1] - c.sharp[1]) < 1.5) Q = q;
+      }
+      const L1 = Math.hypot(Q[0] - EA.O[0], Q[1] - EA.O[1]), L2 = Math.hypot(EB.O[0] - Q[0], EB.O[1] - Q[1]);
+      kq = clamp(Math.round(N * L1 / Math.max(1e-6, L1 + L2)), 1, N - 1);
+    }
+    const ring = [];
+    for (let k = 0; k <= N; k++) {
+      const f = k / N, an = c.a0 + c.da * f, e = [Math.cos(an), Math.sin(an)], w = c.a.w + (c.b.w - c.a.w) * f;
+      const ai = arcAt(k, c.r), I = [ai[0] + dIa[0] + (dIb[0] - dIa[0]) * f, ai[1] + dIa[1] + (dIb[1] - dIa[1]) * f];
+      let Ou;
+      if (Q) Ou = k <= kq ? [EA.O[0] + (Q[0] - EA.O[0]) * k / kq, EA.O[1] + (Q[1] - EA.O[1]) * k / kq]
+        : [Q[0] + (EB.O[0] - Q[0]) * (k - kq) / (N - kq), Q[1] + (EB.O[1] - Q[1]) * (k - kq) / (N - kq)];
+      else { const ao = arcAt(k, Math.max(0, c.r - w)); Ou = [ao[0] + dOa[0] + (dOb[0] - dOa[0]) * f, ao[1] + dOa[1] + (dOb[1] - dOa[1]) * f]; }
+      ring.push({ f, e, w, I, Ou });
+    }
+    return { N, EA, EB, Q, ring };
+  };
+  C.cornerWalks = C.corners.map(cornerWalk);
 }
