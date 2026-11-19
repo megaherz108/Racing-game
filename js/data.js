@@ -5,7 +5,7 @@
 //   hasBadge, badgeGive, fitOf, fitSet, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap, RACE_CPS, RACE_REWARD,
 //   RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN, BOMB_CFG, BOMB_REWARD,
 //   BOMB_ROUND_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave,
-//   cleanJumps, cleanPlayer, loadSave, save, persist, carIndex, browse, paintView.
+//   cleanJumps, cleanPlayer, badgesFromJumps, loadSave, save, persist, carIndex, browse, paintView.
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -339,13 +339,20 @@ function cleanPlayer(p) {
   }
   return { coins: Math.max(0, Math.floor(+p.coins || 0)), owned, sel: owned.includes(p.sel) ? p.sel : 'corolla', paints, paint, badges, fit };
 }
+// значки по уже записанным достижениям: прыжок игрока от BADGE_FLYER_D м в таблице рекордов любой карты — «Лётчик»
+// (рекорды могли появиться раньше самих значков). Меняет sv.players, возвращает sv
+function badgesFromJumps(sv) {
+  for (const list of Object.values(sv.jumps || {}))
+    for (const e of list) if (e.d >= BADGE_FLYER_D && sv.players[e.p]) badgeGive(sv.players[e.p], 'flyer');
+  return sv;
+}
 function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && Array.isArray(s.players) && s.players.length === 2)
-      return { players: s.players.map(cleanPlayer), map: MAP_IDS.includes(s.map) ? s.map : 'city', traffic: cleanTraffic(s.traffic),
+      return badgesFromJumps({ players: s.players.map(cleanPlayer), map: MAP_IDS.includes(s.map) ? s.map : 'city', traffic: cleanTraffic(s.traffic),
         mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod), rain: s.rain === true, quality: cleanQuality(s.quality),
-        jumps: cleanJumps(s.jumps), addr: s.addr === true };
+        jumps: cleanJumps(s.jumps), addr: s.addr === true });
   } catch (e) { /* повреждённое сохранение — начинаем заново */ }
   // перенос со старого формата с общим балансом: монеты делятся пополам, купленные машины есть у обоих
   try {

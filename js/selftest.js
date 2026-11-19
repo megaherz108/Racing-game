@@ -2,11 +2,11 @@
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
 // Использует: cleanPlayer, save, PAINTS, paintOf, PAINT_FREE, paintBuy, hasPaint, FLIP_REWARD, persist, fitSet,
-//   badgeGive, fitOf, hasBadge, CARS, BADGE_SPOTS, BADGES, BADGE_FLYER_D, RACE_CPS, BADGE_RACER_T (js/data.js);
-//   buildCarModel, disposeTree (js/car-models.js); badgeAnchors, fitBadges (js/badges.js); getData, getWorld,
-//   MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js); Traffic
-//   (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins (js/ui.js); Race
-//   (js/race.js); Capture (js/capture.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
+//   badgeGive, fitOf, hasBadge, badgesFromJumps, cleanJumps, BADGE_FLYER_D, CARS, BADGE_SPOTS, BADGES, RACE_CPS,
+//   BADGE_RACER_T (js/data.js); buildCarModel, disposeTree (js/car-models.js); badgeAnchors, fitBadges
+//   (js/badges.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG
+//   (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins
+//   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -295,6 +295,10 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         const junk = cleanPlayer({ owned: ['corolla'], badges: ['racer', 'gold'], fit: { corolla: { hood: 'flyer', lip: 'racer', roof: 'racer' }, niva: { hood: 'racer' } } });
         if (JSON.stringify(junk.badges) !== '["racer"]' || JSON.stringify(junk.fit) !== '{"corolla":{"lip":"racer"}}') errors.push('значок: мусор в сохранении не отброшен ' + JSON.stringify(junk.fit));
         if (cleanPlayer({ coins: 3, owned: ['corolla'], sel: 'corolla' }).badges.length !== 0) errors.push('значок: старое сохранение без значков');
+        // рекорд прыжка, записанный до значков: от BADGE_FLYER_D м у Игрока 2 на Побережье — «Лётчик» у него, у Игрока 1 нет
+        const old = badgesFromJumps({ players: [cleanPlayer({}), cleanPlayer({})],
+          jumps: cleanJumps({ city: [{ d: BADGE_FLYER_D - 0.5, p: 0, car: 'X5' }], coast: [{ d: BADGE_FLYER_D + 12, p: 1, car: '911' }] }) });
+        if (hasBadge(old.players[0], 'flyer') || !hasBadge(old.players[1], 'flyer')) errors.push(`значок «Лётчик» по старым рекордам: ${old.players.map(p => p.badges.join())}`);
         // места на кузове всех машин: нашлись, лежат на поверхности (не утоплены и не висят), бамперные — целиком на бампере
         const bad = [];
         for (const def of CARS) {
