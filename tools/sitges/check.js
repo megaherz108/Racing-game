@@ -7,6 +7,8 @@
 //   time     — постройка: раскладка (getData), мир (getWorld), ровное полотно; fresh — первая постройка на странице
 //   counts   — улицы, пути, переезды, путепроводы, углы, части домов, куски стен, треугольники и меши улиц, столкновения,
 //              заборы (км, отрезков)
+//   roofs    — формы крыш частей (плоская, двускатная, вальмовая, односкатная, вальма отступом), будки лестниц,
+//              треугольники зданий вместе с крышами
 //   corners  — сводка углов C.cornerStats и причины пропусков (C.cornerLog по why)
 //   width    — проезжие улицы с полосами (точки): доли ширины проезжей части < 5, 5–6, 6–8, ≥ 8 м, тротуары с двух
 //              сторон; Enric Morera — медиана проезжей части и тротуаров (эталон решения 3: ≈ 6 м)
@@ -48,6 +50,11 @@
       houses: HS.parts, wallPieces: HS.pieces, blind: HS.blind, streetWalls: HS.street, passes: HS.pass,
       roadTris: RS.tris, roadMeshes: RS.meshes, walkColliderTris: RS.colliders, walkPieces: RS.walk, zebras: RS.zebra, evenNodes: C.evenStats.nodes,
       fenceKm: RS.fences.km, fenceRuns: RS.fences.runs,
+    };
+    // крыши (этап 4): формы по C.houses, будки на плоских, треугольники зданий с крышами
+    out.roofs = {
+      flat: HS.flat || 0, gable: HS.gable || 0, hip: HS.hip || 0, shed: HS.shed || 0, inset: HS.inset || 0,
+      huts: C.houses.filter(h => h.roof && h.roof.hut).length, bldTris: W.stats.bld ? W.stats.bld.tris : 0,
     };
     const why = {};
     for (const e of C.cornerLog) why[e.why] = (why[e.why] || 0) + 1;

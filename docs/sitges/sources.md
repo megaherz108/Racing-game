@@ -6,11 +6,11 @@
 
 | Источник | Что берём | Лицензия / подпись |
 |---|---|---|
-| [OpenStreetMap](https://www.openstreetmap.org) (Overpass API) | улицы и их классы, односторонки, покрытие (у ~половины), контуры зданий, берег, пляжи, волнорезы, марина, ж/д, парки, названия | ODbL — «© участники OpenStreetMap»; готовый файл данных при распространении игры должен оставаться открытым |
+| [OpenStreetMap](https://www.openstreetmap.org) (Overpass API) | точки (магазины и кафе → витрины, деревья, фонари, переходы, ворота — `data-points.js`); улицы и их классы, односторонки, покрытие (у ~половины), контуры зданий, берег, пляжи, волнорезы, марина, ж/д, парки, названия | ODbL — «© участники OpenStreetMap»; готовый файл данных при распространении игры должен оставаться открытым |
 | [Кадастр Испании, INSPIRE BU](https://www.catastro.hacienda.gob.es/webinspire/index_eng.html) | контуры зданий по частям, `numberOfFloorsAboveGround` у каждой части — этажность всех домов | открытые данные — «Fuente: Dirección General del Catastro» |
 | Кадастр Испании, INSPIRE CP (`CadastralParcel`) — этап 3а | границы участков: промежуток между ними — настоящая ширина улицы «от забора до забора», граница участка у улицы — линия забора | то же |
 | Кадастр Испании, INSPIRE AD (`Address`) — подписи адресов | улица и номер дома, точка входа и кадастровый номер участка (= номер здания в BU): 7059 адресов, у всех 2776 зданий карты есть адрес; названия улиц кадастра — заглавными без диакритики («CL AIGUA»), конвейер пишет их как «C/ Aigua» | то же |
-| [ICGC](https://www.icgc.cat/en/Geoinformation-and-Maps/Data-and-products/Elevations/Territorial-LiDAR) (лидар 2021–2023) | рельеф без зданий (DTM); поверхность (DSM) − рельеф = настоящая высота крыш и тип крыши (плоская / скатная); ортофото 25 см — цвет крыш, пляжи, деревья | CC BY 4.0 — «Institut Cartogràfic i Geològic de Catalunya» |
+| [ICGC](https://www.icgc.cat/en/Geoinformation-and-Maps/Data-and-products/Elevations/Territorial-LiDAR) | рельеф без зданий (DTM, WCS `icc_mdt`); прибрежный лидар 50 см 2024 — модель «рельеф + здания» (WMS `elevacions-litoral`, серый с калибровкой по `GetFeatureInfo`) → тип крыши; ортофото 25 см 2024 (WMS `orto-territorial`) → цвет крыш (этап 4, `docs/sitges/stage-4.md`) | CC BY 4.0 — «Institut Cartogràfic i Geològic de Catalunya» |
 | Mapillary, Wikimedia Commons | фото фасадов — стили районов и вид достопримечательностей (смотрим глазами) | свободные |
 | Google Maps / Street View | только смотреть глазами; данные и 3D-тайлы извлекать нельзя по условиям Google | — |
 

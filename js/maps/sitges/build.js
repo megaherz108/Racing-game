@@ -8,7 +8,7 @@
 //   (после тротуаров)            простые заборы по кромке тротуаров (js/maps/sitges/fences3d.js)
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
-// Определяет: SITGES_LANE, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
+// Определяет: SITGES_LANE, SITGES_LOOK, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
 //   (js/maps/city/textures.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesRaster
 //   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
@@ -21,6 +21,8 @@
 
 // смещение машины от оси улицы при респауне, м
 const SITGES_LANE = 1.6;
+// свет карты: экспозиция (1 — как у пресета времени суток)
+const SITGES_LOOK = { exposure: 0.85 };
 // площадные объекты с травой (покрытие под колёсами)
 const SITGES_GREEN = new Set(['park', 'garden', 'grass', 'golf', 'pitch', 'playground', 'cemetery', 'wood', 'scrub', 'farmland']);
 
@@ -95,9 +97,13 @@ function sitgesBuildWorld(K) {
     surface: (x, z, y = Infinity) => { const w = walkAt(x, z); return Math.max(D.ground(x, z), decks.surface(x, z, y), w <= y ? w : -Infinity); },
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
+    // свет (этап 4): белые стены и светлая черепица пересвечивались — экспозиция ниже и тонкоррекция, как на
+    // «Побережье» (js/sky.js, js/core.js). Силу солнца и заполняющего света не задаём: карта ездится в любое время
+    // суток, а look их заменяет, а не умножает
+    look: { exposure: SITGES_LOOK.exposure, grade: true },
     coinCount: 80, spawns,
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats }, walkAt, roadLod,
+    stats: { roads: K.roadsStats, bld: K.bldStats }, walkAt, roadLod,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;

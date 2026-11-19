@@ -4,15 +4,18 @@
 //   Общие стены — ребро контура, вдоль которого встречно (ближе tol) идёт ребро соседней части, закрыто ею по её
 //     высоте: рисуем только то, что выше (или ниже проезда соседа). Над соседом из другого дома — глухая стена
 //     (брандмауэр), над своей частью — фасад с окнами.
-//   Фасады к улице — открытые куски стен, перед которыми проезжая часть или тротуар: на первом этаже витрины и двери.
+//   Фасады к улице — открытые куски стен, перед которыми проезжая часть или тротуар: на первом этаже витрины и двери
+//     (сплошь витрины — у магазинов кадастра и у фасадов рядом с магазином или кафе OSM).
 //   Проезды — части от 2 этажей, сквозь которые идёт проезжая улица (в OSM — короткий тоннель): низ поднят
 //     на clear м над улицей, снизу — потолок, коллайдер — тоже от него.
-// C.houses — части: { b, p, rings, y0, y1, base, pass, walls }; кусок стены — { ax, az, bx, bz, ua, ub, ga, gb,
+//   Крыши — сразу после проездов (sitgesRoofPlan, js/maps/sitges/roofs.js): у скатной верх стен y1 — карниз.
+// C.houses — части: { b, p, rings, y0, y1, top, base, pass, roof, shared, attached, walls } (shared — есть общая
+//   стена, attached — с чужим зданием); кусок стены — { ax, az, bx, bz, ua, ub, ga, gb,
 //   lo, hi, nx, nz, kind }: концы, номер оконной оси на концах, земля у концов, низ и верх, нормаль наружу, вид.
 //   C.houseAt(x, z) — часть дома под точкой (или undefined).
 // Определяет: SITGES_H, SITGES_WALL, SITGES_SHOPS, sitgesPlanHouses.
 // Использует: sitgesBBox, sitgesInPoly, sitgesCells (js/maps/sitges/geom.js); SITGES_DRIVE
-//   (js/maps/sitges/minimap.js).
+//   (js/maps/sitges/minimap.js); sitgesRoofPlan (js/maps/sitges/roofs.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -23,13 +26,15 @@ const SITGES_H = {
   street: [0.6, 1.8], // фасад к улице: проезжая часть с тротуаром (запас sw) — на таком удалении перед стеной
   sw: 4.0,
   clear: 4.4,       // просвет проезда под домом над улицей, м
+  shopR: 9,         // точка магазина OSM ближе к середине куска фасада — витрины
 };
-// вид куска стены (атрибут шейдера фасада): двор / глухая / к улице (жилой) / к улице (магазины); 4 — крыша
-const SITGES_WALL = { yard: 0, blind: 1, street: 2, shops: 3, roof: 4 };
+// вид куска стены (атрибут шейдера фасада): двор / глухая / к улице (жилой) / к улице (магазины); 4 — плоская крыша,
+// 5 — черепица (js/maps/sitges/roofs3d.js)
+const SITGES_WALL = { yard: 0, blind: 1, street: 2, shops: 3, roof: 4, tile: 5 };
 const SITGES_SHOPS = new Set(['4_2_retail', '4_1_office', '4_3_publicServices']);
 
 function sitgesPlanHouses(C) {
-  const { blds, partCells, ground, streets, carriageAt } = C, P = SITGES_H, W = SITGES_WALL;
+  const { blds, partCells, ground, streets, carriageAt, points } = C, P = SITGES_H, W = SITGES_WALL;
   const houses = [];
   const st = { parts: 0, edges: 0, shared: 0, pieces: 0, blind: 0, street: 0, pass: 0, wallArea: 0, hidden: 0 };
 
@@ -61,6 +66,9 @@ function sitgesPlanHouses(C) {
     }
   }
   for (const h of houses) if (h.passY !== undefined && h.passY < h.y1 - 2.5) { h.pass = true; h.y0 = h.passY; st.pass++; }
+
+  /* ---------- крыши (js/maps/sitges/roofs.js): у скатных верх стен опускается до карниза ---------- */
+  houses.forEach((h, k) => { h.roof = sitgesRoofPlan(h, k); st[h.roof.kind] = (st[h.roof.kind] || 0) + 1; });
 
   /* ---------- рёбра и общие стены ---------- */
   const E = [], ecell = sitgesCells(8);
@@ -97,10 +105,14 @@ function sitgesPlanHouses(C) {
   /* ---------- куски стен ---------- */
   // перед стеной улица: проезжая часть с тротуаром в паре метров от фасада
   const facesStreet = (x, z, nx, nz) => P.street.some(d => !!carriageAt(x + nx * d, z + nz * d, null, P.sw));
+  // магазины и кафе OSM (точки): фасад к улице ближе P.shopR — витрины, как у магазинов кадастра
+  const shopCells = sitgesCells(16);
+  for (const q of points.shop) shopCells.add(q[0] - P.shopR, q[0] + P.shopR, q[1] - P.shopR, q[1] + P.shopR, q);
+  const nearShop = (x, z) => shopCells.at(x, z).some(q => (q[0] - x) ** 2 + (q[1] - z) ** 2 < P.shopR * P.shopR);
   for (const e of E) {
     const h = houses[e.hi], shops = SITGES_SHOPS.has(h.b.use);
     st.edges++; st.wallArea += e.L * (h.y1 - h.y0);
-    if (e.cov.length) st.shared++;
+    if (e.cov.length) { st.shared++; h.shared = true; if (e.cov.some(c => c[2].bi !== h.bi)) h.attached = true; }
     // оконные оси: целое число на ребре; номер первой — свой у каждого ребра (по нему шейдер выбирает витрину / дверь)
     const n = e.L >= P.minCol ? Math.max(1, Math.round(e.L / P.col)) : 0, u0 = (st.edges * 37) % 509;
     // точки раздела по длине ребра
@@ -139,7 +151,8 @@ function sitgesPlanHouses(C) {
       st.hidden -= (s.t1 - s.t0) * (s.hi - s.lo);
       const ax = e.ax + e.ux * s.t0, az = e.az + e.uz * s.t0, bx = e.ax + e.ux * s.t1, bz = e.az + e.uz * s.t1;
       let kind = s.k;
-      if (kind < 0) kind = facesStreet((ax + bx) / 2, (az + bz) / 2, e.nx, e.nz) ? (shops ? W.shops : W.street) : W.yard;
+      if (kind < 0) kind = facesStreet((ax + bx) / 2, (az + bz) / 2, e.nx, e.nz)
+        ? (shops || nearShop((ax + bx) / 2, (az + bz) / 2) ? W.shops : W.street) : W.yard;
       if (kind === W.blind) st.blind++;
       if (kind === W.street || kind === W.shops) st.street++;
       h.walls.push({ ax, az, bx, bz, ua: u0 + s.t0 * n / e.L, ub: u0 + s.t1 * n / e.L, ga: ground(ax, az), gb: ground(bx, bz), lo: s.lo, hi: s.hi, nx: e.nx, nz: e.nz, kind });

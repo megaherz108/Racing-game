@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1285,
-  "world": 2123,
-  "even": 142,
+  "data": 1310,
+  "world": 2049,
+  "even": 127,
   "fresh": true
  },
  "counts": {
@@ -15,8 +15,8 @@
   "sharp": 96,
   "snap": 122,
   "houses": 12628,
-  "wallPieces": 60964,
-  "blind": 14312,
+  "wallPieces": 61489,
+  "blind": 14523,
   "streetWalls": 5553,
   "passes": 5,
   "roadTris": 809220,
@@ -27,6 +27,15 @@
   "evenNodes": 210102,
   "fenceKm": 55.125,
   "fenceRuns": 1440
+ },
+ "roofs": {
+  "flat": 5762,
+  "gable": 1084,
+  "hip": 2423,
+  "shed": 2332,
+  "inset": 1027,
+  "huts": 221,
+  "bldTris": 312170
  },
  "corners": {
   "stats": {

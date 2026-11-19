@@ -59,7 +59,7 @@ function sitgesLabels(C, group) {
     for (const h of C.houses) {
       const I = info[h.bi], [cx, cz, a] = ringCentroid(h.rings[0]);
       I.x += cx * a; I.z += cz * a; I.a += a;
-      I.y = Math.max(I.y, h.y1);
+      I.y = Math.max(I.y, h.top ?? h.y1);
       I.f0 = Math.min(I.f0, h.p.floors); I.f1 = Math.max(I.f1, h.p.floors);
     }
     cells = new Map();
@@ -71,7 +71,7 @@ function sitgesLabels(C, group) {
       if (e) {
         const dx = e.x - I.x, dz = e.z - I.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
         const h = C.houseAt(e.x - ux, e.z - uz) || C.houseAt(e.x, e.z);
-        if (h && h.bi === I.bi) I.y = h.y1;
+        if (h && h.bi === I.bi) I.y = h.top ?? h.y1;
         I.x = e.x + ux * L.out; I.z = e.z + uz * L.out;
       }
       const key = Math.floor(I.x / 40) + ',' + Math.floor(I.z / 40);

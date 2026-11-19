@@ -11,8 +11,9 @@
 //   5. рельеф ICGC на сетке 10 м в локальных координатах (с запасом за границей — фон);
 //   5а. участки кадастра (INSPIRE CP) у игровой области: внешние контуры, упрощённые — линия заборов;
 //   5б. адреса кадастра (INSPIRE AD) к зданиям по кадастровому номеру — подписи над домами (отладка);
+//   5в. крыши частей по плиткам ICGC (тип — лидар, цвет — ортофото; tools/sitges/read-roofs.js), точки OSM;
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
-//      data-addr.js.
+//      data-addr.js, data-roofs.js, data-points.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
@@ -20,6 +21,7 @@ const U = require('./util');
 const { readOSM, ROAD_CLASSES, SURFACES, AREA_KINDS, LINE_KINDS } = require('./read-osm');
 const { readCatastro, readParcels, readAddresses, USES } = require('./read-catastro');
 const { readDTM } = require('./read-dtm');
+const { readRoofs, ROOF_TYPES, ROOF } = require('./read-roofs');
 
 const CFG = {
   north: 400,        // граница на севере: ж/д + 400 м…
@@ -312,6 +314,39 @@ for (const b of blds) {
 }
 
 /* =====================================================================
+   5в. КРЫШИ (ортофото и лидар ICGC, tools/sitges/read-roofs.js) И ТОЧКИ OSM
+   ===================================================================== */
+const allParts = blds.flatMap(b => b.parts);
+const haveTiles = ['orto', 'dsm'].every(k => fs.existsSync(path.join(G.RAW, k)));
+const roofs = haveTiles ? readRoofs(allParts) : null;
+const rfStat = { types: ROOF_TYPES.map(() => 0), lidar: 0, slopes: [] };
+const rfStream = [];
+if (roofs) for (const r of roofs) {
+  rfStat.types[r.type]++;
+  if (r.cov >= ROOF.cov) rfStat.lidar++;
+  if (r.slope >= 0) rfStat.slopes.push(r.slope);
+  // [тип, угол / 3°, цвет по 5 бит на канал]
+  rfStream.push(r.type, Math.round(r.ang / 3) % 120, r.col[0] >> 3, r.col[1] >> 3, r.col[2] >> 3);
+}
+// точки OSM (магазины и кафе — витрины; деревья, фонари, переходы, светофоры, ворота — на будущие этапы)
+const PT_KINDS = ['shop', 'tree', 'lamp', 'crossing', 'signals', 'gate'];
+const FRONT = /^(cafe|restaurant|bar|pub|fast_food|ice_cream|pharmacy|bank|bureau_de_change|post_office|nightclub|clinic|dentist|veterinary)$/;
+const ptKind = t => t.shop || t.office || t.craft || FRONT.test(t.amenity || '') ? 'shop'
+  : t.natural === 'tree' ? 'tree' : t.highway === 'street_lamp' ? 'lamp' : t.highway === 'crossing' ? 'crossing'
+  : t.highway === 'traffic_signals' ? 'signals' : /^(gate|lift_gate|sliding_gate|swing_gate)$/.test(t.barrier || '') ? 'gate' : null;
+const pts = [];
+if (fs.existsSync(path.join(G.RAW, 'points.json'))) {
+  for (const e of JSON.parse(fs.readFileSync(path.join(G.RAW, 'points.json'), 'utf8')).elements) {
+    if (e.type !== 'node' || !e.tags) continue;
+    const k = ptKind(e.tags);
+    if (!k) continue;
+    const [x, z] = loc(G.utm(e.lat, e.lon));
+    if (inside(x, z, 20)) pts.push({ k: PT_KINDS.indexOf(k), x: r1(x), z: r1(z) });
+  }
+}
+pts.sort((a, b) => a.k - b.k || morton(a.x, a.z) - morton(b.x, b.z));
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
@@ -428,6 +463,30 @@ write('data-addr.js', [
 };
 `);
 
+if (roofs) write('data-roofs.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: крыши частей зданий — тип по уклонам лидара, цвет по ортофото.',
+  `// Источник: ICGC — ортофото 25 см 2024 (WMS orto-territorial), модель «рельеф + здания» прибрежного лидара 50 см 2024`,
+  `//   (WMS elevacions-litoral), скачано ${date('orto')}; разбор — tools/sitges/read-roofs.js.`, LIC_ICGC,
+  `// SITGES_ROOF: types — ${J(ROOF_TYPES)} (none — нет данных, pitched — скатная по цвету черепицы, лидара нет);`,
+  '//   m — поток целых: на каждую часть в порядке SITGES_BLD [тип, угол / 3° (у односкатной — направление вниз',
+  '//   по скату, 0…360°; у остальных — линия конька, 0…180°; atan2(z, x) в осях игры), R, G, B по 5 бит].',
+], 'SITGES_ROOF', `const SITGES_ROOF = {
+  types: ${J(ROOF_TYPES)},
+  m: '${U.enc(rfStream)}',
+};
+`);
+
+write('data-points.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: точки OSM — магазины и кафе (витрины), деревья, фонари, переходы, светофоры, ворота.',
+  `// Источник: OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}).`, LIC_OSM,
+  `// SITGES_PTS: kinds — ${J(PT_KINDS)}; m — вид каждой точки (по порядку, сгруппированы по виду); p — точки.`,
+], 'SITGES_PTS', `const SITGES_PTS = {
+  kinds: ${J(PT_KINDS)},
+  m: '${U.enc(pts.map(p => p.k))}',
+  p: '${U.encPoints([pts.map(p => [p.x, p.z])])}',
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -441,6 +500,15 @@ console.log('  этажность частей:', Object.entries(fl).map(([k, v]
 console.log(`OSM: улиц ${roads.length} (${km(roadLen)} км), ж/д ${rails.length}, берег ${coast.length}, площадных ${areas.length}${sea ? ' (с морем)' : ' (МОРЕ НЕ ПОСТРОЕНО)'}, линий ${lines.length}, ориентиров ${pois.length}`);
 console.log(`Участки кадастра: ${pcl.stat.all} (дорог и ручьёв сельского кадастра ${pcl.stat.publicRustic}, вне области ${pStat.outside}); на карте ${parcels.length} (сельских ${pStat.rustic}), дыр выброшено ${pStat.holes}; вершин было ${pStat.v0}, стало ${pStat.v1}`);
 console.log(`Адреса кадастра: ${aStat.all}, к зданиям на карте ${aStat.used} (без номера ${aStat.noNum}); с адресом ${aStat.blds} зданий из ${blds.length}, улиц ${adNames.list.length}`);
+if (roofs) {
+  console.log(`Крыши: ${ROOF_TYPES.map((t, i) => t + ' ' + rfStat.types[i]).join(', ')}; с лидаром ${rfStat.lidar} из ${roofs.length}`);
+  // распределение уклонов (сколько частей с уклоном в корзине) — порог ROOF.minSlope должен лечь в провал
+  const bins = [0, 0.03, 0.06, 0.09, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.6, Infinity], hist = bins.slice(1).map(() => 0);
+  for (const v of rfStat.slopes) hist[bins.findIndex((b, i) => v >= b && v < bins[i + 1])]++;
+  console.log('  уклоны:', hist.map((n, i) => `${bins[i]}…${bins[i + 1]}: ${n}`).join(', '));
+}
+else console.log('Крыши: нет плиток orto/ и dsm/ — запусти download.js (data-roofs.js не записан)');
+console.log(`Точки OSM: ${PT_KINDS.map((k, i) => k + ' ' + pts.filter(p => p.k === i).length).join(', ')}`);
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 

@@ -4,18 +4,21 @@
 //   sitgesPlanBase (здесь)       границы, улицы, ж/д, берег, площадные объекты, здания, участки, рельеф ICGC, ориентиры
 //   sitgesPlanTerrain            игровая сетка высот, море, берег, пляжи, волнорезы (js/maps/sitges/terrain.js)
 //   sitgesPlanRoads              ширины улиц, тротуары, путепроводы и выемки под ними (js/maps/sitges/roads.js)
-//   sitgesPlanHouses             высоты домов на рельефе, общие стены, фасады к улице, проезды (js/maps/sitges/houses.js)
+//   sitgesPlanHouses             высоты домов на рельефе, крыши, общие стены, фасады к улице, проезды (js/maps/sitges/houses.js)
+//   sitgesPlanStyles             стили фасадов по году, этажности и району (js/maps/sitges/styles.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
 // Этапы 1–3 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания по контурам и этажности кадастра.
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
 //   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); SITGES_PCL
-//   (js/maps/sitges/data-parcels.js); sitgesCells, sitgesBBox (js/maps/sitges/geom.js); sitgesPlanTerrain
+//   (js/maps/sitges/data-parcels.js); SITGES_ROOF (js/maps/sitges/data-roofs.js); SITGES_PTS
+//   (js/maps/sitges/data-points.js); sitgesCells, sitgesBBox (js/maps/sitges/geom.js); sitgesPlanTerrain
 //   (js/maps/sitges/terrain.js); sitgesPlanStreets (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels
 //   (js/maps/sitges/levels.js); sitgesPlanCorners (js/maps/sitges/corners.js); sitgesPlanCarriage
 //   (js/maps/sitges/carriage.js); sitgesPlanWalks (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE
-//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js).
+//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js); sitgesPlanStyles
+//   (js/maps/sitges/styles.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -67,6 +70,7 @@ function sitgesData() {
   sitgesPlanCarriage(C);
   sitgesPlanWalks(C);
   sitgesPlanHouses(C);
+  sitgesPlanStyles(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
@@ -125,6 +129,15 @@ function sitgesPlanBase(C) {
   const bp = sitgesPts(B.p, counts);
   let ri = 0;
   for (const b of blds) for (const p of b.parts) { p.rings = bp.slice(ri, ri + p.nr); ri += p.nr; delete p.nr; }
+  // крыши (этап 4): на часть [тип, угол / 3°, R, G, B по 5 бит] — тип и цвет по лидару и ортофото ICGC
+  if (typeof SITGES_ROOF !== 'undefined') {
+    const rf = sitgesDec(SITGES_ROOF.m);
+    let k = 0;
+    for (const b of blds) for (const p of b.parts) {
+      const o = k++ * 5;
+      p.roof = { type: rf[o], ang: rf[o + 1] * 3, col: [rf[o + 2], rf[o + 3], rf[o + 4]].map(v => (v * 8 + 4) / 255) };
+    }
+  }
 
   // части домов по клеткам 32 м: { k — номер части по порядку (как в C.houses), r — внешний контур, bb — рамка };
   // «точка в доме» для углов улиц (js/maps/sitges/corners.js) и houseAt (js/maps/sitges/houses.js)
@@ -150,6 +163,13 @@ function sitgesPlanBase(C) {
     return (H[k] * (1 - tx) + H[k + 1] * tx) * (1 - tz) + (H[k + T.nx] * (1 - tx) + H[k + T.nx + 1] * tx) * tz;
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
+  // точки OSM по видам (SITGES_PTS.kinds): { shop: [[x, z], …], tree: …, … }
+  const points = {};
+  if (typeof SITGES_PTS !== 'undefined') {
+    const km = sitgesDec(SITGES_PTS.m), [pp2] = sitgesPts(SITGES_PTS.p, [km.length]);
+    for (const k of SITGES_PTS.kinds) points[k] = [];
+    km.forEach((k, i) => points[SITGES_PTS.kinds[k]].push(pp2[i]));
+  } else points.shop = [];
   const dtm = { H, nx: T.nx, nz: T.nz, x0: T.x0, z0: T.z0, step: T.step };
-  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, partCells, parcels, terrainAt, dtm, pois });
+  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, partCells, parcels, terrainAt, dtm, pois, points });
 }
