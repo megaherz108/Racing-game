@@ -1,7 +1,7 @@
 // Шоурум — 3D-фон меню и гаража
 // Определяет: show, showKey, showCam, podiums, PODIUM_X, PODIUM_SPAN, viewShift, updatePodium.
-// Использует: PLAYER_COLORS, CARS, browse (js/data.js); envTex, QUAL (js/core.js); EnvProbe (js/envprobe.js);
-//   disposeTree, buildCarModel (js/car-models.js).
+// Использует: PLAYER_COLORS, CARS, browse, paintView, paintDef, paintOf, save (js/data.js); envTex, QUAL
+//   (js/core.js); EnvProbe (js/envprobe.js); paintCar, disposeTree, buildCarModel (js/car-models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -41,9 +41,15 @@ for (let p = 0; p < 2; p++) {
 }
 function updatePodium(p) {
   const def = CARS[browse[p]], pod = podiums[p];
-  if (pod.carId === def.id) return;
+  // цвет: примеряемый (paintView) или выбранный игроком для этой машины; смена цвета — без перестройки модели
+  const pd = paintView[p] ? paintDef(paintView[p]) : paintOf(save.players[p], def.id);
+  if (pod.carId === def.id) {
+    if (pod.paintId !== pd.id) { paintCar(pod.car.paint, pd); pod.paintId = pd.id; pod.turn.scale.setScalar(0.94); }
+    return;
+  }
   if (pod.car) { pod.turn.remove(pod.car.root); disposeTree(pod.car.root); }
-  pod.car = buildCarModel(def, def.paints[p], { lacquer: true });
+  pod.car = buildCarModel(def, 0xffffff, { lacquer: true });
+  paintCar(pod.car.paint, pd); pod.paintId = pd.id;
   pod.car.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   pod.turn.add(pod.car.root);
   pod.carId = def.id;

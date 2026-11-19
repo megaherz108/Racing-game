@@ -70,6 +70,15 @@ button{font:inherit;cursor:pointer;color:inherit}
   color:#7ef0a4;font-weight:500;border:1px solid rgba(94,227,138,.3)}
 .buybtn{width:100%}
 .buybtn.can{background:linear-gradient(135deg,#ffd75a,#ffab1a);color:#241500;border:none;font-weight:700}
+.paints{display:flex;gap:2px;margin:0 0 10px}
+.paints .sw{flex:1 1 0;min-width:0;padding:4px 0 2px;border-radius:7px;border:1px solid transparent;background:none;
+  display:flex;flex-direction:column;align-items:center;gap:2px}
+.paints .sw i{width:19px;height:19px;border-radius:50%;box-shadow:inset 0 -4px 6px rgba(0,0,0,.35),inset 0 2px 3px rgba(255,255,255,.35),0 0 0 1px rgba(255,255,255,.28)}
+.paints .sw small{font-size:9.5px;line-height:11px;height:11px;color:var(--mut)}
+.paints .sw.locked i{opacity:.5}
+.paints .sw:hover{background:rgba(255,255,255,.08)}
+.paints .sw.on{border-color:var(--pc);background:rgba(255,255,255,.1)}
+.paints .sw.on small{color:#fff}
 .lockline{display:flex;justify-content:center;gap:6px;color:#ffb7a0;font-size:13px;margin-bottom:8px}
 #garage .bottombar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px}
 #garage .bottombar .row{display:flex;gap:12px}

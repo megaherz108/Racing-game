@@ -1,16 +1,18 @@
 // Интерфейс: меню, гараж, выбор карты, HUD, мини-карта, ввод
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
-//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, JUMP_DESC, MODE_INFO,
-//   drawModePreview, renderMaps, renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
-//   renderWeather, setWeather, renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap,
-//   stepMap, openMaps, setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
-// Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, JUMP, KO_REWARD,
-//   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD,
-//   RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
-//   lerp, clamp (js/core.js); updatePodium (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData,
-//   MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic
-//   (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch, matchMode (js/match.js); Race
-//   (js/race.js); Capture (js/capture.js); jumpTable (js/jumps.js); Bomb (js/bomb.js); Perf (js/main.js).
+//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, showCar, pickPaint, stepPaint, buyPaint,
+//   buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview, renderMaps, renderJumps, renderQuality, setQuality,
+//   stepQuality, renderTime, setTime, stepTime, renderWeather, setWeather, renderAddr, setAddr, renderTraffic,
+//   setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps, setPaused, raceEndOpen, closeRaceEnd, keys,
+//   BLOCK.
+// Использует: paintView, save, persist, KMH, CARS, browse, derive, STATS, paintOf, paintDef, PAINTS, hasPaint,
+//   time100, HANDLING, PAINT_FREE, paintBuy, carIndex, JUMP, KO_REWARD, FLIP_REWARD, CAP_REWARD, CAP_CFG,
+//   CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD, RACE_CP_REWARD, RACE_CPS, playMap, MODES,
+//   PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js); lerp, clamp (js/core.js); updatePodium
+//   (js/showroom.js); smooth01, mulberry32 (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins
+//   (js/effects.js); Sound (js/audio.js); cars (js/physics.js); Traffic (js/traffic/traffic.js); state, paused,
+//   countdown, startMatch, endMatch, matchMode (js/match.js); Race (js/race.js); Capture (js/capture.js); jumpTable
+//   (js/jumps.js); Bomb (js/bomb.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -24,6 +26,7 @@ function setState(s) {
   for (const [k, el] of Object.entries(screens)) el.classList.toggle('hidden', k !== s);
   $('pause').classList.toggle('hidden', !(s === 'play' && paused));
   if (s === 'garage') renderGarage();
+  else if (paintView[0] || paintView[1]) { paintView[0] = paintView[1] = null; updatePodium(0); updatePodium(1); }   // примерка — только в гараже
   if (s === 'maps') renderMaps();
   updateCoins();
 }
@@ -144,8 +147,21 @@ function renderGarage() {
       return `<div class="stat"><span>${label}</span><div class="segs">${segs}</div><b>${v}</b></div>`;
     }).join('');
     let action;
-    if (owned) action = `<div class="owned">✓ В гараже · выбрана</div>`;
-    else {
+    if (owned) {
+      // цвета: купленные выбираются кликом, некупленный клик примеряет на витрине (paintView) и показывает покупку
+      const cur = paintOf(pl, def.id), view = paintView[p] ? paintDef(paintView[p]) : null;
+      const sw = PAINTS.map(c => {
+        const has = hasPaint(pl, def.id, c.id);
+        return `<button class="sw ${(view || cur).id === c.id ? 'on' : ''} ${has ? '' : 'locked'}" data-paint="${p}" data-c="${c.id}"
+          title="${c.name}${has ? '' : ` — ${c.price} монет`}"><i style="background:#${c.hex.toString(16).padStart(6, '0')}"></i><small>${has ? (c.id === cur.id ? '✓' : '') : c.price}</small></button>`;
+      }).join('');
+      action = `<div class="paints">${sw}</div>`;
+      if (view) {
+        const can = pl.coins >= view.price;
+        action += `<div class="lockline">🎨 ${view.name} — не куплен${can ? '' : ` · не хватает ${view.price - pl.coins}`}</div>
+          <button class="btn buybtn ${can ? 'can' : ''}" data-buypaint="${p}" ${can ? '' : 'disabled'}>Купить цвет за ${view.price} <i class="coin"></i></button>`;
+      } else action += `<div class="owned">✓ В гараже · ${cur.name.toLowerCase()} цвет</div>`;
+    } else {
       const can = pl.coins >= def.price;
       action = `<div class="lockline">🔒 Не куплена${can ? '' : ` · не хватает ${def.price - pl.coins}`}</div>
         <button class="btn buybtn ${can ? 'can' : ''}" data-buy="${p}" ${can ? '' : 'disabled'}>Купить за ${def.price} <i class="coin"></i></button>`;
@@ -164,10 +180,38 @@ function renderGarage() {
   $('gWarn').textContent = bad.length ? bad.map(p => `Игрок ${p + 1}: машина не куплена`).join(' · ') : '';
   $('gPlay').disabled = bad.length > 0;
 }
-function browseCar(p, d) { browse[p] = (browse[p] + d + CARS.length) % CARS.length; renderGarage(); }
+function browseCar(p, d) { showCar(p, (browse[p] + d + CARS.length) % CARS.length); }
+function showCar(p, i) { browse[p] = i; paintView[p] = null; renderGarage(); }
+// клик по цвету: купленный — выбрать для этой машины, некупленный — примерить
+function pickPaint(p, id) {
+  const pl = save.players[p], carId = CARS[browse[p]].id;
+  if (!pl.owned.includes(carId)) return;
+  if (hasPaint(pl, carId, id)) {
+    paintView[p] = null;
+    if (id === PAINT_FREE) delete pl.paint[carId]; else pl.paint[carId] = id;
+    persist();
+  } else paintView[p] = id;
+  renderGarage();
+}
+// следующий цвет по кругу (клавиши S / ↓)
+function stepPaint(p) {
+  const pl = save.players[p], carId = CARS[browse[p]].id;
+  if (!pl.owned.includes(carId)) return;
+  const i = PAINTS.indexOf(paintView[p] ? paintDef(paintView[p]) : paintOf(pl, carId));
+  pickPaint(p, PAINTS[(i + 1) % PAINTS.length].id);
+}
+function buyPaint(p) {
+  const pl = save.players[p], def = CARS[browse[p]], pd = paintView[p] && paintDef(paintView[p]);
+  if (!pd) return;
+  const why = paintBuy(pl, def.id, pd.id);
+  if (why) { toast(`Игрок ${p + 1}: ${why}`); return; }
+  paintView[p] = null; persist(); updateCoins();
+  toast(`Игрок ${p + 1}: ${def.short} — ${pd.name.toLowerCase()} цвет куплен!`);
+  renderGarage();
+}
 function buyCar(p) {
   const pl = save.players[p], def = CARS[browse[p]];
-  if (pl.owned.includes(def.id)) return;
+  if (pl.owned.includes(def.id)) { buyPaint(p); return; }   // W / ↑ у купленной машины — купить примеряемый цвет
   if (pl.coins < def.price) { toast(`Игроку ${p + 1} не хватает ${def.price - pl.coins} монет`); return; }
   pl.coins -= def.price; pl.owned.push(def.id); pl.sel = def.id; persist();
   toast(`Игрок ${p + 1}: ${def.name} куплена!`);
@@ -177,10 +221,10 @@ function buyCar(p) {
 function syncBrowse() { for (let p = 0; p < 2; p++) if (!save.players[p].owned.includes(CARS[browse[p]].id)) browse[p] = carIndex(save.players[p].sel); }
 
 // Экран выбора режима и карты (PLAY_MAPS в js/data.js). Гонка — только в городе: ей нужен дорожный граф.
-const JUMP_DESC = `Прыжок от ${JUMP.tiers[0][0]} м — +${JUMP.tiers[0][1]}, от ${JUMP.tiers[1][0]} м — +${JUMP.tiers[1][1]}, от ${JUMP.tiers[2][0]} м — +${JUMP.tiers[2][1]}; рекорд карты — ещё +${JUMP.record}.`;
+const JUMP_DESC = `Прыжок ${JUMP.tiers.map(t => `от ${t[0]} м — +${t[1]}`).join(', ')}; рекорд карты удваивает монеты.`;
 const MODE_INFO = {
   free: { name: 'Свободная езда', tag: `Монеты +1 · нокаут +${KO_REWARD} · переворот +${FLIP_REWARD}`,
-    desc: `Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал. Опрокинули соперника ударом в борт — +${FLIP_REWARD}; таранить лучше носом: удар передом бьёт по прочности на 30% слабее. ${JUMP_DESC}` },
+    desc: `Катайтесь по острову без правил: прыгайте с трамплинов, сбивайте фонари, тараньте соперника. На дорогах лежат монеты — каждая +1 тому, кто подобрал. Положили соперника на крышу или прижали крышей к стене — +${FLIP_REWARD}; таранить лучше носом: удар передом бьёт по прочности на 30% слабее. ${JUMP_DESC}` },
   solo: { name: 'Одиночная езда', tag: '1 игрок · монеты +1',
     desc: 'Один игрок на весь экран, без соперника: спокойно изучайте город, ищите трамплины и короткие пути. Машина и кошелёк Игрока 1, рулить можно WASD или стрелками. ' + JUMP_DESC },
   capture: { name: 'Захват точек', tag: `Победителю +${CAP_REWARD} · +1 за 10 очков`,
@@ -344,8 +388,10 @@ function openMaps() { syncBrowse(); showLoading('Подготовка…'); setT
 $('garage').addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.nav !== undefined) browseCar(+t.dataset.nav, +t.dataset.d);
-  else if (t.dataset.i !== undefined) { browse[+t.dataset.p] = +t.dataset.i; renderGarage(); }
+  else if (t.dataset.i !== undefined) showCar(+t.dataset.p, +t.dataset.i);
   else if (t.dataset.buy !== undefined) buyCar(+t.dataset.buy);
+  else if (t.dataset.paint !== undefined) pickPaint(+t.dataset.paint, t.dataset.c);
+  else if (t.dataset.buypaint !== undefined) buyPaint(+t.dataset.buypaint);
 });
 $('mapGrid').addEventListener('click', e => { const c = e.target.closest('.mapcard'); if (c) selectMode(c.dataset.mode); });
 $('mapGrid').addEventListener('dblclick', e => { const c = e.target.closest('.mapcard'); if (c) { selectMode(c.dataset.mode); startMatch(); } });
@@ -354,8 +400,9 @@ $('mGarage').onclick = () => setState('garage');
 $('mHelp').onclick = () => $('help').classList.remove('hidden');
 $('hClose').onclick = () => $('help').classList.add('hidden');
 $('mReset').onclick = () => {
-  if (!confirm('Сбросить монеты, купленные машины обоих игроков и рекорды прыжков?')) return;
-  save = Object.assign(defaultSave(), { quality: save.quality }); persist();   // графику не сбрасываем — она уже применена browse[0] = browse[1] = 0; updatePodium(0); updatePodium(1); updateCoins(); toast('Прогресс сброшен');
+  if (!confirm('Сбросить монеты, купленные машины и цвета обоих игроков и рекорды прыжков?')) return;
+  save = Object.assign(defaultSave(), { quality: save.quality }); persist();   // графику не сбрасываем — она уже применена
+  browse[0] = browse[1] = 0; paintView[0] = paintView[1] = null; updatePodium(0); updatePodium(1); updateCoins(); toast('Прогресс сброшен');
 };
 $('gBack').onclick = () => setState('menu');
 $('gPlay').onclick = () => { if (!$('gPlay').disabled) openMaps(); };
@@ -409,6 +456,7 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyA') browseCar(0, -1); else if (e.code === 'KeyD') browseCar(0, 1);
     else if (e.code === 'ArrowLeft') browseCar(1, -1); else if (e.code === 'ArrowRight') browseCar(1, 1);
     else if (e.code === 'KeyW') buyCar(0); else if (e.code === 'ArrowUp') buyCar(1);
+    else if (e.code === 'KeyS') stepPaint(0); else if (e.code === 'ArrowDown') stepPaint(1);
     else if (e.code === 'Enter') $('gPlay').click();
     else if (e.code === 'Escape') setState('menu');
   } else if (state === 'maps') {

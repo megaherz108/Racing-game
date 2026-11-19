@@ -2,13 +2,13 @@
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
 // Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
-//   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, PUSH, hitZone, flipKick, contactPoint, rivalKnock, pushContacts,
-//   handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
-// Использует: derive, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD (js/data.js); QUAL, MAT, lerp,
-//   clamp, rand (js/core.js); buildCarModel, disposeTree (js/car-models.js); scene, shadowProxyOf, smooth01,
-//   waterLevel, dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js);
-//   CarFx (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown (js/match.js); addCoins,
-//   notify, keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
+//   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, FLIP_ROOF, FLIP_SIDE, FLIP_WALL, PUSH, hitZone, flipKick,
+//   contactPoint, rivalKnock, pushContacts, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
+// Использует: derive, paintOf, save, PLAYER_COLORS, LIN_DAMP, NITRO, HANDLING, FLIP_REWARD, KO_REWARD (js/data.js);
+//   QUAL, MAT, lerp, clamp, rand (js/core.js); buildCarModel, paintCar, disposeTree (js/car-models.js); scene,
+//   shadowProxyOf, smooth01, waterLevel, dropShadowProxy (js/world.js); world (js/maps/registry.js); smoke, sparks,
+//   wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic (js/traffic/traffic.js); countdown
+//   (js/match.js); addCoins, notify, keys (js/ui.js); Feel (js/feel.js); Stunts (js/stunts.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -199,7 +199,8 @@ class Car {
     this.L = g.L; this.W = g.W; this.H = g.H; this.wb = g.axF - g.axR; this.g = g;
     this.cr = g.W / 2;
     const span = g.L - g.W; this.cOff = [-span / 2, 0, span / 2];
-    this.model = buildCarModel(def, def.paints[p], { lacquer: QUAL.lacquer, bumpers: true });   // лак (кроме «Минимума») и отрываемые бамперы
+    this.model = buildCarModel(def, 0xffffff, { lacquer: QUAL.lacquer, bumpers: true });   // лак (кроме «Минимума») и отрываемые бамперы
+    paintCar(this.model.paint, paintOf(save.players[p], def.id));                          // цвет, выбранный игроком в гараже
     scene.add(this.model.root);
     // свои задние фонари: стоп-сигналы разгораются при торможении (общий MAT.tail — у трафика)
     this.tailMat = MAT.tail.clone(); this.tailMat.userData = {};
@@ -219,6 +220,7 @@ class Car {
       .setFriction(RT.staticFriction).setRestitution(RT.restitution)
       .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(m * RT.dmgThreshold / FIXED), this.body);
     PH.info.set(this.collider.handle, { kind: 'car', car: this });
+    this.roofC = by + hh; this.roofR = hh;   // центр кузова над землёй и полувысота — для «крышей к стене» (roofDown())
 
     // колёса: лучи подвески из точек крепления вниз
     const v = this.veh = rw.createVehicleController(this.body);
@@ -254,7 +256,7 @@ class Car {
     b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.x = x; this.z = z; this.h = h; this.y = gy + 0.08;
     this.vx = this.vz = this.vy = this.w = 0; this.vf = this.vl = 0; this.steer = 0; this.thr = 0; this.hb = false;
-    this.grounded = true; this.contacts = 4; this.upY = 1; this.flipT = 0; this.airVy = 0;
+    this.grounded = true; this.contacts = 4; this.upY = 1; this.flipT = 0; this.roofT = 0; this.airVy = 0;
     this.drown = 0; this.skidPrev = [null, null];
     this.placeN = (this.placeN || 0) + 1;     // счётчик переносов: прыжок, прерванный переносом, не считается (js/jumps.js)
     this.touchT = this.shoveT = this.dazeT = this.knockCd = 0;
@@ -391,10 +393,12 @@ class Car {
     }
     // перевёрнутая машина сама встаёт на колёса
     if (this.drown <= 0 && this.upY < 0.35 && Math.hypot(lv.x, lv.y, lv.z) < 3) this.flipT += dt; else this.flipT = 0;
-    // бонус за переворот: машина легла на бок или крышу вскоре после удара соперника — ему FLIP_REWARD.
-    // Один раз за переворот: flipPaid сбрасывается, только когда машина снова стоит на колёсах
+    // бонус за переворот: машина легла на крышу (или на бок, но крышей к стене) вскоре после удара соперника —
+    // ему FLIP_REWARD. На боку посреди дороги — не считается. Один раз за переворот: flipPaid сбрасывается, только
+    // когда машина снова стоит на колёсах
+    if (this.flipT > 0 && this.roofDown()) this.roofT += dt; else this.roofT = 0;
     if (this.upY > 0.8) this.flipPaid = false;
-    if (this.flipT > FLIP_LIE && !this.flipPaid) {
+    if (this.roofT > FLIP_LIE && !this.flipPaid) {
       this.flipPaid = true;
       const att = this.lastHitBy;
       if (att && simTime - this.lastHitTime < FLIP_WINDOW) {
@@ -405,6 +409,16 @@ class Car {
       this.place(this.x, this.z, this.h, this.y + 1.5);
       notify(this.p, 'Машина поставлена на колёса', 'good');
     }
+  }
+
+  // лежит на крыше: колёсами вверх (upY < -FLIP_ROOF) или на боку, а над крышей вплотную неподвижное — стена, дом,
+  // ограждение (луч из центра кузова вдоль его «верха», только по неподвижным телам: соперник стеной не считается)
+  roofDown() {
+    if (this.upY < -FLIP_ROOF) return true;
+    if (Math.abs(this.upY) > FLIP_SIDE) return false;
+    const b = this.body, t = b.translation(), [ux, uy, uz] = qrot(b.rotation(), 0, 1, 0), c = this.roofC;
+    const ray = new RAPIER.Ray({ x: t.x + ux * c, y: t.y + uy * c, z: t.z + uz * c }, { x: ux, y: uy, z: uz });
+    return !!PH.rw.castRay(ray, this.roofR + FLIP_WALL, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC);
   }
 
   // dir — направление силы удара (необязательно, см. hitZone())
@@ -609,9 +623,10 @@ const DMG_SCALE = { car: 1, traffic: 0.8, static: 0.5, ground: 0.5, deck: 0.5, b
 const FLIP_DV = { car: 6, traffic: 6, static: 10 };
 // удар передом: доля урона по прочности (0,7 — на 30% меньше, чем в борт или корму)
 const FRONT_DMG = 0.7;
-// бонус за переворот соперника (FLIP_REWARD в js/data.js): машина пролежала на боку или крыше FLIP_LIE с,
-// а соперник бил её не раньше FLIP_WINDOW с назад
-const FLIP_LIE = 0.3, FLIP_WINDOW = 3;
+// бонус за переворот соперника (FLIP_REWARD в js/data.js): машина пролежала на крыше FLIP_LIE с (Car.roofDown()),
+// а соперник бил её не раньше FLIP_WINDOW с назад. «На крыше» — upY < -FLIP_ROOF (наклон больше ~135°) либо на боку
+// (|upY| < FLIP_SIDE) с неподвижным препятствием не дальше FLIP_WALL м от крыши
+const FLIP_LIE = 0.3, FLIP_WINDOW = 3, FLIP_ROOF = 0.7, FLIP_SIDE = 0.5, FLIP_WALL = 0.3;
 // Толкотня машин игроков. Раньше стоящую машину было не сдвинуть: без газа она сама вставала на тормоз 30 м/с²,
 // а шины держали 21–28 м/с² вбок — втрое больше, чем тянет мотор соперника (6–9 м/с²). В «Захвате точек» игроки
 // упирались друг в друга и стояли. Теперь: касание соперника снимает автотормоз; машину, которую толкают в борт или

@@ -1,5 +1,5 @@
 // Mid-poly модели машин из примитивов
-// Определяет: buildCarModel, STYLE, carNarrow, taperMesh, carFaces, disposeTree.
+// Определяет: paintCar, buildCarModel, STYLE, carNarrow, taperMesh, carFaces, disposeTree.
 // Использует: MAT, extrude, lowerShape, box, polyShape, beam, lerp, clamp, mergeByMaterial, makeWheel, cyl
 //   (js/core.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -11,6 +11,15 @@
 // opts.lacquer — краска с лаковым слоем (clearcoat): резкий блик поверх мягкого металлика, как у настоящей краски.
 //   Дороже обычной (второй слой бликов в каждом пикселе кузова), поэтому только у машин игроков, не у трафика.
 // opts.bumpers — передний и задний бамперы отдельными группами (их может оторвать ударом, js/carfx.js)
+// перекрасить кузов машины игрока цветом pd из PAINTS (js/data.js): mat — model.paint из buildCarModel().
+// Меняются только числа материала, без перекомпиляции шейдера — можно на лету (витрина гаража)
+function paintCar(mat, pd) {
+  const lac = mat.isMeshPhysicalMaterial;
+  mat.color.setHex(pd.hex);
+  mat.metalness = pd.m ?? (lac ? 0.45 : 0.5);
+  mat.roughness = (lac ? pd.rl : pd.r) ?? (lac ? 0.42 : 0.3);
+  mat.envMapIntensity = pd.env ?? (lac ? 1.2 : 1.1);
+}
 function buildCarModel(def, paintHex, opts = {}) {
   const g = def.geo;
   const root = new THREE.Group();

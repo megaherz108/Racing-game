@@ -1,6 +1,6 @@
 // Длинные прыжки: длина по горизонтали от точки отрыва (последнее касание колёсами) до приземления. В свободной
 // и одиночной езде (JUMP.modes) прыжок длиннее порога JUMP.tiers приносит монеты — но один и тот же трамплин платит
-// раз в JUMP.cooldown с; лучшие прыжки каждой карты пишутся в таблицу save.jumps, первое место — ещё JUMP.record.
+// раз в JUMP.cooldown с; лучшие прыжки каждой карты пишутся в таблицу save.jumps, первое место — монеты порога ещё раз.
 // Прыжок засчитывается, если машина села на колёса и простояла на них JUMP.settle с (не перевернулась, не утонула).
 // Определяет: jumpTable, Jumps.
 // Использует: save, JUMP, persist (js/data.js); world (js/maps/registry.js); Sound (js/audio.js); cars, simTime
@@ -38,8 +38,9 @@ const Jumps = (() => {
     list.splice(place, 0, { d: Math.round(d * 10) / 10, p, car: c.def.short });
     save.jumps[id] = list.slice(0, JUMP.top);
     if (place === 0) {
-      addCoins(p, JUMP.record);
-      notify(p, `РЕКОРД КАРТЫ! ${m} м${was ? ` (было ${Math.round(was.d)})` : ''} · +${JUMP.record}`, 'gold', true);
+      // рекорд удваивает монеты порога — и на «остывшем» трамплине: побить рекорд и так непросто
+      addCoins(p, tier[1]);
+      notify(p, `РЕКОРД КАРТЫ! ${m} м${was ? ` (было ${Math.round(was.d)})` : ''} · +${tier[1]}`, 'gold', true);
       Sound.ko(p); Feel.record(p);
       if (cars.length > 1) notify(1 - p, `Игрок ${p + 1} поставил рекорд прыжка: ${m} м`, 'trick');
     } else {

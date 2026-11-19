@@ -1,9 +1,10 @@
 // Самопроверка: дешёвая текстовая проверка игры для разработчика и ИИ-ассистента (без скриншотов).
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
-// Использует: save, FLIP_REWARD, persist (js/data.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars,
-//   FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown,
-//   endMatch (js/match.js); updateCoins (js/ui.js); Capture (js/capture.js); Bomb (js/bomb.js).
+// Использует: cleanPlayer, save, PAINTS, paintOf, PAINT_FREE, paintBuy, hasPaint, FLIP_REWARD, persist (js/data.js);
+//   getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG (js/physics.js);
+//   Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins (js/ui.js); Capture
+//   (js/capture.js); Bomb (js/bomb.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -119,6 +120,29 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
   const KEYS = ['KeyW', 'KeyD', 'ArrowUp', 'ArrowLeft'];
   const wait = ms => new Promise(r => setTimeout(r, ms));
   try {
+    // цвета машин (js/data.js): покупка на копии игрока — кошельки и купленное в сохранении не трогаются
+    try {
+      const pl = cleanPlayer(JSON.parse(JSON.stringify(save.players[0])));
+      const before = JSON.stringify(save.players), black = PAINTS.find(c => c.id === 'black');
+      pl.coins = black.price + 5; pl.owned = ['corolla']; pl.paints = {}; pl.paint = {};
+      if (paintOf(pl, 'corolla').id !== PAINT_FREE) errors.push('цвет: по умолчанию не белый');
+      if (!paintBuy(pl, 'niva', 'black')) errors.push('цвет: купился для некупленной машины');
+      let why = paintBuy(pl, 'corolla', 'black');
+      if (why || pl.coins !== 5) errors.push(`цвет: покупка «${why}», монет осталось ${pl.coins}, ждали 5`);
+      if (!paintBuy(pl, 'corolla', 'black') || pl.coins !== 5) errors.push('цвет: купился второй раз');
+      if (!paintBuy(pl, 'corolla', 'red')) errors.push('цвет: купился без монет');
+      pl.owned.push('niva');
+      if (hasPaint(pl, 'niva', 'black') || paintOf(pl, 'niva').id !== PAINT_FREE) errors.push('цвет: купленный для Короллы есть и у Нивы');
+      const back = cleanPlayer(JSON.parse(JSON.stringify(pl)));   // как после перезагрузки страницы
+      if (paintOf(back, 'corolla').id !== 'black' || !hasPaint(back, 'corolla', 'black')) errors.push('цвет: не сохранился');
+      const junk = cleanPlayer({ owned: ['corolla'], paints: { corolla: ['gold', 'red'], niva: ['red'] }, paint: { corolla: 'gold' } });
+      if (JSON.stringify(junk.paints) !== '{"corolla":["red"]}' || paintOf(junk, 'corolla').id !== PAINT_FREE) errors.push('цвет: мусор в сохранении не отброшен');
+      if (cleanPlayer({ coins: 3, owned: ['corolla'], sel: 'corolla' }).paints.corolla) errors.push('цвет: старое сохранение без цветов');
+      if (JSON.stringify(save.players) !== before) errors.push('цвет: проверка изменила сохранение');
+      lines.push(`цвета: ${PAINTS.length}, чёрный за ${black.price} куплен и сохранён, повторно не покупается`);
+    } catch (e) {
+      errors.push('цвета: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
+    }
     for (const id of maps) {
       try {
         const t0 = performance.now();
@@ -157,7 +181,7 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         if (cars.length) endMatch('menu');
       }
     }
-    // удары (js/physics.js): удар передом отнимает FRONT_DMG от урона в борт; переворот соперника — FLIP_REWARD монет, один раз
+    // удары (js/physics.js): удар передом отнимает FRONT_DMG от урона в борт; переворот соперника на крышу — FLIP_REWARD монет, один раз; на бок — ничего
     if (mode === 'free' && maps.length) {
       const coins0 = save.players.map(p => p.coins);
       try {
@@ -184,7 +208,17 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         for (let i = 0, n = Math.round(1.5 / FIXED); i < n; i++) stepWorld(FIXED);
         const got = save.players[0].coins - before;
         if (got !== FLIP_REWARD) errors.push(`переворот: Игроку 1 начислено ${got}, ждали ${FLIP_REWARD} (upY ${b.upY.toFixed(2)}, лёжка ${b.flipT.toFixed(2)} с)`);
-        lines.push(`удары: урон нос/борт ${(front / side).toFixed(2)}, за переворот +${got}`);
+        // на боку посреди дороги (крыша ни во что не упирается) — бонуса нет
+        b.fullReset(...world.spawns[1]);
+        const t2 = b.body.translation(), sh = Math.sin(b.h / 2), ch = Math.cos(b.h / 2), r = Math.SQRT1_2;
+        b.body.setTranslation({ x: t2.x, y: t2.y + 1, z: t2.z }, true);
+        b.body.setRotation({ x: sh * r, y: sh * r, z: ch * r, w: ch * r }, true);   // курс h, кузов на боку
+        b.lastHitBy = a; b.lastHitTime = simTime;
+        const before2 = save.players[0].coins;
+        for (let i = 0, n = Math.round(1 / FIXED); i < n; i++) stepWorld(FIXED);
+        const side2 = save.players[0].coins - before2;
+        if (side2) errors.push(`переворот на бок посреди дороги: начислено ${side2}, ждали 0 (upY ${b.upY.toFixed(2)})`);
+        lines.push(`удары: урон нос/борт ${(front / side).toFixed(2)}, за переворот +${got}, на бок +${side2}`);
       } catch (e) {
         errors.push('удары: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
       } finally {
