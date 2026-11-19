@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1098,
-  "world": 1479,
-  "even": 135,
+  "data": 1285,
+  "world": 2123,
+  "even": 142,
   "fresh": true
  },
  "counts": {
@@ -19,12 +19,14 @@
   "blind": 14312,
   "streetWalls": 5553,
   "passes": 5,
-  "roadTris": 644350,
-  "roadMeshes": 140,
-  "walkColliderTris": 125072,
+  "roadTris": 809220,
+  "roadMeshes": 438,
+  "walkColliderTris": 194476,
   "walkPieces": 21721,
   "zebras": 543,
-  "evenNodes": 210102
+  "evenNodes": 210102,
+  "fenceKm": 55.125,
+  "fenceRuns": 1440
  },
  "corners": {
   "stats": {
@@ -35,8 +37,8 @@
    "skipWalk": 195,
    "skipFar": 115,
    "skipHouse": 34,
-   "shrunk": 165,
    "skipBend": 48,
+   "shrunk": 165,
    "offStrip": 42,
    "sharp": 96
   },

@@ -5,7 +5,8 @@
 //
 // __sitgesCheck() → объект (числа; --compare в tools/cdp.js показывает, что поменялось, кроме групп time и ms…):
 //   time     — постройка: раскладка (getData), мир (getWorld), ровное полотно; fresh — первая постройка на странице
-//   counts   — улицы, пути, переезды, путепроводы, углы, части домов, куски стен, треугольники и меши улиц, столкновения
+//   counts   — улицы, пути, переезды, путепроводы, углы, части домов, куски стен, треугольники и меши улиц, столкновения,
+//              заборы (км, отрезков)
 //   corners  — сводка углов C.cornerStats и причины пропусков (C.cornerLog по why)
 //   width    — проезжие улицы с полосами (точки): доли ширины проезжей части < 5, 5–6, 6–8, ≥ 8 м, тротуары с двух
 //              сторон; Enric Morera — медиана проезжей части и тротуаров (эталон решения 3: ≈ 6 м)
@@ -46,6 +47,7 @@
       unders: C.unders.length, corners: C.corners.length, sharp: C.corners.filter(c => c.sharp).length, snap: C.cornerSnap,
       houses: HS.parts, wallPieces: HS.pieces, blind: HS.blind, streetWalls: HS.street, passes: HS.pass,
       roadTris: RS.tris, roadMeshes: RS.meshes, walkColliderTris: RS.colliders, walkPieces: RS.walk, zebras: RS.zebra, evenNodes: C.evenStats.nodes,
+      fenceKm: RS.fences.km, fenceRuns: RS.fences.runs,
     };
     const why = {};
     for (const e of C.cornerLog) why[e.why] = (why[e.why] || 0) + 1;
@@ -165,6 +167,7 @@
       'enric-morera': mid(/Enric Morera/),
       'sant-antoni': meet(/Carrer de Sant Antoni/, /Bassa Rodona/),
       'fonollar-maricel': mid(/Fonollar/),
+      balmes: mid(/Balmes/),               // заборы вилл Террамара (решение 4)
       overpass: under ? { x: under.x, z: under.z } : null,
       'vilanova-bridge': deckOf(/Passeig de Vilanova/),
       church: poi(/Bartomeu/),

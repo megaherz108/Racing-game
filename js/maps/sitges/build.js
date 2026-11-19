@@ -5,6 +5,7 @@
 //   sitgesBuildKit (здесь)       группа, сетка коллизий
 //   sitgesBuildGround            земля, море, волнорезы, понтоны, фон (js/maps/sitges/ground.js)
 //   sitgesBuildRoads             улицы, тротуары, мосты, ж/д, стены по границе (js/maps/sitges/roads3d.js)
+//   (после тротуаров)            простые заборы по кромке тротуаров (js/maps/sitges/fences3d.js)
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
 // Определяет: SITGES_LANE, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
@@ -12,8 +13,8 @@
 //   (js/maps/city/textures.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesRaster
 //   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
 //   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
-//   (js/maps/sitges/walks3d.js); sitgesBuildRail (js/maps/sitges/rail3d.js); sitgesBuildBuildings
-//   (js/maps/sitges/buildings.js).
+//   (js/maps/sitges/walks3d.js); sitgesBuildFences (js/maps/sitges/fences3d.js); sitgesBuildRail
+//   (js/maps/sitges/rail3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -28,6 +29,7 @@ function buildSitges(D) {
   sitgesBuildGround(K);
   sitgesBuildRoads(K);
   sitgesBuildWalks(K);
+  sitgesBuildFences(K);
   sitgesBuildMarks(K);
   sitgesBuildRail(K);
   sitgesBuildRoadMeshes(K);
@@ -40,7 +42,7 @@ function sitgesBuildKit(K) {
 }
 
 function sitgesBuildWorld(K) {
-  const { D, group, grid, decks, landLod, rockLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
+  const { D, group, grid, decks, landLod, rockLod, roadLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
   optimizeStatic(group);
   buildShadowProxies(group);
 
@@ -92,7 +94,7 @@ function sitgesBuildWorld(K) {
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
     coinCount: 80, spawns,
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats }, walkAt,
+    stats: { roads: K.roadsStats }, walkAt, roadLod,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;
@@ -117,6 +119,7 @@ function sitgesBuildWorld(K) {
         for (let q = 0; q < L.lods.length; q++) L.lods[q].mesh.visible = q === on;
       }
       for (const R of rockLod) R.mesh.visible = Math.hypot(R.x - x, R.z - z) - R.r < SITGES_G.rockFar;
+      for (const L of roadLod) L.mesh.visible = Math.hypot(L.x - x, L.z - z) - L.r < L.far;   // заборы
     },
   };
 }

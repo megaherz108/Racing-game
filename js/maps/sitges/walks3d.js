@@ -4,6 +4,8 @@
 //   Скруглённые углы — асфальт веером до дуги, тротуар полосой между дугами r и r − w или до острого угла, концы —
 //     точно сечения полос.
 //   Верх и бордюр — сетка столкновений Rapier (набор K.rk: cquad), верх — поиск тротуаров (addWalk → world.walkAt).
+//   Наружная кромка (полосы и углы) — в K.rk.edges: { A, B, ya, yb, n, st, deck } — отрезок [x, z], высота верха
+//     тротуара на концах, нормаль к кварталу; по ней ставит заборы fences3d.js.
 // Определяет: sitgesBuildWalks.
 // Использует: MAT, clamp (js/core.js); SITGES_R (js/maps/sitges/roads.js); SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -12,6 +14,7 @@
 function sitgesBuildWalks(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
   const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
+  const edges = rk.edges = [];
   /* ---------- тротуары: полосы по C.walks (обрезка — в раскладке, js/maps/sitges/walks.js), на бордюре ---------- */
   const lift = P.lift.drive;
   for (const W of C.walks) {
@@ -46,6 +49,7 @@ function sitgesBuildWalks(K) {
     if (cutStart) cquad(c3(I0, y(I0) - 0.1), c3(O0, y(O0) - 0.1), c3(O0, top(O0)), c3(I0, top(I0)));
     if (cutEnd) cquad(c3(I1, y(I1) - 0.1), c3(O1, y(O1) - 0.1), c3(O1, top(O1)), c3(I1, top(I1)));
     addWalk([I0, I1, O1, O0], top(I0));
+    edges.push({ A: O0, B: O1, ya: top(O0), yb: top(O1), n: [-nx, -nz], st, deck: !!a.deck });
     cnt.walk++;
   }
 
@@ -125,6 +129,7 @@ function sitgesBuildWalks(K) {
       cquad(v3(A.I, A.yI + T), v3(B.I, B.yI + T), v3(B.Ou, B.yO + T), v3(A.Ou, A.yO + T));
       cquad(v3(A.I, A.yI - 0.1), v3(B.I, B.yI - 0.1), v3(B.I, B.yI + T), v3(A.I, A.yI + T));
       addWalk([A.I, B.I, B.Ou, A.Ou], A.yI + T);
+      edges.push({ A: A.Ou, B: B.Ou, ya: A.yO + T, yb: B.yO + T, n: [-em[0], -em[1]], st: c.a.st, deck: false });
       A = B;
     }
     cnt.corner++;
