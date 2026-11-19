@@ -7,15 +7,73 @@
 //   Наружная кромка (полосы и углы) — в K.rk.edges: { A, B, ya, yb, n, st, deck } — отрезок [x, z], высота верха
 //     тротуара на концах, нормаль к кварталу; концы A, B — те же массивы, что в раскладке (O0 / O1 полос, Ou колец
 //     C.cornerWalks): по ним fences3d.js находит высоту для отрезков C.fenceLine.
-// Определяет: sitgesBuildWalks.
-// Использует: MAT, clamp (js/core.js); SITGES_R (js/maps/sitges/roads.js); SITGES_RB (js/maps/sitges/roads3d.js).
+// Определяет: SITGES_DROP, sitgesBuildWalks.
+// Использует: MAT, clamp (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js);
+//   SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
+
+// съезд у ворот (4а.5): бордюр на ширине ворот — dropTo м над дорогой, скосы по skew м с боков; пандус — полоса
+// ramp м у бордюра (на узком тротуаре — не шире rampMax его ширины)
+const SITGES_DROP = { dropTo: 0.03, skew: 0.6, ramp: 0.6, rampMax: 0.6 };
 
 function sitgesBuildWalks(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
   const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   const edges = rk.edges = [];
+  /* ---------- съезды у ворот (4а.5): опущенный бордюр и пандус ---------- */
+  // Ворота kind 'car' (C.gates — js/maps/sitges/gates.js) на кромке полос: на ширине ворот бордюр низкий (dropTo),
+  // по skew м с боков — скос к обычному; полоса ramp м у бордюра — пандус к обычному верху. Положение вдоль — s, м по
+  // касательной ворот от их середины: у соседних полос в общей точке s одно, стык ровный. Ворота, чей съезд не лежит
+  // целиком на полосах (угол, край проезжей части без тротуара, настил), — без съезда.
+  const DR = SITGES_DROP, dep = P.curb - DR.dropTo, drops = new Map();
+  const dst = rk.dropStats = { gates: 0, ramps: 0, noWalk: 0, partial: 0 };   // без съезда: нет полосы; полосы не целиком (угол)
+  {
+    const cells = sitgesCells(16);
+    for (const W of C.walks) {
+      const { O0, O1 } = W;
+      if (!W.st.v[W.i].deck) cells.add(Math.min(O0[0], O1[0]), Math.max(O0[0], O1[0]), Math.min(O0[1], O1[1]), Math.max(O0[1], O1[1]), W);
+    }
+    for (const G of C.gates || []) {
+      if (G.kind !== 'car') continue;
+      dst.gates++;
+      const a = G.w / 2, b = a + DR.skew, n = G.n, T = [-n[1], n[0]], hit = [];
+      let cover = 0;
+      cells.each(G.x - b - 1, G.x + b + 1, G.z - b - 1, G.z + b + 1, l => {
+        for (const W of l) {
+          if (hit.some(h => h.W === W)) continue;
+          const v0 = W.st.v[W.i], sg = W.side ? -1 : 1;
+          if (-sg * v0.tz * n[0] + sg * v0.tx * n[1] < 0.9) continue;   // нормаль к кварталу — как у ворот
+          const s0 = (W.O0[0] - G.x) * T[0] + (W.O0[1] - G.z) * T[1], s1 = (W.O1[0] - G.x) * T[0] + (W.O1[1] - G.z) * T[1];
+          const lo = Math.max(-b, Math.min(s0, s1)), hi = Math.min(b, Math.max(s0, s1)), ov = hi - lo;
+          if (ov <= 0.01 || Math.abs(s1 - s0) <= 0.01) continue;
+          // кромка полосы на участке съезда — на линии ворот (± 0,3 м)
+          const d0 = (W.O0[0] - G.x) * n[0] + (W.O0[1] - G.z) * n[1], d1 = (W.O1[0] - G.x) * n[0] + (W.O1[1] - G.z) * n[1];
+          const dAt = s => d0 + (d1 - d0) * (s - s0) / (s1 - s0);
+          if (Math.abs(dAt(lo)) > 0.3 || Math.abs(dAt(hi)) > 0.3) continue;
+          hit.push({ W, s0, s1, a, b }); cover += ov;
+        }
+      });
+      if (cover < 2 * b - 0.05) { dst[cover > 0 ? 'partial' : 'noWalk']++; continue; }
+      dst.ramps++;
+      for (const h of hit) { let l = drops.get(h.W); if (!l) drops.set(h.W, l = []); l.push(h); }
+    }
+  }
+  // глубина опускания бордюра в точке t (0…1 вдоль полосы) и изломы профиля вдоль полосы
+  const sinkAt = (L, t) => {
+    let d = 0;
+    for (const { s0, s1, a, b } of L) {
+      const s = Math.abs(s0 + (s1 - s0) * t);
+      d = Math.max(d, s <= a ? 1 : s >= b ? 0 : (b - s) / (b - a));
+    }
+    return d * dep;
+  };
+  const sinkBreaks = L => {
+    const ts = [0, 1];
+    for (const { s0, s1, a, b } of L) for (const s of [-b, -a, a, b]) { const t = (s - s0) / (s1 - s0); if (t > 1e-4 && t < 1 - 1e-4) ts.push(t); }
+    return ts.sort((x, z) => x - z).filter((t, k, A) => !k || t - A[k - 1] > 1e-4);
+  };
+
   /* ---------- тротуары: полосы по C.walks (обрезка — в раскладке, js/maps/sitges/walks.js), на бордюре ---------- */
   const lift = P.lift.drive;
   for (const W of C.walks) {
@@ -33,10 +91,52 @@ function sitgesBuildWalks(K) {
     const top = p => (p === I0 ? yI0 : p === I1 ? yI1 : p === O0 ? yO0 : p === O1 ? yO1 : p === E0 ? yI0 + (yO0 - yI0) * fe : yI1 + (yO1 - yI1) * fe) + P.curb;
     const nn = a.deck ? UP : gn(a.x, a.z);
     const v3 = (p, yy) => [p[0], yy, p[1]];
+    const [nx, nz] = [sg * a.tz, -sg * a.tx];
+    const L = drops.get(W);
+    if (L) {
+      // съезд у ворот: полоса кусками вдоль (изломы профиля) и поперёк (кромка, край пандуса); верх, бордюр, торцы
+      // и столкновения — по тем же точкам
+      const wR = Math.max(0.2, wI), uR = Math.min(DR.ramp, DR.rampMax * wR) / wR;
+      const us = [0, fe, uR, 1].sort((x, z) => x - z).filter((u, k, A) => !k || u - A[k - 1] > 1e-4);
+      const ts = sinkBreaks(L), sk = ts.map(t => sinkAt(L, t));
+      const pt = (t, u) => lerp2(lerp2(I0, I1, t), lerp2(O0, O1, t), u);
+      const ht = (k, u) => {
+        const t = ts[k], yi = yI0 + (yI1 - yI0) * t, yo = yO0 + (yO1 - yO0) * t;
+        return yi + (yo - yi) * u + P.curb - sk[k] * Math.max(0, 1 - u / uR);
+      };
+      for (let k = 0; k + 1 < ts.length; k++) {
+        const t0 = ts[k], t1 = ts[k + 1];
+        for (let j = 0; j + 1 < us.length; j++) {
+          const u0 = us[j], u1 = us[j + 1];
+          const A0 = v3(pt(t0, u0), ht(k, u0)), B0 = v3(pt(t1, u0), ht(k + 1, u0)), B1 = v3(pt(t1, u1), ht(k + 1, u1)), A1 = v3(pt(t0, u1), ht(k, u1));
+          quad('panot', [A0, B0, B1, A1], nn, u1 <= fe + 1e-4 ? 0xdedad2 : 0xffffff);
+          cquad(A0, B0, B1, A1);
+        }
+        const Ia = pt(t0, 0), Ib = pt(t1, 0), ya = y(Ia), yb = y(Ib);
+        wallQuad('panot', Ia[0], Ia[1], ya - 0.02, ht(k, 0), Ib[0], Ib[1], yb - 0.02, ht(k + 1, 0), nx, nz, 0xd6d2ca);
+        cquad(v3(Ia, ya - 0.1), v3(Ib, yb - 0.1), v3(Ib, ht(k + 1, 0)), v3(Ia, ht(k, 0)));
+        // поиск тротуаров: пандус и остальное, с высотами углов
+        const Ra = pt(t0, uR), Rb = pt(t1, uR), Oa = pt(t0, 1), Ob = pt(t1, 1);
+        addWalk([Ia, Ib, Rb, Ra], ht(k, 0), [ht(k, 0), ht(k + 1, 0), ht(k + 1, uR), ht(k, uR)]);
+        if (uR < 1 - 1e-4) addWalk([Ra, Rb, Ob, Oa], ht(k, uR), [ht(k, uR), ht(k + 1, uR), ht(k + 1, 1), ht(k, 1)]);
+      }
+      const cap = (k, t, s) => {
+        for (let j = 0; j + 1 < us.length; j++) {
+          const p0 = pt(t, us[j]), p1 = pt(t, us[j + 1]);
+          wallQuad('panot', p0[0], p0[1], y(p0) - 0.02, ht(k, us[j]), p1[0], p1[1], y(p1) - 0.02, ht(k, us[j + 1]), s * a.tx, s * a.tz, 0xd6d2ca);
+          cquad(v3(p0, y(p0) - 0.1), v3(p1, y(p1) - 0.1), v3(p1, ht(k, us[j + 1])), v3(p0, ht(k, us[j])));
+        }
+      };
+      if (cutStart) cap(0, 0, -1);
+      if (cutEnd) cap(ts.length - 1, 1, 1);
+      if (!(a.fac && a.fac[side] < a.hw + a.sw[side] + 0.6)) wallQuad('panot', O0[0], O0[1], y(O0) - 0.3, top(O0), O1[0], O1[1], y(O1) - 0.3, top(O1), -nx, -nz, 0xb8b4ac);
+      edges.push({ A: O0, B: O1, ya: top(O0), yb: top(O1), n: [-nx, -nz], st, deck: !!a.deck });
+      cnt.walk++;
+      continue;
+    }
     quad('panot', [v3(I0, top(I0)), v3(I1, top(I1)), v3(E1, top(E1)), v3(E0, top(E0))], nn, 0xdedad2);
     quad('panot', [v3(E0, top(E0)), v3(E1, top(E1)), v3(O1, top(O1)), v3(O0, top(O0))], nn, 0xffffff);
     // бордюр (лицом к дороге)
-    const [nx, nz] = [sg * a.tz, -sg * a.tx];
     wallQuad('panot', I0[0], I0[1], y(I0) - 0.02, top(I0), I1[0], I1[1], y(I1) - 0.02, top(I1), nx, nz, 0xd6d2ca);
     // наружный край — где за тротуаром нет фасада вплотную
     if (!(a.fac && a.fac[side] < a.hw + a.sw[side] + 0.6)) wallQuad('panot', O0[0], O0[1], y(O0) - 0.3, top(O0), O1[0], O1[1], y(O1) - 0.3, top(O1), -nx, -nz, 0xb8b4ac);

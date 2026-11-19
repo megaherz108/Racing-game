@@ -12,13 +12,14 @@
 //   лист, дверь — твёрдые, обе стороны; сетка и кованая — с альфой и рамой); над проёмом в глухой стене — перемычка.
 //   Материалы (копилка улиц K.rk, квадраты SITGES_FENCE.chunk м со скрытием дальше far): fence-solid — атлас твёрдых
 //   поверхностей (тень — теневые копии), fence-hedge — листва (тень — теневые копии), fence-alpha — атлас с альфой
-//   (тени нет); текстуры — fencetex.js. Ворота и калитки закрыты: столкновения — стенки высотой SITGES_FENCE.h1 с двух
-//   сторон цоколя по всей линии, через проёмы тоже (как в 3б), торцы на концах сплошного забора.
+//   (тени нет; вдали — дымка: alphaToCoverage при MSAA, без него — смешивание, 4а.7); текстуры — fencetex.js.
+//   Ворота и калитки закрыты: столкновения — стенки высотой SITGES_FENCE.h1 с двух сторон цоколя по всей линии, через
+//   проёмы тоже (как в 3б), торцы на концах сплошного забора.
 //   Отладка — страница с ?fences: цоколь цветом вида верха (SITGES_FENCE_DBG), створки — цветом проёма (калитка —
 //   малиновая, ворота по ортофото — голубые, по OSM и проездам — синие).
 // rk.fenceStats — сводка раскладки C.fenceStats и постройки: geo = { posts, plates, leaves, hedgeKm, tris }, ms.
 // Определяет: SITGES_FENCE_DBG, SITGES_FENCE3D, sitgesBuildFences.
-// Использует: MAT, clamp (js/core.js); SITGES_FENCE (js/maps/sitges/fences.js); SITGES_FSTYLE
+// Использует: MAT, QUAL, clamp (js/core.js); SITGES_FENCE (js/maps/sitges/fences.js); SITGES_FSTYLE
 //   (js/maps/sitges/fencestyle.js); SITGES_RB (js/maps/sitges/roads3d.js); sitgesFenceTextures, SITGES_FTEX
 //   (js/maps/sitges/fencetex.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -60,7 +61,13 @@ function sitgesBuildFences(K) {
   casts.add('fence-solid'); casts.add('fence-hedge');
   MAT['fence-solid'] = new THREE.MeshStandardMaterial({ name: 'fence-solid', map: TX.solid, roughness: 0.9, vertexColors: true });
   MAT['fence-hedge'] = new THREE.MeshStandardMaterial({ name: 'fence-hedge', map: TX.hedge, roughness: 0.95, vertexColors: true });
-  MAT['fence-alpha'] = new THREE.MeshStandardMaterial({ name: 'fence-alpha', map: TX.alpha, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.3, vertexColors: true });
+  // Прутья вдали (4а.7): с MSAA — alphaToCoverage (дымка по доле покрытия; смешивание Custom ONE / ZERO — то же
+  // непрозрачное, но в three 0.160 у NormalBlending альфа на выходе = 1 и покрытие было бы полным); без MSAA —
+  // полупрозрачный (смешивание по альфе, глубина пишется; alphaHash шумел и вблизи). Мипмапы атласа — свои
+  // (fencetex.js, sitgesAlphaMips).
+  const FA = SITGES_FTEX, a2c = !!QUAL.aa;
+  MAT['fence-alpha'] = new THREE.MeshStandardMaterial({ name: 'fence-alpha', map: TX.alpha, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.3, vertexColors: true,
+    ...(a2c ? { alphaToCoverage: true, alphaTest: FA.alphaCut, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.ZeroFactor } : { transparent: true, alphaTest: FA.alphaCut }) });
   let nq = 0;
   const quad = (...a) => { nq++; rk.quad(...a); };
 

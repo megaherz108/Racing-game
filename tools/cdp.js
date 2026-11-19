@@ -16,6 +16,7 @@
 //   --compare файл    сравнить числа результата с JSON из файла (группы time и ms… — не сравниваются)
 //   --dir папка       картинки из результата (поле png: { имя: dataURL }) — в файлы, из печати убираются
 //   --shot файл.png   снимок страницы в конце
+//   --quality min     уровень графики (high / low / min) — пишется в сохранение до загрузки страницы
 //   --size 1600x900   размер окна; --timeout 300 — секунд на всё; --headed — с окном (отладка)
 // Видеокарта — настоящая (headless=new), вкладка на переднем плане (Page.bringToFront): время честное. Ошибки
 // страницы (console.error, исключения) печатаются в конце; код выхода 1 — исключение в --eval или ошибки страницы.
@@ -135,6 +136,8 @@ async function main() {
     await page.send('Runtime.enable');
     await page.send('Page.enable');
     await page.send('Page.bringToFront');
+    // --quality: уровень графики в сохранении до загрузки страницы (renderer читает его один раз — js/core.js)
+    if (A.quality) await page.send('Page.addScriptToEvaluateOnNewDocument', { source: `try { const k = 'steel_duel_save_v2', s = JSON.parse(localStorage.getItem(k) || '{}'); if (!Array.isArray(s.players) || s.players.length !== 2) s.players = [{}, {}]; s.quality = ${JSON.stringify(A.quality)}; localStorage.setItem(k, JSON.stringify(s)); } catch (e) {}` });
     await page.send('Page.navigate', { url });
     const ev = async (expression, replMode = true) => {
       const r = await page.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, replMode });

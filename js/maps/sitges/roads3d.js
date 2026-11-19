@@ -166,9 +166,10 @@ function sitgesBuildRoads(K) {
   const cquad = (a, b, c, d) => { ctri(a, b, c); ctri(a, c, d); };
   // поиск тротуаров для world.surface() и покрытия: кусок — четырёхугольник [x, z]×4 и высота верха
   const walks = sitgesCells(8);
-  const addWalk = (pts, y) => {
+  // ys — высоты углов (съезд у ворот, walks3d.js): тогда высота под точкой — по треугольнику, иначе y на весь кусок
+  const addWalk = (pts, y, ys) => {
     const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
-    walks.add(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs), { pts, y });
+    walks.add(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs), ys ? { pts, y, ys } : { pts, y });
   };
   const offs = (q, d) => [q.x - q.tz * d, q.z + q.tx * d];   // d > 0 — сторона 0 (левая)
   const DK = P.deck;
@@ -346,12 +347,25 @@ function sitgesBuildRoadMeshes(K) {
     return !((d0 < 0 || d1 < 0 || d2 < 0) && (d0 > 0 || d1 > 0 || d2 > 0));
   };
   const inQuad = (x, z, p) => inTri(x, z, p[0], p[1], p[2]) || inTri(x, z, p[0], p[2], p[3]);
+  // высота в треугольнике (a, b, c) с высотами (ya, yb, yc)
+  const triY = (x, z, a, b, c, ya, yb, yc) => {
+    const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+    if (Math.abs(d) < 1e-9) return ya;
+    const l0 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (z - c[1])) / d, l1 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (z - c[1])) / d;
+    return l0 * ya + l1 * yb + (1 - l0 - l1) * yc;
+  };
   const walkAt = (x, z) => {
-    for (const o of walks.at(x, z)) if (inQuad(x, z, o.pts)) return o.y;
+    for (const o of walks.at(x, z)) {
+      const p = o.pts;
+      if (!o.ys) { if (inQuad(x, z, p)) return o.y; continue; }
+      const h = o.ys;
+      if (inTri(x, z, p[0], p[1], p[2])) return triY(x, z, p[0], p[1], p[2], h[0], h[1], h[2]);
+      if (inTri(x, z, p[0], p[2], p[3])) return triY(x, z, p[0], p[2], p[3], h[0], h[2], h[3]);
+    }
     return -Infinity;
   };
   Object.assign(K, {
     meshColliders, walkAt, roadLod, roadSurf: st => surfOf(st)[2],
-    roadsStats: { ...cnt, fences: rk.fenceStats, blocks: blocks.length, tris, meshes, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
+    roadsStats: { ...cnt, fences: rk.fenceStats, drops: rk.dropStats, blocks: blocks.length, tris, meshes, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
   });
 }

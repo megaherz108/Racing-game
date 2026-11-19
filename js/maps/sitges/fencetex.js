@@ -3,14 +3,14 @@
 //   solid — атлас «твёрдых» поверхностей (один материал, тень — теневыми копиями): полосы с повтором по вертикали
 //     band м — штукатурка, бутовый камень, кирпич, бежевая плитка, бетон с опалубкой, вереск, ламели, доски, лист;
 //     полоса misc без повтора — дверь старого города и лицо общего столба (почтовый ящик, домофон, номер дома).
-//   alpha — атлас с альфой (alphaTest), полосы «от верха» (верх картинки — верх грани): сварная сетка с рамой, кованая
-//     решётка с пиками, перила блоков (трубы), кромка листвы над изгородью.
+//   alpha — атлас с альфой (свои мипмапы sitgesAlphaMips), полосы «от верха» (верх картинки — верх грани): сварная
+//     сетка с рамой, кованая решётка с пиками, перила блоков (трубы), кромка листвы над изгородью.
 //   hedge — листва изгороди tile × tile м с повтором в обе стороны.
 //   Ширина атласов — rep м (повтор вдоль забора). Полосы разделены полями gutter px (у полос с повтором — продолжение
 //   рисунка) от протекания мипмапов. Светлые серые тона красит цвет вершины (штукатурка, вереск, ламели, доски, лист,
 //   сетка, решётка, листва), камень, кирпич, плитка и бетон — в своём цвете.
 //   uv[полоса] = { v0, v1, m } — низ и верх полосы по v, высота полосы, м; SITGES_FTEX.misc — места картинок misc по u.
-// Определяет: SITGES_FTEX, sitgesFenceTextures.
+// Определяет: SITGES_FTEX, sitgesFenceTextures, sitgesAlphaMips.
 // Использует: canvasTex (js/maps/city/textures.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -20,6 +20,7 @@ const SITGES_FTEX = {
   rep: 4,         // ширина атласов вдоль забора, м (512 px)
   band: 1.25,     // высота полос с повтором, м
   gutter: 16,     // поля полос, px
+  alphaCut: 0.1,  // порог альфы атласа с альфой (вдали — дымка: alphaToCoverage при MSAA, без него — смешивание)
   hedge: 1.6,     // листва изгороди: повтор, м
   // misc (2,25 м без повтора): дверь 1 м × 2,1 м и два варианта лица общего столба 0,4 м — [u0, u1] в px
   misc: { door: [8, 136], plate: [[168, 219], [240, 291]] },
@@ -249,5 +250,25 @@ function sitgesFenceTextures() {
   const HP = 256;   // листва: 256 px на T.hedge м
   const hc = tile(HP, '#5a5b56', hedge, 61, true, HP);
   const tex = cv => { const t = canvasTex(cv); t.generateMipmaps = true; return t; };
-  return { solid: tex(S.c), alpha: tex(A.c), hedge: tex(hc), uv: { ...S.uv, ...A.uv }, W, H: { solid: S.c.height, alpha: A.c.height } };
+  // атлас с альфой — свои мипмапы (4а.7): уменьшение canvas с учётом альфы (у GPU-мипмапов из canvas прозрачное —
+  // чёрное, прутья вдали темнеют); средняя альфа уровня — доля покрытия (её берут alphaToCoverage и смешивание)
+  const alpha = canvasTex(A.c);
+  alpha.mipmaps = sitgesAlphaMips(A.c);
+  alpha.generateMipmaps = false;
+  return { solid: tex(S.c), alpha, hedge: tex(hc), uv: { ...S.uv, ...A.uv }, W, H: { solid: S.c.height, alpha: A.c.height } };
+}
+
+// цепочка мипмапов canvas до 1 × 1 (каждый уровень — уменьшение предыдущего вдвое)
+function sitgesAlphaMips(c0) {
+  const out = [c0];
+  let prev = c0;
+  while (prev.width > 1 || prev.height > 1) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, prev.width >> 1); c.height = Math.max(1, prev.height >> 1);
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    x.drawImage(prev, 0, 0, c.width, c.height);
+    out.push(prev = c);
+  }
+  return out;
 }

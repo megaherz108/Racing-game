@@ -28,7 +28,8 @@
 //   gates    — калитки и ворота (4а.3, C.fenceStats.gates): участков с забором, калиток (wicketSrc: ent — вход ≤ 2,5 м,
 //              entFar — 2,5–12 м) и участков с ними (wicketPct, %), ворот по источникам (carSrc: osm, svc, win) и
 //              участков (carPct), пар калитка + ворота, ширины (widths), створки (leaves); входы и ворота OSM без места
-//              (entNoFence, entFar, entNoPlace, osmOff, svcOff, carNoPlace); at — ближайшие калитка и ворота у мест с фото
+//              (entNoFence, entFar, entNoPlace, osmOff, svcOff, carNoPlace); drops — съезды у ворот (4а.5, walks3d.js): ворот, со
+//              съездом, без (угол, край проезжей части без тротуара); at — ближайшие калитка и ворота у мест с фото
 // __sitgesShots({ w, h, only }) → { png: { имя: dataURL } } — кадры контрольных мест (PLACES ниже) с высоты;
 //   tools/cdp.js --dir папка пишет их в файлы. Тени — вокруг каждой точки (aimSun), время суток — из меню.
 (() => {
@@ -186,7 +187,7 @@
           return b ? `${kind === 'car' ? 'ворота' : 'калитка'} ${bd.toFixed(1)} м (${b.src}, ${b.leaf.type}${b.pair >= 0 ? ', пара' : ''})` : `${kind === 'car' ? 'ворот' : 'калитки'} нет`;
         }).join('; ');
       }
-      out.gates = { ...g, at };
+      out.gates = { ...g, drops: RS.drops, at };
     }
     return out;
   };
@@ -194,7 +195,7 @@
   const FS_GATES = C => C.fenceStats && C.fenceStats.gates;
   // места заборов с фото (sv/fence, docs/sitges/photos.md): координаты игры
   const FENCE_AT = { 'balmes-39': [1377, -133], 'arcadi-mas-21': [-934, 27], 'valencia-2': [283, 229], 'vinyet-57': [708, 71],
-    'corral-fal-6': [-1750, 129], 'pere-pau-sagarra-19': [1135, 86] };
+    'corral-fal-6': [-1750, 129], 'pere-pau-sagarra-19': [1135, 86], 'roma-11': [1087, -109], 'carreta-14': [-472, -35] };
   // ближайший к точке забор: { f, d, x, z, n } (n — нормаль к участку)
   const nearFence = (C, x, z) => {
     let best = null;
