@@ -11,6 +11,7 @@
 //   mesh (сварная сетка), grille (кованая решётка, у блоков — перила), wall (глухая стена, h0 = h1 = 2–2,5 м), low
 //   (низкая стенка без верха, h0 = h1 ≈ 1 м); h0 — верх цоколя, h1 — верх забора над тротуаром, м; posts — столбы:
 //   none, plaster (в цвет цоколя), stone, brick; color — цвет верха (у wall и low — цоколя), 0xRRGGBB.
+// C.fenceLotCls — { [участок]: класс (по корню комплекса) } — для створок ворот (js/maps/sitges/gates.js).
 // Сводка — C.fenceStyleStats: { top: { вид: км }, base: { вид: км }, cls: { класс: км }, zone: { район: км },
 //   lots, clusters, joined }.
 // Определяет: SITGES_FSTYLE, sitgesFenceHash, sitgesPlanFenceStyles.
@@ -162,5 +163,7 @@ function sitgesPlanFenceStyles(C) {
     if (f.lot >= 0) { add(st.cls, lotCls[find(String(f.lot))], L); add(st.zone, lotZone[f.lot], L); }
   }
   for (const g of [st.top, st.base, st.cls, st.zone]) for (const k in g) g[k] = Math.round(g[k]) / 1000;
-  Object.assign(C, { fenceStyleStats: st });
+  const fenceLotCls = {};
+  for (const p in fenceLots) fenceLotCls[p] = lotCls[find(p)];
+  Object.assign(C, { fenceStyleStats: st, fenceLotCls });
 }

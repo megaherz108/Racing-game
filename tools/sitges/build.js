@@ -12,8 +12,9 @@
 //   5а. участки кадастра (INSPIRE CP) у игровой области: внешние контуры, упрощённые — линия заборов;
 //   5б. адреса кадастра (INSPIRE AD) к зданиям по кадастровому номеру — подписи над домами (отладка);
 //   5в. крыши частей по плиткам ICGC (тип — лидар, цвет — ортофото; tools/sitges/read-roofs.js), точки OSM;
+//   5г. калитки и ворота: входы кадастра, окна съездов по ортофото, служебные проезды (tools/sitges/read-gates.js);
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
-//      data-addr.js, data-roofs.js, data-points.js.
+//      data-addr.js, data-roofs.js, data-points.js, data-gates.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
@@ -22,6 +23,7 @@ const { readOSM, ROAD_CLASSES, SURFACES, AREA_KINDS, LINE_KINDS } = require('./r
 const { readCatastro, readParcels, readAddresses, USES } = require('./read-catastro');
 const { readDTM } = require('./read-dtm');
 const { readRoofs, ROOF_TYPES, ROOF } = require('./read-roofs');
+const { readGates, GATE } = require('./read-gates');
 
 const CFG = {
   north: 400,        // граница на севере: ж/д + 400 м…
@@ -274,7 +276,7 @@ for (const p of pcl.parcels) {
   if (U.area(s) < 0) s = s.reverse();
   pStat.v1 += s.length;
   if (p.rustic) pStat.rustic++;
-  parcels.push({ ring: s.map(q => [r1(q[0]), r1(q[1])]), rustic: p.rustic, c: U.centroid(s) });
+  parcels.push({ ring: s.map(q => [r1(q[0]), r1(q[1])]), rustic: p.rustic, c: U.centroid(s), ref: p.ref });
 }
 parcels.sort((a, b) => morton(...a.c) - morton(...b.c));
 
@@ -345,6 +347,15 @@ if (fs.existsSync(path.join(G.RAW, 'points.json'))) {
   }
 }
 pts.sort((a, b) => a.k - b.k || morton(a.x, a.z) - morton(b.x, b.z));
+
+/* =====================================================================
+   5г. КАЛИТКИ И ВОРОТА (tools/sitges/read-gates.js): входы кадастра, окна съездов по ортофото, служебные проезды
+   ===================================================================== */
+const gates = readGates({ parcels, parts: allParts.map(p => p.rings[0]), roads, addresses: ad.list });
+// по участку, внутри — по положению: разности номеров участков маленькие
+const byLot = l => l.map(g => ({ ...g, x: r1(g.x), z: r1(g.z) })).sort((a, b) => a.p - b.p || morton(a.x, a.z) - morton(b.x, b.z));
+const gEnt = byLot(gates.ent), gWin = byLot(gates.win), gSvc = byLot(gates.svc);
+const lotDelta = l => l.map((g, i) => g.p - (i ? l[i - 1].p : 0));
 
 /* =====================================================================
    6. ЗАПИСЬ
@@ -487,6 +498,24 @@ write('data-points.js', [
 };
 `);
 
+write('data-gates.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: места калиток и ворот (этап 4а.3) — входы кадастра, окна съездов по ортофото,',
+  '//   служебные проезды OSM через границу участка. На заборы их ставит игра (js/maps/sitges/gates.js).',
+  `// Источник: кадастр Испании INSPIRE AD (архив обновлён ${dAd}); ICGC — ортофото 25 см 2024 (скачано`,
+  `//   ${haveTiles ? date('orto') : '—'}); OpenStreetMap (скачано ${dOSM}). Разбор — tools/sitges/read-gates.js.`,
+  LIC_CAT.replace('INSPIRE Buildings', 'INSPIRE Addresses'), LIC_ICGC, LIC_OSM,
+  '// SITGES_GATES: winW — ширина окна, м; thr — порог оценки окна; участок — индекс в SITGES_PCL; списки отсортированы по участку, m — разности номеров участков:',
+  '//   ent — входы кадастра типа Entrance { m: [Δучастка], p: точки };',
+  `//   win — окна ${GATE.win} м вдоль границы участка с самым мощёным двором { m: [Δучастка, оценка %], p: середины окон };`,
+  '//   svc — пересечения highway=service с границей участка { m: [Δучастка], p }.',
+], 'SITGES_GATES', `const SITGES_GATES = {
+  winW: ${GATE.win}, thr: ${GATE.thr},
+  ent: { m: '${U.enc(lotDelta(gEnt))}', p: '${U.encPoints([gEnt.map(g => [g.x, g.z])])}' },
+  win: { m: '${U.enc(lotDelta(gWin).flatMap((d, i) => [d, Math.round(gWin[i].sc * 100)]))}', p: '${U.encPoints([gWin.map(g => [g.x, g.z])])}' },
+  svc: { m: '${U.enc(lotDelta(gSvc))}', p: '${U.encPoints([gSvc.map(g => [g.x, g.z])])}' },
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -509,6 +538,7 @@ if (roofs) {
 }
 else console.log('Крыши: нет плиток orto/ и dsm/ — запусти download.js (data-roofs.js не записан)');
 console.log(`Точки OSM: ${PT_KINDS.map((k, i) => k + ' ' + pts.filter(p => p.k === i).length).join(', ')}`);
+console.log(`Калитки и ворота: входов Entrance ${gates.stat.ent} (без участка на карте ${gates.stat.entNoParcel}); окон съездов ${gates.stat.win} у ${gates.stat.winLots} участков${gates.stat.noTiles ? ' (НЕТ ПЛИТОК orto/)' : ''}; служебных проездов через границу ${gates.stat.svc}`);
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 

@@ -6,7 +6,7 @@
 //   сельские участки с номером ≥ 9000 (дороги, ручьи — общественные земли) выброшены: это не «забор», а сама дорога
 // readAddresses() — адреса INSPIRE AD (raw/addresses/*.gml): { streets: Map id → название кадастра (« CL AIGUA»),
 //   list: [{ ref — кадастровый номер участка (= номер здания в BU), street — id улицы, num — номер дома (строка,
-//   «S-N» — без номера), x, y — точка входа или участка, UTM }] }
+//   «S-N» — без номера), x, y — точка входа или участка, UTM, spec — 'Entrance' (вход, портал) или 'Parcel' }] }
 const fs = require('fs');
 const path = require('path');
 const { RAW } = require('./geo');
@@ -89,9 +89,10 @@ function readAddresses() {
     const pos = (b.match(/<gml:pos>([^<]+)</) || [])[1];
     const num = (b.match(/<AD:LocatorDesignator>\s*<AD:designator>([^<]*)</) || [])[1];
     const tn = (b.match(/xlink:href="#ES\.SDGC\.TN\.([^"]+)"/) || [])[1];
+    const spec = (b.match(/<AD:specification[^>]*>([^<]*)</) || [])[1] || '';
     if (!pos || !tn) continue;
     const [x, y] = pos.trim().split(/\s+/).map(Number);
-    list.push({ ref: id.slice(-14), street: tn, num: (num || '').trim(), x, y });
+    list.push({ ref: id.slice(-14), street: tn, num: (num || '').trim(), x, y, spec });
   }
   return { streets, list };
 }

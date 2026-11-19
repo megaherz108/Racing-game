@@ -7,7 +7,8 @@
 //   по квадратам), столкновения — стенки высотой h1 с двух сторон цоколя в сетке тротуаров (cquad). Забор разрезан
 //   по участкам (cut): на разрезе торца нет, текстура идёт дальше (f.s). Стиль участка (f.style, fencestyle.js) пока
 //   не рисуется (виды — этап 4а.4); отладка — страница с ?fences: цоколь цветом вида верха (SITGES_FENCE_DBG),
-//   высоты h0 / h1 стиля, у глухой и низкой стенки без решётки; столкновения те же.
+//   высоты h0 / h1 стиля, у глухой и низкой стенки без решётки, проёмы калиток и ворот (C.gates, gates.js) —
+//   цветные столбики с перекладиной; столкновения те же.
 // Определяет: SITGES_FENCE_DBG, sitgesFenceTextures, sitgesBuildFences.
 // Использует: MAT (js/core.js); canvasTex (js/maps/city/textures.js); SITGES_FENCE (js/maps/sitges/fences.js);
 //   SITGES_RB (js/maps/sitges/roads3d.js).
@@ -60,11 +61,15 @@ function sitgesBuildFences(K) {
   /* ---------- постройка ---------- */
   const T = F.t, dbg = typeof location !== 'undefined' && /[?&]fences\b/.test(location.search);
   cnt.yard = 0;
-  for (const f of C.fences) buildRun(f);
+  // отладка (?fences): проёмы калиток и ворот (C.gates, js/maps/sitges/gates.js) — по куску забора
+  const gatesOf = new Map();
+  if (dbg && C.gates) for (const gt of C.gates) { if (!gatesOf.has(gt.f)) gatesOf.set(gt.f, []); gatesOf.get(gt.f).push(gt); }
+  C.fences.forEach((f, i) => buildRun(f, i));
 
-  function buildRun({ P, N, at, cut, s, style }) {
+  function buildRun({ P, N, at, cut, s, style }, fi) {
     // высота верха тротуара в точках ломаной
     const Y = at.map(([e, t]) => ys[e][0] + (ys[e][1] - ys[e][0]) * t);
+    if (gatesOf.has(fi)) gateMarks(P, Y, gatesOf.get(fi));
     const off = (k, d) => [P[k][0] + N[k][0] * d, P[k][1] + N[k][1] * d];
     const H0 = dbg ? style.h0 : F.h0, H1 = F.h1, HG = dbg ? style.h1 : F.h1, top = HG > H0 + 0.05;
     const cf = dbg ? SITGES_FENCE_DBG[style.top] : 0xffffff, cb = dbg ? cf : 0xf2efe8, ce = dbg ? cf : 0xe8e4dc;
@@ -103,6 +108,30 @@ function sitgesBuildFences(K) {
       quad('plaster', [[a[0], y - 0.05, a[1]], [b[0], gb, b[1]], [b[0], y + H0, b[1]], [a[0], y + H0, a[1]]], nn, ce,
         [[0, 0], [T / 2, 0], [T / 2, 0.5], [0, 0.5]]);
       cquad([a[0], y - 0.1, a[1]], [b[0], gb, b[1]], [b[0], y + H1, b[1]], [a[0], y + H1, a[1]]);
+    }
+  }
+  // отладка: проём — два цветных столбика по краям и перекладина над ним (калитка — малиновая, ворота по ортофото —
+  // голубые, по OSM — синие); столкновений нет, забор под проёмом пока сплошной (геометрия створок — 4а.4)
+  function gateMarks(P, Y, list) {
+    const S = [0];
+    for (let k = 1; k < P.length; k++) S.push(S[k - 1] + Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]));
+    const yAt = v => { let k = 0; while (k + 2 < P.length && S[k + 1] < v) k++; const t = Math.max(0, Math.min(1, (v - S[k]) / Math.max(1e-6, S[k + 1] - S[k]))); return Y[k] + (Y[k + 1] - Y[k]) * t; };
+    const box = (x, z, y0, y1, r, col) => {
+      for (const [dx, dz] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+        const ax = x + (dx - dz) * r, az = z + (dz + dx) * r, bx = x + (dx + dz) * r, bz = z + (dz - dx) * r;
+        quad('plaster', [[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], [dx, 0, dz], col, [[0, 0], [0.1, 0], [0.1, 0.5], [0, 0.5]]);
+      }
+    };
+    for (const gt of list) {
+      const col = gt.kind === 'wicket' ? 0xff30c0 : gt.src === 'win' ? 0x20d0ff : 0x3050ff, tx = -gt.n[1], tz = gt.n[0];
+      const y = yAt(gt.s), h = gt.kind === 'wicket' ? 2.3 : 2.6;
+      for (const sg of [-1, 1]) box(gt.x + tx * sg * gt.w / 2, gt.z + tz * sg * gt.w / 2, y - 0.05, y + h, 0.1, col);
+      const a = [gt.x - tx * gt.w / 2, gt.z - tz * gt.w / 2], b = [gt.x + tx * gt.w / 2, gt.z + tz * gt.w / 2];
+      for (const nn of [[-gt.n[0], 0, -gt.n[1]], [gt.n[0], 0, gt.n[1]]]) {
+        const o = [nn[0] * 0.11, nn[2] * 0.11];
+        quad('plaster', [[a[0] + o[0], y + h - 0.2, a[1] + o[1]], [b[0] + o[0], y + h - 0.2, b[1] + o[1]], [b[0] + o[0], y + h, b[1] + o[1]], [a[0] + o[0], y + h, a[1] + o[1]]], nn, col,
+          [[0, 0], [gt.w / 2, 0], [gt.w / 2, 0.1], [0, 0.1]]);
+      }
     }
   }
   // сводка раскладки (ms — раскладка + постройка)

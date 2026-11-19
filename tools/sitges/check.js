@@ -23,6 +23,10 @@
 //              (joined — склеено соседей), снято с участков без домов (bare: [участков, км] — зелень OSM, ж/д, пустырь),
 //              кусков 1 м перед домами от 3 этажей (front); км по видам верха (top) и цоколя (base), по классам участка
 //              (cls) и районам (zone); at — стиль у мест с фото (FENCE_AT, строки — не сравниваются)
+//   gates    — калитки и ворота (4а.3, C.fenceStats.gates): участков с забором, калиток (wicketSrc: ent — вход ≤ 2,5 м,
+//              entFar — 2,5–12 м) и участков с ними (wicketPct, %), ворот по источникам (carSrc: osm, svc, win) и
+//              участков (carPct), пар калитка + ворота, ширины (widths), створки (leaves); входы и ворота OSM без места
+//              (entNoFence, entFar, entNoPlace, osmOff, svcOff, carNoPlace); at — ближайшие калитка и ворота у мест с фото
 // __sitgesShots({ w, h, only }) → { png: { имя: dataURL } } — кадры контрольных мест (PLACES ниже) с высоты;
 //   tools/cdp.js --dir папка пишет их в файлы. Тени — вокруг каждой точки (aimSun), время суток — из меню.
 (() => {
@@ -169,9 +173,23 @@
       out.fences = { km: FS.km, runs: FS.runs, pieces: FS.pieces, lots: FS.lots, clusters: SS.clusters, joined: SS.joined,
         bare: FS.bare, front: FS.no.front, top: SS.top, base: SS.base, cls: SS.cls, zone: SS.zone, at };
     }
+
+    /* ---------- калитки и ворота (4а.3) ---------- */
+    if (FS_GATES(C)) {
+      const { ms, ...g } = FS_GATES(C), at = {};
+      for (const [name, [x, z]] of Object.entries(FENCE_AT)) {
+        at[name] = ['wicket', 'car'].map(kind => {
+          let b = null, bd = 40;
+          for (const o of C.gates) if (o.kind === kind) { const d = Math.hypot(o.x - x, o.z - z); if (d < bd) { bd = d; b = o; } }
+          return b ? `${kind === 'car' ? 'ворота' : 'калитка'} ${bd.toFixed(1)} м (${b.src}, ${b.leaf.type}${b.pair >= 0 ? ', пара' : ''})` : `${kind === 'car' ? 'ворот' : 'калитки'} нет`;
+        }).join('; ');
+      }
+      out.gates = { ...g, at };
+    }
     return out;
   };
 
+  const FS_GATES = C => C.fenceStats && C.fenceStats.gates;
   // места заборов с фото (sv/fence, docs/sitges/photos.md): координаты игры
   const FENCE_AT = { 'balmes-39': [1377, -133], 'arcadi-mas-21': [-934, 27], 'valencia-2': [283, 229], 'vinyet-57': [708, 71],
     'corral-fal-6': [-1750, 129], 'pere-pau-sagarra-19': [1135, 86] };

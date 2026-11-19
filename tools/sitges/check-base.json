@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1531,
-  "world": 1858,
-  "even": 133,
+  "data": 1555,
+  "world": 1812,
+  "even": 130,
   "fresh": true
  },
  "counts": {
@@ -225,6 +225,60 @@
    "vinyet-57": "heath / rubble 0.7–1.8 м, столбы stone, участок 2793, 0.4 м",
    "corral-fal-6": "wall / cream 2.2–2.2 м, столбы none, участок 892, 1.1 м",
    "pere-pau-sagarra-19": "hedge / rubble 0.4–1.8 м, столбы stone, участок 3114, 0.7 м"
+  }
+ },
+ "gates": {
+  "lots": 1079,
+  "wickets": 1009,
+  "wicketLots": 888,
+  "wicketPct": 82.3,
+  "wicketSrc": {
+   "ent": 913,
+   "entFar": 96
+  },
+  "entNoFence": 2229,
+  "entFar": 242,
+  "entNoPlace": 25,
+  "cars": 682,
+  "carLots": 682,
+  "carPct": 63.2,
+  "carSrc": {
+   "osm": 1,
+   "svc": 1,
+   "win": 680
+  },
+  "osmPts": 18,
+  "osmOff": 14,
+  "svcOff": 48,
+  "winElig": 880,
+  "winNone": 177,
+  "carNoPlace": 21,
+  "pairs": 259,
+  "widths": {
+   "1": 1009,
+   "3": 15,
+   "3.5": 667
+  },
+  "leaves": {
+   "wicket:slats": 389,
+   "wicket:mesh": 77,
+   "wicket:wood": 192,
+   "wicket:wrought": 238,
+   "wicket:sheet": 99,
+   "wicket:door": 14,
+   "car:slats": 261,
+   "car:mesh": 60,
+   "car:wood": 138,
+   "car:wrought": 156,
+   "car:sheet": 67
+  },
+  "at": {
+   "balmes-39": "калитка 0.4 м (ent, wrought, пара); ворота 2.3 м (win, wrought, пара)",
+   "arcadi-mas-21": "калитка 0.8 м (ent, wood, пара); ворота 2.4 м (win, wood, пара)",
+   "valencia-2": "калитка 1.3 м (ent, slats); ворота 21.2 м (win, slats)",
+   "vinyet-57": "калитка 0.5 м (ent, wood, пара); ворота 2.5 м (win, wood, пара)",
+   "corral-fal-6": "калитка 1.1 м (ent, slats, пара); ворота 2.6 м (win, slats, пара)",
+   "pere-pau-sagarra-19": "калитка 0.8 м (ent, wood, пара); ворота 2.5 м (win, wood, пара)"
   }
  }
 }

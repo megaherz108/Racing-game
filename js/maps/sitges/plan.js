@@ -8,6 +8,7 @@
 //   sitgesPlanStyles             стили фасадов по году, этажности и району (js/maps/sitges/styles.js)
 //   sitgesPlanFences             где забор: линия по кромке тротуаров, решение кусками, цепочки, участки (js/maps/sitges/fences.js)
 //   sitgesPlanFenceStyles        стиль забора по участку, году дома и району (js/maps/sitges/fencestyle.js)
+//   sitgesPlanGates              калитки и ворота на заборах: входы кадастра, съезды, OSM (js/maps/sitges/gates.js)
 //   sitgesPlanFacades            балконы по sitgesBalcony() и карнизы (js/maps/sitges/styles.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
@@ -16,13 +17,14 @@
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
 //   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); SITGES_PCL
 //   (js/maps/sitges/data-parcels.js); SITGES_ROOF (js/maps/sitges/data-roofs.js); SITGES_PTS
-//   (js/maps/sitges/data-points.js); sitgesCells, sitgesBBox (js/maps/sitges/geom.js); sitgesPlanTerrain
-//   (js/maps/sitges/terrain.js); sitgesPlanStreets (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels
-//   (js/maps/sitges/levels.js); sitgesPlanCorners (js/maps/sitges/corners.js); sitgesPlanCarriage
-//   (js/maps/sitges/carriage.js); sitgesPlanWalks (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE
-//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js); sitgesPlanFences
-//   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
-//   (js/maps/sitges/fencestyle.js).
+//   (js/maps/sitges/data-points.js); SITGES_GATES (js/maps/sitges/data-gates.js); sitgesCells, sitgesBBox
+//   (js/maps/sitges/geom.js); sitgesPlanTerrain (js/maps/sitges/terrain.js); sitgesPlanStreets
+//   (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels (js/maps/sitges/levels.js); sitgesPlanCorners
+//   (js/maps/sitges/corners.js); sitgesPlanCarriage (js/maps/sitges/carriage.js); sitgesPlanWalks
+//   (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
+//   (js/maps/sitges/houses.js); sitgesPlanFences (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades
+//   (js/maps/sitges/styles.js); sitgesPlanFenceStyles (js/maps/sitges/fencestyle.js); sitgesPlanGates
+//   (js/maps/sitges/gates.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -77,6 +79,7 @@ function sitgesData() {
   sitgesPlanStyles(C);
   sitgesPlanFences(C);
   sitgesPlanFenceStyles(C);
+  sitgesPlanGates(C);
   sitgesPlanFacades(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
@@ -177,6 +180,17 @@ function sitgesPlanBase(C) {
     for (const k of SITGES_PTS.kinds) points[k] = [];
     km.forEach((k, i) => points[SITGES_PTS.kinds[k]].push(pp2[i]));
   } else points.shop = [];
+  // калитки и ворота (data-gates.js, 4а.3): входы кадастра, окна съездов по ортофото, служебные проезды —
+  // { ent: [{ p, x, z }], win: [{ p, x, z, sc }], svc: [{ p, x, z }], winW, thr }; p — индекс в parcels
+  let gateData = { ent: [], win: [], svc: [], winW: 3.5, thr: 0.6 };
+  if (typeof SITGES_GATES !== 'undefined') {
+    const GD = SITGES_GATES, list = (o, k) => {
+      const m = sitgesDec(o.m), [pts] = sitgesPts(o.p, [m.length / k]);
+      let p = 0;
+      return pts.map((q, i) => { p += m[i * k]; const g = { p, x: q[0], z: q[1] }; if (k > 1) g.sc = m[i * k + 1] / 100; return g; });
+    };
+    gateData = { ent: list(GD.ent, 1), win: list(GD.win, 2), svc: list(GD.svc, 1), winW: GD.winW, thr: GD.thr };
+  }
   const dtm = { H, nx: T.nx, nz: T.nz, x0: T.x0, z0: T.z0, step: T.step };
-  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, partCells, parcels, terrainAt, dtm, pois, points });
+  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, partCells, parcels, terrainAt, dtm, pois, points, gateData });
 }
