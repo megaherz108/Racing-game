@@ -1,22 +1,16 @@
-// Ситжес — ПОСТРОЙКА: улицы и железная дорога по раскладке js/maps/sitges/roads.js.
-//   Полотно — лента по точкам улицы чуть выше рельефа, текстура в мировых координатах (на перекрёстках ленты
-//     перекрываются без шва): асфальт, плитка, брусчатка, бетон, грунт; велодорожки — красноватый асфальт.
-//   Тротуары — приподнятые на бордюр полосы плитки «панот» с гранитной кромкой; на перекрёстках обрезаны по проезжей
-//     части другой улицы (край ищется делением пополам — косые углы ровные), у скруглённых углов (C.corners) — по
-//     точке касания (по длине дуги улицы): дальше угловой кусок по дуге, его концы — точно сечения полос (стык без
-//     ступеньки); наружный край — дуга или острый угол до дома; асфальт угла — веером до дуги. Верх и бордюр — сетка столкновений
-//     Rapier (world.meshColliders, js/physics.js): колесо на бордюре подпрыгивает.
-//   Разметка — прерывистая ось двусторонних улиц (кроме перекрёстков), «зебры» у концов улиц с тротуарами (за точками
-//     касания скруглённых углов).
-//   Мосты и путепроводы — настил (Decks) с парапетами (выемки с откосами под ними — в раскладке).
-//   Ж/д — балласт со шпалами, рельсы, ограда вдоль путей (кроме промежутков между соседними путями).
-//   Граница игровой области на суше — каменная стена; где через неё уходит улица — бетонные блоки.
-//   Лестницы перекрыты тумбами.
-// Геометрия копится по квадратам SITGES_RB.chunk м и материалам (мало вызовов отрисовки).
-// Порядок этапов — в buildSitges() (js/maps/sitges/build.js).
-// Определяет: SITGES_RB, sitgesRoadTextures, SITGES_RB_TILE, sitgesBuildRoads.
+// Ситжес — ПОСТРОЙКА: улицы по раскладке (js/maps/sitges/roads.js и следующие этапы улиц).
+//   sitgesBuildRoads — набор постройки K.rk (материалы, копилка геометрии по квадратам SITGES_RB.chunk м и материалам —
+//     мало вызовов отрисовки; сетка столкновений тротуаров, поиск тротуаров, парапет) и полотно: лента по точкам улицы
+//     чуть выше рельефа, текстура в мировых координатах (на перекрёстках ленты перекрываются без шва).
+//   sitgesBuildMarks — разметка (ось двусторонних улиц, «зебры» за точками касания углов), мосты и путепроводы улиц
+//     (настил Decks с парапетами).
+//   sitgesBuildRoadMeshes — меши из копилки, тумбы и блоки, сетка столкновений (world.meshColliders), walkAt.
+// Между ними — тротуары (walks3d.js) и ж/д с границей (rail3d.js); порядок — в buildSitges() (js/maps/sitges/build.js):
+// от него зависит порядок вершин в мешах (отпечаток мира).
+// Определяет: SITGES_RB, sitgesRoadTextures, SITGES_RB_TILE, sitgesBuildRoads, sitgesBuildMarks,
+//   sitgesBuildRoadMeshes.
 // Использует: clamp (js/core.js); mulberry32 (js/world.js); Weather (js/weather.js); canvasTex
-//   (js/maps/city/textures.js); cobbleTexture (js/maps/city/landmarks.js); SITGES_GEO (js/maps/sitges/data-geo.js);
+//   (js/maps/city/textures.js); cobbleTexture (js/maps/city/landmarks.js); sitgesCells (js/maps/sitges/geom.js);
 //   SITGES_R (js/maps/sitges/roads.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -98,6 +92,8 @@ function sitgesRoadTextures() {
 // размер плитки текстуры, м (мировые координаты → uv)
 const SITGES_RB_TILE = { asphalt: 6, paving: 2, sett: 2.5, dirt: 4, panot: 1.2, stone: 4 };
 
+// набор постройки улиц: материалы, копилка геометрии по квадратам и материалам, сетка столкновений тротуаров, поиск
+// тротуаров, полотно улиц. Набор — K.rk; им пользуются walks3d.js, rail3d.js и сборка мешей sitgesBuildRoadMeshes()
 function sitgesBuildRoads(K) {
   const { D, group, grid, decks } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
   const TX = sitgesRoadTextures();
@@ -167,20 +163,28 @@ function sitgesBuildRoads(K) {
   };
   const cquad = (a, b, c, d) => { ctri(a, b, c); ctri(a, c, d); };
   // поиск тротуаров для world.surface() и покрытия: кусок — четырёхугольник [x, z]×4 и высота верха
-  const WC = 8, walks = new Map();
+  const walks = sitgesCells(8);
   const addWalk = (pts, y) => {
-    const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]), o = { pts, y };
-    for (let i = Math.floor(Math.min(...xs) / WC); i <= Math.floor(Math.max(...xs) / WC); i++)
-      for (let j = Math.floor(Math.min(...zs) / WC); j <= Math.floor(Math.max(...zs) / WC); j++) {
-        const k = i * 65536 + j;
-        if (!walks.has(k)) walks.set(k, []);
-        walks.get(k).push(o);
-      }
+    const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
+    walks.add(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs), { pts, y });
+  };
+  const offs = (q, d) => [q.x - q.tz * d, q.z + q.tx * d];   // d > 0 — сторона 0 (левая)
+  const DK = P.deck;
+  // solid — столкновения (у настила ж/д их нет: под ним проезжая часть, а коллайдер стенки — столб от земли)
+  const parapet = (ax, az, ay, bx, bz, by, nx, nz, solid = true) => {
+    // стенка толщиной 0,3 м над настилом: две грани и верх
+    const t = 0.3, ox = nx * t, oz = nz * t;
+    wallQuad('stone', ax, az, ay - DK.t, ay + DK.parapet, bx, bz, by - DK.t, by + DK.parapet, nx, nz, 0xd8d0c0);
+    wallQuad('stone', ax - ox, az - oz, ay, ay + DK.parapet, bx - ox, bz - oz, by, by + DK.parapet, -nx, -nz, 0xd8d0c0);
+    quad('stone', [[ax, ay + DK.parapet, az], [bx, by + DK.parapet, bz], [bx - ox, by + DK.parapet, bz - oz], [ax - ox, ay + DK.parapet, az - oz]], UP, 0xe8e0d0);
+    const cx = (ax + bx) / 2 - ox / 2, cz = (az + bz) / 2 - oz / 2, L = Math.hypot(bx - ax, bz - az);
+    if (solid && L > 0.2) grid.addOBB(cx, cz, t, L, Math.atan2(bx - ax, bz - az), Math.max(ay, by) + DK.parapet - g(cx, cz));
   };
 
+  const cnt = { ribbon: 0, walk: 0, corner: 0, dash: 0, zebra: 0, deck: 0, fence: 0, wall: 0 };
+  K.rk = { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards: [], blocks: [] };
+
   /* ---------- полотно улиц ---------- */
-  const offs = (q, d) => [q.x - q.tz * d, q.z + q.tx * d];   // d > 0 — сторона 0 (левая)
-  let nRibbon = 0;
   for (const st of C.streets) {
     const [mat, tint] = surfOf(st), v = st.v;
     const lift = st.drive ? (mat === 'asphalt' ? P.lift.drive : P.lift.paved) : st.cls === 'pedestrian' ? P.lift.ped : P.lift.flat;
@@ -200,247 +204,16 @@ function sitgesBuildRoads(K) {
         for (let c = 0; c < m; c++) quad(mat, [A[c], B[c], B[c + 1], A[c + 1]], nn, c0);
         A = B;
       }
-      nRibbon++;
+      cnt.ribbon++;
     }
   }
+}
 
-  /* ---------- тротуары: полоса между проезжей частью и фасадом, на бордюре ---------- */
-  // точка внутри проезжей части другой улицы или в зоне скруглённого угла этой стороны улицы (до касания — там
-  // тротуар угла); только среди cand / candC — соседей текущего отрезка тротуара
-  let cand = [], candC = [], curSide = 0;
-  const cornersNear = (x0, x1, z0, z1) => {
-    const out = new Set();
-    for (let ci = Math.floor(x0 / 16); ci <= Math.floor(x1 / 16); ci++)
-      for (let cj = Math.floor(z0 / 16); cj <= Math.floor(z1 / 16); cj++) for (const c of C.cornersAt(ci * 16 + 1, cj * 16 + 1)) out.add(c);
-    return [...out];
-  };
-  // зона угла — по длине дуги улицы: от узла (и чуть за него) до касания X.s; угловой кусок начинается ровно там же
-  // (его концы — сечения полосы при X.s), поэтому стык без ступеньки и торцевой стенки
-  const inZone = (st, s) => {
-    for (const c of candC) for (const X of [c.a, c.b]) {
-      // рукав без тротуара угла (w = 0) полосу не режет: её обрезает проезжая часть другой улицы
-      if (X.st !== st || X.side !== curSide || X.w <= 0) continue;
-      const sJ = st.v[X.i].s, al = (s - sJ) * X.dir;
-      if (al >= (X.s - sJ) * X.dir) continue;
-      // за узел — на wz + 1,5 м (огрызки полосы у перекрёстка), но не на рукав с другим углом этой же стороны
-      if (al >= 0) return true;
-      const twin = candC.some(c2 => [c2.a, c2.b].some(Y => Y !== X && Y.st === st && Y.side === curSide && Y.i === X.i && Y.dir === -X.dir && Y.w > 0));
-      if (!twin && al >= -(X.wz + 1.5)) return true;
-    }
-    return false;
-  };
-  // граница зоны угла рядом с s (для точной обрезки и без торца) — её s, иначе null
-  const zoneEdge = (st, s) => {
-    for (const c of candC) for (const X of [c.a, c.b]) if (X.st === st && X.side === curSide && X.w > 0 && Math.abs(s - X.s) < 0.05) return X.s;
-    return null;
-  };
-  const inOther = (st, x, z, s) => {
-    if (candC.length && inZone(st, s)) return true;
-    for (const [o, i] of cand) {
-      const a = o.v[i], b = o.v[i + 1], dx = b.x - a.x, dz = b.z - a.z, LL = dx * dx + dz * dz || 1;
-      const t0 = ((x - a.x) * dx + (z - a.z) * dz) / LL;
-      // конец улицы обрезан поперёк, без полукруга: иначе широкая улица (пешеходная, hw 4 м), кончающаяся в узле,
-      // откусывает край тротуара соседней
-      if ((t0 < 0 && i === 0) || (t0 > 1 && i === o.v.length - 2)) continue;
-      const t = clamp(t0, 0, 1), ex = x - a.x - dx * t, ez = z - a.z - dz * t, hw = a.hw + (b.hw - a.hw) * t;
-      if (ex * ex + ez * ez < hw * hw) return true;
-    }
-    return false;
-  };
-  let nWalk = 0;
-  for (const st of C.streets) {
-    if (!st.drive) continue;
-    const v = st.v, lift = P.lift.drive;
-    for (const side of [0, 1]) {
-      const sg = side ? -1 : 1;
-      curSide = side;
-      // точки внутреннего (у бордюра) и внешнего края на отрезке i при параметре t
-      const edge = (i, t, outer) => {
-        const a = v[i], b = v[i + 1];
-        const [ax, az] = offs(a, sg * (a.hw + (outer ? a.sw[side] : 0.05))), [bx, bz] = offs(b, sg * (b.hw + (outer ? b.sw[side] : 0.05)));
-        return [ax + (bx - ax) * t, az + (bz - az) * t];
-      };
-      const mid = (i, t) => {
-        const a = v[i], b = v[i + 1], w = (a.sw[side] + b.sw[side]) / 2;
-        const [ax, az] = offs(a, sg * (a.hw + w * 0.5)), [bx, bz] = offs(b, sg * (b.hw + w * 0.5));
-        return [ax + (bx - ax) * t, az + (bz - az) * t];
-      };
-      const sAt = (i, t) => v[i].s + (v[i + 1].s - v[i].s) * t;
-      // граница «свободно / занято» между t0 (свободно) и t1 — делением пополам по краю outer; у границы зоны угла —
-      // точно по её s
-      const cutT = (i, t0, t1, outer) => {
-        const free0 = !inOther(st, ...edge(i, t0, outer), sAt(i, t0)), free1 = !inOther(st, ...edge(i, t1, outer), sAt(i, t1));
-        if (free0 === free1) return free0 ? t1 : t0;
-        let lo = t0, hi = t1;
-        for (let k = 0; k < 9; k++) { const m = (lo + hi) / 2; if (!inOther(st, ...edge(i, m, outer), sAt(i, m)) === free0) lo = m; else hi = m; }
-        const t = (lo + hi) / 2, sz = candC.length ? zoneEdge(st, sAt(i, t)) : null;
-        return sz === null ? t : clamp((sz - v[i].s) / Math.max(1e-6, v[i + 1].s - v[i].s), 0, 1);
-      };
-      let cont = -1;                                       // отрезок, на котором полоса дошла до конца без обрезки
-      for (let i = 0; i + 1 < v.length; i++) {
-        const a = v[i], b = v[i + 1];
-        if (a.sw[side] <= 0 && b.sw[side] <= 0) continue;
-        const [p0x, p0z] = offs(a, sg * (a.hw + a.sw[side])), [p1x, p1z] = offs(b, sg * (b.hw + b.sw[side]));
-        const bx0 = Math.min(a.x, b.x, p0x, p1x), bx1 = Math.max(a.x, b.x, p0x, p1x), bz0 = Math.min(a.z, b.z, p0z, p1z), bz1 = Math.max(a.z, b.z, p0z, p1z);
-        cand = C.carriageNear(bx0, bx1, bz0, bz1, st);
-        candC = cornersNear(bx0, bx1, bz0, bz1).filter(c => (c.a.st === st && c.a.side === side) || (c.b.st === st && c.b.side === side));
-        const L = Math.hypot(b.x - a.x, b.z - a.z), n0 = cand.length || candC.length ? Math.max(1, Math.ceil(L)) : 1;
-        // куски по ≈ 1 м; границы зон углов (касания) — тоже границы кусков: иначе короткий свободный кусок у вершины
-        // улицы (касание в 0,3 м от неё) проверялся бы по середине занятого куска и пропадал — щель у стыка
-        const br = []; for (let k = 0; k <= n0; k++) br.push(k / n0);
-        for (const c of candC) for (const X of [c.a, c.b]) {
-          if (X.st !== st || X.side !== side || X.w <= 0) continue;
-          const t = (X.s - a.s) / Math.max(1e-6, b.s - a.s);
-          if (t > 1e-3 && t < 1 - 1e-3) br.push(t);
-        }
-        br.sort((p, q) => p - q);
-        for (let k = br.length - 1; k > 0; k--) if (br[k] - br[k - 1] < 1e-4) br.splice(k, 1);
-        const n = br.length - 1, md = k => (br[k] + br[k + 1]) / 2;
-        // свободные куски (по середине полосы)
-        const free = []; for (let k = 0; k < n; k++) free.push(!inOther(st, ...mid(i, md(k)), sAt(i, md(k))));
-        for (let k = 0; k < n;) {
-          if (!free[k]) { k++; continue; }
-          let e = k; while (e < n && free[e]) e++;
-          // отрезок свободен от br[k] до br[e]; края уточнить по внутренней и внешней кромке отдельно — от середины
-          // крайнего свободного куска до конца соседнего занятого (граница может лежать и в том, и в другом); конец
-          // отрезка внутри зоны угла (граница — в крайнем куске до его середины) — тоже искать
-          const z0 = k === 0 && candC.length > 0 && inZone(st, a.s), z1 = e === n && candC.length > 0 && inZone(st, b.s);
-          const tI0 = k ? cutT(i, md(k), br[k - 1], false) : z0 ? cutT(i, md(0), 0, false) : 0;
-          const tO0 = k ? cutT(i, md(k), br[k - 1], true) : z0 ? cutT(i, md(0), 0, true) : 0;
-          const tI1 = e < n ? cutT(i, md(e - 1), br[e + 1], false) : z1 ? cutT(i, md(n - 1), 1, false) : 1;
-          const tO1 = e < n ? cutT(i, md(e - 1), br[e + 1], true) : z1 ? cutT(i, md(n - 1), 1, true) : 1;
-          const nx2 = v[i + 2];
-          // торец — где полоса обрезана, кроме стыка с угловым куском
-          const atC = t => candC.length > 0 && zoneEdge(st, sAt(i, t)) !== null;
-          const cutStart = (k > 0 || z0 || cont !== i - 1) && !atC(tI0), cutEnd = (e < n || z1 || !nx2 || (b.sw[side] <= 0 && nx2.sw[side] <= 0)) && !atC(tI1);
-          const k0 = k;
-          if (e === n && !z1) cont = i;
-          k = e;
-          // обрезок короче 1,6 м, зажатый между проезжими частями с обеих сторон, — не тротуар (островок на развилке);
-          // кусок между двумя углами (короткий рукав) — тротуар
-          if (k0 > 0 && e < n && (br[e] - br[k0]) * L < 1.6 && !atC(tI0) && !atC(tI1)) continue;
-          // углы: внутренний / внешний край в начале и в конце
-          const I0 = edge(i, tI0, false), O0 = edge(i, tO0, true), I1 = edge(i, tI1, false), O1 = edge(i, tO1, true);
-          // гранитная кромка у бордюра и плитка за ней
-          const wI = (a.sw[side] + b.sw[side]) / 2, fe = Math.min(1, P.edge / Math.max(0.2, wI));
-          const lerp2 = (p, r, f) => [p[0] + (r[0] - p[0]) * f, p[1] + (r[1] - p[1]) * f];
-          const E0 = lerp2(I0, O0, fe), E1 = lerp2(I1, O1, fe);
-          // верх: от уровня дороги у бордюра; к фасаду поднимается вслед за рельефом, но не круче 15 %
-          const q = a.deck ? a : null, yq = p => q ? q.y + lift : g(p[0], p[1]) + lift;
-          const y = p => yq(p);
-          const yI0 = yq(I0), yI1 = yq(I1), wd = Math.max(0.5, (a.sw[side] + b.sw[side]) / 2);
-          const yO = (O, yi) => q ? yi : clamp(g(O[0], O[1]) + lift, yi, yi + 0.15 * wd);
-          const yO0 = yO(O0, yI0), yO1 = yO(O1, yI1);
-          const top = p => (p === I0 ? yI0 : p === I1 ? yI1 : p === O0 ? yO0 : p === O1 ? yO1 : p === E0 ? yI0 + (yO0 - yI0) * fe : yI1 + (yO1 - yI1) * fe) + P.curb;
-          const nn = a.deck ? UP : gn(a.x, a.z);
-          const v3 = (p, yy) => [p[0], yy, p[1]];
-          quad('panot', [v3(I0, top(I0)), v3(I1, top(I1)), v3(E1, top(E1)), v3(E0, top(E0))], nn, 0xdedad2);
-          quad('panot', [v3(E0, top(E0)), v3(E1, top(E1)), v3(O1, top(O1)), v3(O0, top(O0))], nn, 0xffffff);
-          // бордюр (лицом к дороге)
-          const [nx, nz] = [sg * a.tz, -sg * a.tx];
-          wallQuad('panot', I0[0], I0[1], y(I0) - 0.02, top(I0), I1[0], I1[1], y(I1) - 0.02, top(I1), nx, nz, 0xd6d2ca);
-          // наружный край — где за тротуаром нет фасада вплотную
-          if (!(a.fac && a.fac[side] < a.hw + a.sw[side] + 0.6)) wallQuad('panot', O0[0], O0[1], y(O0) - 0.3, top(O0), O1[0], O1[1], y(O1) - 0.3, top(O1), -nx, -nz, 0xb8b4ac);
-          // торцы на обрезке
-          if (cutStart) wallQuad('panot', I0[0], I0[1], y(I0) - 0.02, top(I0), O0[0], O0[1], y(O0) - 0.02, top(O0), -a.tx, -a.tz, 0xd6d2ca);
-          if (cutEnd) wallQuad('panot', I1[0], I1[1], y(I1) - 0.02, top(I1), O1[0], O1[1], y(O1) - 0.02, top(O1), a.tx, a.tz, 0xd6d2ca);
-          // столкновения: верх и бордюр
-          const c3 = (p, yy) => [p[0], yy, p[1]];
-          cquad(c3(I0, top(I0)), c3(I1, top(I1)), c3(O1, top(O1)), c3(O0, top(O0)));
-          cquad(c3(I0, y(I0) - 0.1), c3(I1, y(I1) - 0.1), c3(I1, top(I1)), c3(I0, top(I0)));
-          if (cutStart) cquad(c3(I0, y(I0) - 0.1), c3(O0, y(O0) - 0.1), c3(O0, top(O0)), c3(I0, top(I0)));
-          if (cutEnd) cquad(c3(I1, y(I1) - 0.1), c3(O1, y(O1) - 0.1), c3(O1, top(O1)), c3(I1, top(I1)));
-          addWalk([I0, I1, O1, O0], top(I0));
-          nWalk++;
-        }
-      }
-    }
-  }
-
-  /* ---------- скруглённые углы: асфальт до дуги, тротуар полосой между дугами r и r − w ---------- */
-  let nCorner = 0;
-  for (const c of C.corners) {
-    const [mat, tint] = surfOf(c.a.st), lift = mat === 'asphalt' ? P.lift.drive : P.lift.paved, lw = P.lift.drive;
-    const N = Math.max(3, Math.ceil(Math.abs(c.da) * c.r / 0.8));
-    // асфальт угла заходит на 0,4 м внутрь проезжих частей (лента улицы у узла не точно по бордюрной линии)
-    const m = 0.4, Kx = [c.K[0] - (c.a.n[0] + c.b.n[0]) * m, c.K[1] - (c.a.n[1] + c.b.n[1]) * m];
-    const yK = g(Kx[0], Kx[1]) + lift, nn = gn(c.K[0], c.K[1]);
-    const v3a = p => [p[0], g(p[0], p[1]) + lift, p[1]];
-    // концы углового куска — точно сечения прямых полос тротуара при s касания (как edge() у полос): дуга
-    // подправляется сдвигом, плавно меняющимся от одного конца к другому
-    const endOf = X => {
-      const v = X.st.v, sg = X.side ? -1 : 1;
-      let i = 0; while (i < v.length - 2 && v[i + 1].s < X.s) i++;
-      const a = v[i], b = v[i + 1], t = clamp((X.s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
-      const L2 = (p, q) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
-      // наружный край — по ширине угла X.w (у полосы там та же ширина; рукав без полосы за касанием — 0)
-      return { I: L2(offs(a, sg * (a.hw + 0.05)), offs(b, sg * (b.hw + 0.05))), O: L2(offs(a, sg * (a.hw + X.w)), offs(b, sg * (b.hw + X.w))) };
-    };
-    const EA = endOf(c.a), EB = endOf(c.b);
-    const arcAt = (k, rr) => { const an = c.a0 + c.da * k / N; return [c.O[0] + Math.cos(an) * rr, c.O[1] + Math.sin(an) * rr]; };
-    const sub = (p, q) => [p[0] - q[0], p[1] - q[1]];
-    const dIa = sub(EA.I, arcAt(0, c.r)), dIb = sub(EB.I, arcAt(N, c.r));
-    const dOa = sub(EA.O, arcAt(0, Math.max(0, c.r - c.a.w))), dOb = sub(EB.O, arcAt(N, Math.max(0, c.r - c.b.w)));
-    // острый наружный угол: пересечение наружных краёв полос (по направлениям рукавов), вершина Q — на своём кольце
-    let Q = null, kq = 0;
-    if (c.sharp) {
-      const den = c.a.u[0] * c.b.u[1] - c.a.u[1] * c.b.u[0];
-      Q = c.sharp;
-      if (Math.abs(den) > 1e-6) {
-        const t = ((EB.O[0] - EA.O[0]) * c.b.u[1] - (EB.O[1] - EA.O[1]) * c.b.u[0]) / den, q = [EA.O[0] + c.a.u[0] * t, EA.O[1] + c.a.u[1] * t];
-        if (Math.hypot(q[0] - c.sharp[0], q[1] - c.sharp[1]) < 1.5) Q = q;
-      }
-      const L1 = Math.hypot(Q[0] - EA.O[0], Q[1] - EA.O[1]), L2 = Math.hypot(EB.O[0] - Q[0], EB.O[1] - Q[1]);
-      kq = clamp(Math.round(N * L1 / Math.max(1e-6, L1 + L2)), 1, N - 1);
-    }
-    const TA_ = X => [X.T[0] - X.n[0] * m, X.T[1] - X.n[1] * m];
-    const dA = Math.hypot(EA.O[0] - EA.I[0], EA.O[1] - EA.I[1]), dB = Math.hypot(EB.O[0] - EB.I[0], EB.O[1] - EB.I[1]);
-    quad(mat, [v3a(Kx), v3a(TA_(c.a)), v3a(EA.I), v3a(Kx)], nn, tint);
-    quad(mat, [v3a(Kx), v3a(EB.I), v3a(TA_(c.b)), v3a(Kx)], nn, tint);
-    const ring = k => {
-      const f = k / N, an = c.a0 + c.da * f, e = [Math.cos(an), Math.sin(an)], w = c.a.w + (c.b.w - c.a.w) * f;
-      const ai = arcAt(k, c.r), I = [ai[0] + dIa[0] + (dIb[0] - dIa[0]) * f, ai[1] + dIa[1] + (dIb[1] - dIa[1]) * f];
-      let Ou;
-      if (Q) Ou = k <= kq ? [EA.O[0] + (Q[0] - EA.O[0]) * k / kq, EA.O[1] + (Q[1] - EA.O[1]) * k / kq]
-        : [Q[0] + (EB.O[0] - Q[0]) * (k - kq) / (N - kq), Q[1] + (EB.O[1] - Q[1]) * (k - kq) / (N - kq)];
-      else { const ao = arcAt(k, Math.max(0, c.r - w)); Ou = [ao[0] + dOa[0] + (dOb[0] - dOa[0]) * f, ao[1] + dOa[1] + (dOb[1] - dOa[1]) * f]; }
-      // гранитная кромка — как у полос (P.edge от ширины тротуара), у острого угла шире пропорционально
-      const dist = Math.hypot(Ou[0] - I[0], Ou[1] - I[1]), dEnd = dA + (dB - dA) * f;
-      const fe = Math.min(1, P.edge / Math.max(0.2, w * dist / Math.max(1e-3, dEnd)));
-      const E = [I[0] + (Ou[0] - I[0]) * fe, I[1] + (Ou[1] - I[1]) * fe];
-      const yI = g(I[0], I[1]) + lw, yO = clamp(g(Ou[0], Ou[1]) + lw, yI, yI + 0.15 * Math.max(0.5, w));
-      return { e, w, I, Ou, E, yI, yO, yE: yI + (yO - yI) * fe };
-    };
-    const v3 = (p, y) => [p[0], y, p[1]], T = P.curb;
-    let A = ring(0);
-    for (let k = 1; k <= N; k++) {
-      const B = ring(k), em = [(A.e[0] + B.e[0]) / 2, (A.e[1] + B.e[1]) / 2];
-      // асфальт: веер из K, поперёк — через ≤ 2,5 м по рельефу (крупный треугольник уходит под рельеф)
-      const M = Math.max(1, Math.ceil(Math.max(Math.hypot(A.I[0] - Kx[0], A.I[1] - Kx[1]), Math.hypot(B.I[0] - Kx[0], B.I[1] - Kx[1])) / 2.5));
-      const fan = (P2, f) => { const x = Kx[0] + (P2[0] - Kx[0]) * f, z = Kx[1] + (P2[1] - Kx[1]) * f; return [x, f ? g(x, z) + lift : yK, z]; };
-      for (let j = 0; j < M; j++) {
-        const f0 = j / M, f1 = (j + 1) / M;
-        quad(mat, j ? [fan(A.I, f0), fan(A.I, f1), fan(B.I, f1), fan(B.I, f0)] : [fan(A.I, 0), fan(A.I, f1), fan(B.I, f1), fan(A.I, 0)], nn, tint);
-      }
-      // нет тротуара на обоих концах куска — только асфальт (без бордюра)
-      if (A.w < 0.05 && B.w < 0.05) { A = B; continue; }
-      // верх: гранитная кромка у бордюра и плитка
-      quad('panot', [v3(A.I, A.yI + T), v3(B.I, B.yI + T), v3(B.E, B.yE + T), v3(A.E, A.yE + T)], nn, 0xdedad2);
-      quad('panot', [v3(A.E, A.yE + T), v3(B.E, B.yE + T), v3(B.Ou, B.yO + T), v3(A.Ou, A.yO + T)], nn, 0xffffff);
-      // бордюр по дуге — лицом к дороге (от центра); наружный край — к кварталу
-      wallQuad('panot', A.I[0], A.I[1], A.yI - 0.02, A.yI + T, B.I[0], B.I[1], B.yI - 0.02, B.yI + T, em[0], em[1], 0xd6d2ca);
-      if (Q || c.r - Math.max(c.a.w, c.b.w) > 0.3) wallQuad('panot', A.Ou[0], A.Ou[1], A.yO - 0.3, A.yO + T, B.Ou[0], B.Ou[1], B.yO - 0.3, B.yO + T, -em[0], -em[1], 0xb8b4ac);
-      // столкновения: верх и бордюр
-      cquad(v3(A.I, A.yI + T), v3(B.I, B.yI + T), v3(B.Ou, B.yO + T), v3(A.Ou, A.yO + T));
-      cquad(v3(A.I, A.yI - 0.1), v3(B.I, B.yI - 0.1), v3(B.I, B.yI + T), v3(A.I, A.yI + T));
-      addWalk([A.I, B.I, B.Ou, A.Ou], A.yI + T);
-      A = B;
-    }
-    nCorner++;
-  }
-
+// разметка (ось, «зебры»), мосты и путепроводы улиц — после тротуаров (порядок геометрии в копилке)
+function sitgesBuildMarks(K) {
+  const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
   /* ---------- разметка: ось двусторонних улиц, «зебры» у перекрёстков ---------- */
-  let nDash = 0, nZebra = 0;
   const AXIS = new Set(['secondary', 'tertiary', 'unclassified', 'residential']);
   for (const st of C.streets) {
     if (!st.drive || st.oneway || !AXIS.has(st.cls) || st.surf !== 'asphalt') continue;
@@ -455,7 +228,7 @@ function sitgesBuildRoads(K) {
         const ux = (b.x - a.x) / L, uz = (b.z - a.z) / L, w = 0.06, y = p => (a.deck ? a.y + (b.y - a.y) * p : 0) + P.lift.drive + 0.012;
         const ya = a.deck ? y(t0) : g(x0, z0) + P.lift.drive + 0.012, yb = a.deck ? y(t1) : g(x1, z1) + P.lift.drive + 0.012;
         quad('white', [[x0 - uz * w, ya, z0 + ux * w], [x1 - uz * w, yb, z1 + ux * w], [x1 + uz * w, yb, z1 - ux * w], [x0 + uz * w, ya, z0 - ux * w]], UP, 0xe8e4d8, [[0, 0], [0, 0], [0, 0], [0, 0]]);
-        nDash++;
+        cnt.dash++;
       }
     }
   }
@@ -490,23 +263,12 @@ function sitgesBuildRoads(K) {
         const p = (f, o) => { const x = cx + zx * f - zz * o, z = cz + zz * f + zx * o; return [x, g(x, z) + P.lift.drive + 0.012, z]; };
         quad('white', [p(0, -w), p(Z.len, -w), p(Z.len, w), p(0, w)], UP, 0xeeeae0, [[0, 0], [0, 0], [0, 0], [0, 0]]);
       }
-      nZebra++;
+      cnt.zebra++;
     }
   }
 
   /* ---------- мосты и путепроводы улиц: настил, парапеты ---------- */
   const DK = P.deck;
-  let nDeck = 0;
-  // solid — столкновения (у настила ж/д их нет: под ним проезжая часть, а коллайдер стенки — столб от земли)
-  const parapet = (ax, az, ay, bx, bz, by, nx, nz, solid = true) => {
-    // стенка толщиной 0,3 м над настилом: две грани и верх
-    const t = 0.3, ox = nx * t, oz = nz * t;
-    wallQuad('stone', ax, az, ay - DK.t, ay + DK.parapet, bx, bz, by - DK.t, by + DK.parapet, nx, nz, 0xd8d0c0);
-    wallQuad('stone', ax - ox, az - oz, ay, ay + DK.parapet, bx - ox, bz - oz, by, by + DK.parapet, -nx, -nz, 0xd8d0c0);
-    quad('stone', [[ax, ay + DK.parapet, az], [bx, by + DK.parapet, bz], [bx - ox, by + DK.parapet, bz - oz], [ax - ox, ay + DK.parapet, az - oz]], UP, 0xe8e0d0);
-    const cx = (ax + bx) / 2 - ox / 2, cz = (az + bz) / 2 - oz / 2, L = Math.hypot(bx - ax, bz - az);
-    if (solid && L > 0.2) grid.addOBB(cx, cz, t, L, Math.atan2(bx - ax, bz - az), Math.max(ay, by) + DK.parapet - g(cx, cz));
-  };
   for (const st of C.streets) {
     const v = st.v;
     for (let i = 0; i + 1 < v.length; i++) {
@@ -521,120 +283,15 @@ function sitgesBuildRoads(K) {
       }
       const [lx0, lz0] = offs(a, wa), [rx0, rz0] = offs(a, -wa), [lx1, lz1] = offs(b, wb), [rx1, rz1] = offs(b, -wb);
       quad('stone', [[lx0, a.y - DK.t, lz0], [lx1, b.y - DK.t, lz1], [rx1, b.y - DK.t, rz1], [rx0, a.y - DK.t, rz0]], [0, -1, 0], 0xb0a898);
-      nDeck++;
+      cnt.deck++;
     }
   }
+}
 
-  /* ---------- железная дорога ---------- */
-  const RL = P.rail;
-  // все отрезки путей — для поиска соседнего пути у ограды
-  const TC = 16, tcell = new Map();
-  for (const tr of C.tracks) tr.v.forEach((q, i) => {
-    if (i === tr.v.length - 1) return;
-    const b = tr.v[i + 1];
-    for (let ci = Math.floor(Math.min(q.x, b.x) / TC); ci <= Math.floor(Math.max(q.x, b.x) / TC); ci++)
-      for (let cj = Math.floor(Math.min(q.z, b.z) / TC); cj <= Math.floor(Math.max(q.z, b.z) / TC); cj++) {
-        const k = ci * 65536 + cj;
-        if (!tcell.has(k)) tcell.set(k, []);
-        tcell.get(k).push([q, b]);
-      }
-  });
-  const trackDist = (x, z) => {
-    let best = Infinity;
-    for (let ci = Math.floor((x - 4) / TC); ci <= Math.floor((x + 4) / TC); ci++)
-      for (let cj = Math.floor((z - 4) / TC); cj <= Math.floor((z + 4) / TC); cj++)
-        for (const [a, b] of tcell.get(ci * 65536 + cj) || []) {
-          const dx = b.x - a.x, dz = b.z - a.z, LL = dx * dx + dz * dz || 1, t = clamp(((x - a.x) * dx + (z - a.z) * dz) / LL, 0, 1);
-          best = Math.min(best, Math.hypot(x - a.x - dx * t, z - a.z - dz * t));
-        }
-    return best;
-  };
-  let nFence = 0;
-  for (const tr of C.tracks) {
-    const v = tr.v;
-    for (let i = 0; i + 1 < v.length; i++) {
-      const a = v[i], b = v[i + 1], deck = a.deck;
-      const ya = (deck ? a.y : g(a.x, a.z)) + RL.bed, yb = (deck ? b.y : g(b.x, b.z)) + RL.bed;
-      // насыпь: верх (балласт со шпалами) и откосы
-      const [la, lza] = offs(a, RL.top), [ra, rza] = offs(a, -RL.top), [lb, lzb] = offs(b, RL.top), [rb, rzb] = offs(b, -RL.top);
-      const va = a.s / 2.4, vb = b.s / 2.4;
-      quad('ballast', [[la, ya, lza], [lb, yb, lzb], [rb, yb, rzb], [ra, ya, rza]], UP, 0xffffff, [[0.12, va], [0.12, vb], [0.88, vb], [0.88, va]]);
-      for (const sg of [1, -1]) {
-        const [xa, za] = offs(a, sg * RL.top), [xb, zb] = offs(b, sg * RL.top), [Xa, Za] = offs(a, sg * RL.half), [Xb, Zb] = offs(b, sg * RL.half);
-        const ga = deck ? a.y - 0.1 : g(Xa, Za) - 0.1, gb = deck ? b.y - 0.1 : g(Xb, Zb) - 0.1;
-        quad('ballast', [[xa, ya, za], [xb, yb, zb], [Xb, gb, Zb], [Xa, ga, Za]], UP, 0xe0dcd6, [[0.12, va], [0.12, vb], [0, vb], [0, va]]);
-      }
-      // рельсы: брусок 7 × 16 см
-      for (const sg of [1, -1]) {
-        const [xa, za] = offs(a, sg * RL.gauge), [xb, zb] = offs(b, sg * RL.gauge), w = 0.035, nx = -a.tz * w, nz = a.tx * w;
-        const ta = ya + RL.h, tb = yb + RL.h;
-        quad('steel', [[xa - nx, ta, za - nz], [xb - nx, tb, zb - nz], [xb + nx, tb, zb + nz], [xa + nx, ta, za + nz]], UP);
-        wallQuad('steel', xa + nx, za + nz, ya, ta, xb + nx, zb + nz, yb, tb, -a.tz, a.tx);
-        wallQuad('steel', xa - nx, za - nz, ya, ta, xb - nx, zb - nz, yb, tb, a.tz, -a.tx);
-      }
-      // на путепроводе — настил и парапеты
-      if (deck) {
-        for (const sg of [1, -1]) {
-          const [ax, az] = offs(a, sg * (RL.half + 0.3)), [bx, bz] = offs(b, sg * (RL.half + 0.3));
-          if (trackDist((ax + bx) / 2, (az + bz) / 2) < RL.half) continue;     // соседний путь на том же мосту
-          parapet(ax, az, a.y, bx, bz, b.y, sg * -a.tz, sg * a.tx, false);
-        }
-        const [lx0, lz0] = offs(a, RL.half + 0.3), [rx0, rz0] = offs(a, -RL.half - 0.3), [lx1, lz1] = offs(b, RL.half + 0.3), [rx1, rz1] = offs(b, -RL.half - 0.3);
-        quad('stone', [[lx0, a.y - DK.t, lz0], [lx1, b.y - DK.t, lz1], [rx1, b.y - DK.t, rz1], [rx0, a.y - DK.t, rz0]], [0, -1, 0], 0xb0a898);
-        quad('stone', [[lx0, a.y - 0.05, lz0], [lx1, b.y - 0.05, lz1], [rx1, b.y - 0.05, rz1], [rx0, a.y - 0.05, rz0]], UP, 0x9a9488);
-        continue;
-      }
-      // ограда по обе стороны, кроме промежутков между соседними путями и проезжей части
-      for (const sg of [1, -1]) {
-        const [xa, za] = offs(a, sg * RL.fence), [xb, zb] = offs(b, sg * RL.fence), mx = (xa + xb) / 2, mz = (za + zb) / 2;
-        if (trackDist(mx, mz) < RL.fence - 0.3 || C.carriageAt(mx, mz, null, 1.5) || D.waterAt(mx, mz) > -1) continue;
-        if (b.deck || (i > 0 && v[i - 1].deck)) continue;
-        const ga = g(xa, za), gb = g(xb, zb);
-        wallQuad('fence', xa, za, ga - 0.05, ga + RL.fenceH, xb, zb, gb - 0.05, gb + RL.fenceH, sg * -a.tz, sg * a.tx, 0xffffff, 'fence');
-        const L = Math.hypot(xb - xa, zb - za);
-        if (L > 0.2) grid.addOBB(mx, mz, 0.2, L, Math.atan2(xb - xa, zb - za), RL.fenceH + Math.max(ga, gb) - g(mx, mz));
-        nFence++;
-      }
-    }
-  }
-
-  /* ---------- лестницы: тумбы на концах ---------- */
-  const bollards = [];
-  for (const st of C.streets) {
-    if (st.cls !== 'steps') continue;
-    const v = st.v;
-    for (const end of [0, 1]) {
-      const E = end ? v[v.length - 1] : v[0], N = end ? v[v.length - 2] : v[1], L = Math.hypot(N.x - E.x, N.z - E.z) || 1;
-      const ux = (N.x - E.x) / L, uz = (N.z - E.z) / L, d = Math.min(0.8, L / 2);
-      for (const c of [-0.8, 0, 0.8]) bollards.push([E.x + ux * d - uz * c, E.z + uz * d + ux * c]);
-    }
-  }
-
-  /* ---------- граница игровой области на суше ---------- */
-  const WL = P.wall, rect = C.rect, G = SITGES_GEO.north;
-  const border = [];
-  for (let k = 0; k < C.north.length; k++) border.push([G.x0 + k * G.step, C.north[k] + WL.off]);
-  border.sort((p, q) => p[0] - q[0]);
-  const bx0 = rect[0] - 1.5, bx1 = rect[1] + 1.5;
-  const line = [[bx0, rect[2]], [bx0, C.northAt(rect[0]) + WL.off], ...border.filter(p => p[0] > bx0 && p[0] < bx1), [bx1, C.northAt(rect[1]) + WL.off], [bx1, rect[2]]];
-  const blocks = [];
-  let nWall = 0;
-  for (let k = 0; k + 1 < line.length; k++) {
-    const [ax0, az0] = line[k], [bx2, bz2] = line[k + 1], L = Math.hypot(bx2 - ax0, bz2 - az0), n = Math.max(1, Math.ceil(L / 5));
-    for (let s = 0; s < n; s++) {
-      const ax = ax0 + (bx2 - ax0) * s / n, az = az0 + (bz2 - az0) * s / n, bx = ax0 + (bx2 - ax0) * (s + 1) / n, bz = az0 + (bz2 - az0) * (s + 1) / n;
-      const mx = (ax + bx) / 2, mz = (az + bz) / 2, ga = g(ax, az), gb = g(bx, bz);
-      if (D.waterAt(mx, mz) > -1 || Math.min(ga, gb) < 0.2) continue;              // в море стены нет
-      const l = Math.hypot(bx - ax, bz - az), nx = (bz - az) / l, nz = -(bx - ax) / l;
-      if (C.carriageAt(mx, mz, null, 2)) { blocks.push([mx, mz, Math.atan2(bx - ax, bz - az), l]); continue; }   // улица уходит за границу
-      const t = WL.t / 2;
-      for (const sg of [1, -1]) wallQuad('stone', ax + nx * t * sg, az + nz * t * sg, ga - 0.4, ga + WL.h, bx + nx * t * sg, bz + nz * t * sg, gb - 0.4, gb + WL.h, nx * sg, nz * sg, 0xd8ccb4);
-      quad('stone', [[ax + nx * t, ga + WL.h, az + nz * t], [bx + nx * t, gb + WL.h, bz + nz * t], [bx - nx * t, gb + WL.h, bz - nz * t], [ax - nx * t, ga + WL.h, az - nz * t]], UP, 0xe8dcc4);
-      grid.addOBB(mx, mz, WL.t, l, Math.atan2(bx - ax, bz - az), WL.h + Math.max(ga, gb) - g(mx, mz));
-      nWall++;
-    }
-  }
-
+// меши из копилки, тумбы и блоки, сетка столкновений тротуаров, walkAt
+function sitgesBuildRoadMeshes(K) {
+  const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
+  const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, bollards, blocks } = rk;
   /* ---------- меши ---------- */
   let tris = 0;
   for (const b of buckets.values()) {
@@ -692,12 +349,11 @@ function sitgesBuildRoads(K) {
   };
   const inQuad = (x, z, p) => inTri(x, z, p[0], p[1], p[2]) || inTri(x, z, p[0], p[2], p[3]);
   const walkAt = (x, z) => {
-    const list = walks.get(Math.floor(x / WC) * 65536 + Math.floor(z / WC));
-    if (list) for (const o of list) if (inQuad(x, z, o.pts)) return o.y;
+    for (const o of walks.at(x, z)) if (inQuad(x, z, o.pts)) return o.y;
     return -Infinity;
   };
   Object.assign(K, {
     meshColliders, walkAt, roadSurf: st => surfOf(st)[2],
-    roadsStats: { ribbon: nRibbon, walk: nWalk, corner: nCorner, dash: nDash, zebra: nZebra, deck: nDeck, fence: nFence, wall: nWall, blocks: blocks.length, bollards: bollards.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
+    roadsStats: { ...cnt, blocks: blocks.length, bollards: bollards.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
   });
 }

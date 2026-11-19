@@ -11,7 +11,8 @@
 //   lo, hi, nx, nz, kind }: концы, номер оконной оси на концах, земля у концов, низ и верх, нормаль наружу, вид.
 //   C.houseAt(x, z) — часть дома под точкой (или undefined).
 // Определяет: SITGES_H, SITGES_WALL, SITGES_SHOPS, sitgesPlanHouses.
-// Использует: SITGES_DRIVE (js/maps/sitges/minimap.js).
+// Использует: sitgesBBox, sitgesInPoly, sitgesCells (js/maps/sitges/geom.js); SITGES_DRIVE
+//   (js/maps/sitges/minimap.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -28,7 +29,7 @@ const SITGES_WALL = { yard: 0, blind: 1, street: 2, shops: 3, roof: 4 };
 const SITGES_SHOPS = new Set(['4_2_retail', '4_1_office', '4_3_publicServices']);
 
 function sitgesPlanHouses(C) {
-  const { blds, ground, streets, carriageAt } = C, P = SITGES_H, W = SITGES_WALL;
+  const { blds, partCells, ground, streets, carriageAt } = C, P = SITGES_H, W = SITGES_WALL;
   const houses = [];
   const st = { parts: 0, edges: 0, shared: 0, pieces: 0, blind: 0, street: 0, pass: 0, wallArea: 0, hidden: 0 };
 
@@ -42,25 +43,14 @@ function sitgesPlanHouses(C) {
   }));
 
   /* ---------- проезды под домами ---------- */
-  const inRing = (x, z, r) => {
-    let ins = false;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const [xi, zi] = r[i], [xj, zj] = r[j];
-      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) ins = !ins;
-    }
-    return ins;
+  houses.forEach(h => { h.box = sitgesBBox(h.rings[0]); });
+  // часть дома под точкой — по общей сетке частей C.partCells (номер o.k — как в houses): строго внутри рамки, внутри
+  // внешнего контура и не в дыре
+  const houseAt = (x, z) => {
+    const o = partCells.at(x, z).find(o => x > o.bb[0] && x < o.bb[1] && z > o.bb[2] && z < o.bb[3] &&
+      sitgesInPoly(x, z, o.r) && !houses[o.k].rings.slice(1).some(r => sitgesInPoly(x, z, r)));
+    return o && houses[o.k];
   };
-  const HC = 32, hcell = new Map();
-  houses.forEach(h => {
-    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-    for (const [x, z] of h.rings[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    h.box = [x0, x1, z0, z1];
-    for (let i = Math.floor(x0 / HC); i <= Math.floor(x1 / HC); i++) for (let j = Math.floor(z0 / HC); j <= Math.floor(z1 / HC); j++) {
-      const k = i * 65536 + j; let l = hcell.get(k); if (!l) hcell.set(k, l = []); l.push(h);
-    }
-  });
-  const houseAt = (x, z) => (hcell.get(Math.floor(x / HC) * 65536 + Math.floor(z / HC)) || []).find(h =>
-    x > h.box[0] && x < h.box[1] && z > h.box[2] && z < h.box[3] && inRing(x, z, h.rings[0]) && !h.rings.slice(1).some(r => inRing(x, z, r)));
   for (const s of streets) {
     if (!SITGES_DRIVE.has(s.cls)) continue;
     for (let i = 0; i < s.v.length; i++) for (const f of i ? [0, 0.5] : [0]) {
@@ -73,7 +63,7 @@ function sitgesPlanHouses(C) {
   for (const h of houses) if (h.passY !== undefined && h.passY < h.y1 - 2.5) { h.pass = true; h.y0 = h.passY; st.pass++; }
 
   /* ---------- рёбра и общие стены ---------- */
-  const E = [], EC = 8, ecell = new Map();
+  const E = [], ecell = sitgesCells(8);
   houses.forEach((h, hi) => h.rings.forEach((r, ri) => {
     // внешнее кольцо — против часовой (в осях x, z), дыры — по часовой; знак — по площади, на случай исключений
     let A = 0;
@@ -84,27 +74,24 @@ function sitgesPlanHouses(C) {
       if (L < 0.01) continue;
       const e = { hi, ax, az, bx, bz, L, ux: (bx - ax) / L, uz: (bz - az) / L, nx: sgn * (bz - az) / L, nz: -sgn * (bx - ax) / L, cov: [] };
       E.push(e);
-      for (let ci = Math.floor(Math.min(ax, bx) / EC); ci <= Math.floor(Math.max(ax, bx) / EC); ci++)
-        for (let cj = Math.floor(Math.min(az, bz) / EC); cj <= Math.floor(Math.max(az, bz) / EC); cj++) {
-          const k = ci * 65536 + cj; let l = ecell.get(k); if (!l) ecell.set(k, l = []); l.push(e);
-        }
+      ecell.add(Math.min(ax, bx), Math.max(ax, bx), Math.min(az, bz), Math.max(az, bz), e);
     }
   }));
   const seen = new Set();
   for (const e of E) {
     seen.clear();
-    for (let ci = Math.floor(Math.min(e.ax, e.bx) / EC); ci <= Math.floor(Math.max(e.ax, e.bx) / EC); ci++)
-      for (let cj = Math.floor(Math.min(e.az, e.bz) / EC); cj <= Math.floor(Math.max(e.az, e.bz) / EC); cj++)
-        for (const f of ecell.get(ci * 65536 + cj) || []) {
-          if (f.hi === e.hi || seen.has(f)) continue;
-          seen.add(f);
-          if (e.ux * f.ux + e.uz * f.uz > -0.995) continue;
-          const d0 = (f.ax - e.ax) * -e.uz + (f.az - e.az) * e.ux, d1 = (f.bx - e.ax) * -e.uz + (f.bz - e.az) * e.ux;
-          if (Math.abs(d0) > P.tol || Math.abs(d1) > P.tol) continue;
-          const t0 = (f.ax - e.ax) * e.ux + (f.az - e.az) * e.uz, t1 = (f.bx - e.ax) * e.ux + (f.bz - e.az) * e.uz;
-          const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(e.L, Math.max(t0, t1));
-          if (hi - lo > 0.05) e.cov.push([lo, hi, houses[f.hi]]);
-        }
+    ecell.each(Math.min(e.ax, e.bx), Math.max(e.ax, e.bx), Math.min(e.az, e.bz), Math.max(e.az, e.bz), list => {
+      for (const f of list) {
+        if (f.hi === e.hi || seen.has(f)) continue;
+        seen.add(f);
+        if (e.ux * f.ux + e.uz * f.uz > -0.995) continue;
+        const d0 = (f.ax - e.ax) * -e.uz + (f.az - e.az) * e.ux, d1 = (f.bx - e.ax) * -e.uz + (f.bz - e.az) * e.ux;
+        if (Math.abs(d0) > P.tol || Math.abs(d1) > P.tol) continue;
+        const t0 = (f.ax - e.ax) * e.ux + (f.az - e.az) * e.uz, t1 = (f.bx - e.ax) * e.ux + (f.bz - e.az) * e.uz;
+        const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(e.L, Math.max(t0, t1));
+        if (hi - lo > 0.05) e.cov.push([lo, hi, houses[f.hi]]);
+      }
+    });
   }
 
   /* ---------- куски стен ---------- */

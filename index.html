@@ -232,14 +232,21 @@ const FILES = [
   "js/maps/sitges/data-buildings.js",
   "js/maps/sitges/data-terrain.js",
   "js/maps/sitges/data-parcels.js",
+  "js/maps/sitges/geom.js",
   "js/maps/sitges/plan.js",
   "js/maps/sitges/terrain.js",
   "js/maps/sitges/roads.js",
+  "js/maps/sitges/levels.js",
+  "js/maps/sitges/corners.js",
+  "js/maps/sitges/carriage.js",
+  "js/maps/sitges/walks.js",
   "js/maps/sitges/minimap.js",
   "js/maps/sitges/houses.js",
   "js/maps/sitges/build.js",
   "js/maps/sitges/ground.js",
   "js/maps/sitges/roads3d.js",
+  "js/maps/sitges/walks3d.js",
+  "js/maps/sitges/rail3d.js",
   "js/maps/sitges/facade.js",
   "js/maps/sitges/buildings.js",
   "js/maps/registry.js",
@@ -281,6 +288,7 @@ try {
       document.body.appendChild(s);
     });
   }
+  window.__loaded = true;                               // все скрипты на месте (tools/cdp.js ждёт эту метку)
 } catch (e) {
   document.getElementById('loading').textContent = e.message;
 }

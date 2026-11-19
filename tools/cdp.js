@@ -4,9 +4,10 @@
 //   node tools/cdp.js --inject tools/sitges/check.js --eval "await __sitgesCheck()" --save out.json --compare base.json
 //   node tools/cdp.js --inject tools/sitges/check.js --eval "await __sitgesShots()" --dir shots
 // Сам поднимает статический сервер на свободном порту (127.0.0.1, корень — папка игры: launch.json и чужие порты
-// не нужны) и Edge с отдельным профилем во временной папке; ждёт window.__game, выполняет --inject (файлы скриптов,
-// как bench.js) и --eval (по порядку, с await верхнего уровня), печатает результат последнего --eval, закрывает
-// браузер через CDP Browser.close (msedge.exe по имени не убивать — это браузер пользователя).
+// не нужны) и Edge с отдельным профилем во временной папке; ждёт загрузки всех скриптов (метка window.__loaded
+// в index.html), выполняет --inject (файлы скриптов, как bench.js) и --eval (по порядку, с await верхнего уровня),
+// печатает результат последнего --eval, закрывает браузер через CDP Browser.close (msedge.exe по имени не убивать —
+// это браузер пользователя).
 // Ключи:
 //   --url путь        страница (по умолчанию index.html), можно с ?fps и т. п.
 //   --inject файл     выполнить файл в странице (можно несколько)
@@ -142,8 +143,8 @@ async function main() {
     };
     // игра загрузилась (модули с CDN, затем все скрипты)
     let ready = false;
-    for (let i = 0; i < 600 && !ready; i++) { await sleep(100); try { ready = await ev("typeof window.__game === 'object' && typeof getData === 'function'"); } catch (e) { /* страница ещё грузится */ } }
-    if (!ready) throw new Error('window.__game не появился за 60 с');
+    for (let i = 0; i < 600 && !ready; i++) { await sleep(100); try { ready = await ev('window.__loaded === true'); if (!ready) { const t = await ev("document.getElementById('loading')?.textContent || ''"); if (/Не удалось/.test(t)) throw new Error(t); } } catch (e) { if (/Не удалось/.test(e.message)) throw e; /* страница ещё грузится */ } }
+    if (!ready) throw new Error('скрипты игры не загрузились за 60 с (метка window.__loaded в index.html)');
     for (const f of A.inject) await ev(fs.readFileSync(path.resolve(f), 'utf8'), false);
     let result;
     for (const e of A.eval) result = await ev(e);

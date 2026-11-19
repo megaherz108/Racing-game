@@ -11,9 +11,11 @@
 // Определяет: SITGES_ABC, sitgesDec, sitgesPts, SITGES_FLOOR, sitgesHeight, sitgesData, sitgesPlanBase.
 // Использует: SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_OSM (js/maps/sitges/data-osm.js); SITGES_BLD
 //   (js/maps/sitges/data-buildings.js); SITGES_DTM (js/maps/sitges/data-terrain.js); SITGES_PCL
-//   (js/maps/sitges/data-parcels.js); sitgesPlanTerrain (js/maps/sitges/terrain.js); sitgesPlanRoads
-//   (js/maps/sitges/roads.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
-//   (js/maps/sitges/houses.js).
+//   (js/maps/sitges/data-parcels.js); sitgesCells, sitgesBBox (js/maps/sitges/geom.js); sitgesPlanTerrain
+//   (js/maps/sitges/terrain.js); sitgesPlanStreets (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels
+//   (js/maps/sitges/levels.js); sitgesPlanCorners (js/maps/sitges/corners.js); sitgesPlanCarriage
+//   (js/maps/sitges/carriage.js); sitgesPlanWalks (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE
+//   (js/maps/sitges/minimap.js); sitgesPlanHouses (js/maps/sitges/houses.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -58,7 +60,12 @@ function sitgesData() {
   const C = {};
   sitgesPlanBase(C);
   sitgesPlanTerrain(C);
-  sitgesPlanRoads(C);
+  sitgesPlanStreets(C);
+  sitgesEvenRoads(C);
+  sitgesPlanLevels(C);
+  sitgesPlanCorners(C);
+  sitgesPlanCarriage(C);
+  sitgesPlanWalks(C);
   sitgesPlanHouses(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
@@ -119,6 +126,11 @@ function sitgesPlanBase(C) {
   let ri = 0;
   for (const b of blds) for (const p of b.parts) { p.rings = bp.slice(ri, ri + p.nr); ri += p.nr; delete p.nr; }
 
+  // части домов по клеткам 32 м: { k — номер части по порядку (как в C.houses), r — внешний контур, bb — рамка };
+  // «точка в доме» для углов улиц (js/maps/sitges/corners.js) и houseAt (js/maps/sitges/houses.js)
+  const partCells = sitgesCells(32);
+  { let k = 0; for (const b of blds) for (const p of b.parts) { const r = p.rings[0], bb = sitgesBBox(r); partCells.add(...bb, { k: k++, r, bb }); } }
+
   // участки кадастра: внешний контур (против часовой), сельский ли
   const pm = rows(PL.m, 2), pp = sitgesPts(PL.p, pm.map(r => r[0]));
   const parcels = pm.map((r, i) => ({ ring: pp[i], rustic: !!(r[1] & 1) }));
@@ -139,5 +151,5 @@ function sitgesPlanBase(C) {
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
   const dtm = { H, nx: T.nx, nz: T.nz, x0: T.x0, z0: T.z0, step: T.step };
-  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, parcels, terrainAt, dtm, pois });
+  Object.assign(C, { rect, HX, HZ, north, northAt, inside, roads, drive, rails, coast, areas, lines, blds, partCells, parcels, terrainAt, dtm, pois });
 }

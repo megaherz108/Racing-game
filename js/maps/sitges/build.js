@@ -9,8 +9,10 @@
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
 // Определяет: SITGES_LANE, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
-//   (js/maps/city/textures.js); sitgesRaster (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G
-//   (js/maps/sitges/ground.js); sitgesBuildRoads (js/maps/sitges/roads3d.js); sitgesBuildBuildings
+//   (js/maps/city/textures.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesRaster
+//   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
+//   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
+//   (js/maps/sitges/walks3d.js); sitgesBuildRail (js/maps/sitges/rail3d.js); sitgesBuildBuildings
 //   (js/maps/sitges/buildings.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -25,6 +27,10 @@ function buildSitges(D) {
   sitgesBuildKit(K);
   sitgesBuildGround(K);
   sitgesBuildRoads(K);
+  sitgesBuildWalks(K);
+  sitgesBuildMarks(K);
+  sitgesBuildRail(K);
+  sitgesBuildRoadMeshes(K);
   sitgesBuildBuildings(K);
   return sitgesBuildWorld(K);
 }
@@ -39,19 +45,8 @@ function sitgesBuildWorld(K) {
   buildShadowProxies(group);
 
   // точка внутри здания или ближе m к его стене
-  const inPoly = (x, z, r) => {
-    let ins = false;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const [xi, zi] = r[i], [xj, zj] = r[j];
-      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) ins = !ins;
-    }
-    return ins;
-  };
-  const nearEdge = (x, z, r, m) => r.some(([ax, az], i) => {
-    const [bx, bz] = r[(i + 1) % r.length], dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz;
-    const t = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L)) : 0;
-    return Math.hypot(x - ax - t * dx, z - az - t * dz) < m;
-  });
+  const inPoly = sitgesInPoly;
+  const nearEdge = (x, z, r, m) => r.some(([ax, az], i) => { const [bx, bz] = r[(i + 1) % r.length]; return sitgesSeg(x, z, ax, az, bx, bz) < m; });
   const blocked = (x, z, m = 0) => grid.query(x - m, x + m, z - m, z + m).some(o => o.poly && (inPoly(x, z, o.poly) || (m > 0 && nearEdge(x, z, o.poly, m))));
 
   // точки проезжих улиц через ~4 м (без служебных проездов): респаун, монеты
