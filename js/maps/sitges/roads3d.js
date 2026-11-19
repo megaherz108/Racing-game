@@ -120,7 +120,8 @@ function sitgesBuildRoads(K) {
   const surfOf = st => SURF[st.surf] || SURF.asphalt;
 
   /* ---------- копилка геометрии по квадратам и материалам ---------- */
-  // lod — материалы мелкими квадратами со скрытием вдали: { mat: [квадрат, дальность] } (заборы, fences3d.js)
+  // lod — материалы мелкими квадратами со скрытием вдали: { mat: [квадрат, дальность] } (заборы, fences3d.js; балконы,
+  // facades3d.js)
   const buckets = new Map(), lod = {};
   const bucket = (mat, x, z) => {
     const ch = lod[mat] ? lod[mat][0] : P.chunk, i = Math.floor(x / ch), j = Math.floor(z / ch), k = mat + '|' + i + ',' + j;
@@ -183,7 +184,9 @@ function sitgesBuildRoads(K) {
   };
 
   const cnt = { ribbon: 0, walk: 0, corner: 0, dash: 0, zebra: 0, deck: 0, fence: 0, wall: 0 };
-  K.rk = { MAT, surfOf, buckets, lod, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks: [] };
+  // casts — материалы, чьи меши отбрасывают тень (теневые копии, js/world.js); apart — материалы чужих этапов (балконы,
+  // facades3d.js): в сводку улиц не идут
+  K.rk = { MAT, surfOf, buckets, lod, casts: new Set(['stone', 'plaster']), apart: new Set(), quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks: [] };
 
   /* ---------- полотно улиц ---------- */
   for (const st of C.streets) {
@@ -294,7 +297,7 @@ function sitgesBuildRoadMeshes(K) {
   const { D, group, grid, decks, rk } = K, C = D.C, P = SITGES_RB, R = SITGES_R, g = D.ground;
   const { MAT, surfOf, buckets, quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks } = rk;
   /* ---------- меши ---------- */
-  let tris = 0;
+  let tris = 0, meshes = 0;
   const roadLod = [];   // меши, скрываемые вдали (world.cullView): { mesh, x, z, r, far }
   for (const b of buckets.values()) {
     const geo = new THREE.BufferGeometry();
@@ -305,11 +308,11 @@ function sitgesBuildRoadMeshes(K) {
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, MAT[b.mat]);
     mesh.receiveShadow = true;
-    mesh.castShadow = b.mat === 'stone' || b.mat === 'plaster';
+    mesh.castShadow = rk.casts.has(b.mat);
     mesh.userData.keep = true;
     group.add(mesh);
     if (rk.lod[b.mat]) roadLod.push({ mesh, x: b.x, z: b.z, r: b.ch * 0.71, far: rk.lod[b.mat][1] });
-    tris += b.pos.length / 9;
+    if (!rk.apart.has(b.mat)) { tris += b.pos.length / 9; meshes++; }
   }
   // бетонные блоки (New Jersey) поперёк улиц на границе
   if (blocks.length) {
@@ -349,6 +352,6 @@ function sitgesBuildRoadMeshes(K) {
   };
   Object.assign(K, {
     meshColliders, walkAt, roadLod, roadSurf: st => surfOf(st)[2],
-    roadsStats: { ...cnt, fences: rk.fenceStats, blocks: blocks.length, tris, meshes: buckets.size, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
+    roadsStats: { ...cnt, fences: rk.fenceStats, blocks: blocks.length, tris, meshes, colliders: meshColliders.reduce((s, m) => s + m.i.length / 3, 0) },
   });
 }

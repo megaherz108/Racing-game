@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1310,
-  "world": 2049,
-  "even": 127,
+  "data": 1210,
+  "world": 2155,
+  "even": 137,
   "fresh": true
  },
  "counts": {
@@ -35,7 +35,10 @@
   "shed": 2332,
   "inset": 1027,
   "huts": 221,
-  "bldTris": 312170
+  "bldTris": 312170,
+  "balconies": 7518,
+  "cornices": 3485,
+  "facTris": 155138
  },
  "corners": {
   "stats": {

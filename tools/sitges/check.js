@@ -8,7 +8,7 @@
 //   counts   — улицы, пути, переезды, путепроводы, углы, части домов, куски стен, треугольники и меши улиц, столкновения,
 //              заборы (км, отрезков)
 //   roofs    — формы крыш частей (плоская, двускатная, вальмовая, односкатная, вальма отступом), будки лестниц,
-//              треугольники зданий вместе с крышами
+//              треугольники зданий вместе с крышами; балконы, карнизы и их треугольники (4.4)
 //   corners  — сводка углов C.cornerStats и причины пропусков (C.cornerLog по why)
 //   width    — проезжие улицы с полосами (точки): доли ширины проезжей части < 5, 5–6, 6–8, ≥ 8 м, тротуары с двух
 //              сторон; Enric Morera — медиана проезжей части и тротуаров (эталон решения 3: ≈ 6 м)
@@ -55,6 +55,8 @@
     out.roofs = {
       flat: HS.flat || 0, gable: HS.gable || 0, hip: HS.hip || 0, shed: HS.shed || 0, inset: HS.inset || 0,
       huts: C.houses.filter(h => h.roof && h.roof.hut).length, bldTris: W.stats.bld ? W.stats.bld.tris : 0,
+      // балконы и карнизы (4.4, js/maps/sitges/facades3d.js)
+      balconies: C.facStats ? C.facStats.balconies : 0, cornices: C.facStats ? C.facStats.cornices : 0, facTris: W.stats.fac ? W.stats.fac.tris : 0,
     };
     const why = {};
     for (const e of C.cornerLog) why[e.why] = (why[e.why] || 0) + 1;
