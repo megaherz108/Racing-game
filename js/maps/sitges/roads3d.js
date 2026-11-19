@@ -683,15 +683,14 @@ function sitgesBuildRoads(K) {
   }
   const meshColliders = [...cmesh.values()].map(m => ({ v: new Float32Array(m.v), i: new Uint32Array(m.i) }));
 
-  // тротуар под точкой: высота верха или −∞
-  const inQuad = (x, z, p) => {
-    let pos = 0, neg = 0;
-    for (let k = 0; k < 4; k++) {
-      const [ax, az] = p[k], [bx, bz] = p[(k + 1) % 4], c = (bx - ax) * (z - az) - (bz - az) * (x - ax);
-      if (c > 0) pos++; else if (c < 0) neg++;
-    }
-    return !(pos && neg);
+  // тротуар под точкой: высота верха или −∞. Кусок — два треугольника (0, 1, 2) и (0, 2, 3), как у меша и сетки
+  // столкновений: у острых углов четырёхугольник бывает невыпуклым, проверка «все стороны с одного боку» его теряла
+  const inTri = (x, z, a, b, c) => {
+    const d0 = (b[0] - a[0]) * (z - a[1]) - (b[1] - a[1]) * (x - a[0]), d1 = (c[0] - b[0]) * (z - b[1]) - (c[1] - b[1]) * (x - b[0]);
+    const d2 = (a[0] - c[0]) * (z - c[1]) - (a[1] - c[1]) * (x - c[0]);
+    return !((d0 < 0 || d1 < 0 || d2 < 0) && (d0 > 0 || d1 > 0 || d2 > 0));
   };
+  const inQuad = (x, z, p) => inTri(x, z, p[0], p[1], p[2]) || inTri(x, z, p[0], p[2], p[3]);
   const walkAt = (x, z) => {
     const list = walks.get(Math.floor(x / WC) * 65536 + Math.floor(z / WC));
     if (list) for (const o of list) if (inQuad(x, z, o.pts)) return o.y;

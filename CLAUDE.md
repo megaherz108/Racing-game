@@ -25,7 +25,8 @@
 | `js/maps/coast/` | «Побережье» (1000 × 1500 м): раскладка `plan.js` → `terrain.js` (рельеф, река, `waterAt`), `sites.js` (площадки, улочки, порт, зоны), `roads.js`, `village.js`, `nature.js`, `minimap.js`; постройка `build.js` → `ground.js`, `roads3d.js`, `structures.js`, `props.js`, `market.js` (рынок на пьяцце), `crossings.js` (мосты, акведук, трамплин), `jumps.js` (обрушенный мост, сходни на тюках), `backdrop.js` (горы-фон), `life.js` (чайки, дым из труб); `trafficnet.js` — дорожный граф трафика из сплайнов дорог (строится при заезде) |
 | `js/maps/forest.js`, `arena.js` | скрытые карты |
 | `js/maps/sitges/` | «Ситжес» (реальный город, в работе; есть в меню): данные `data-*.js` (их пишет `tools/sitges/build.js` — не читать), раскладка `plan.js` (распаковка, `sitgesHeight()`) → `terrain.js` (сетка высот 2,5 м, море, пляжи, волнорезы, фон `outer()`) → `roads.js` (улицы: склейка, ширина по участкам `C.parcels` и фасадам, тротуары, ровное полотно `sitgesEvenRoads()`, мосты от плеч подходов, путепроводы и выемки, скруглённые углы `C.corners`, `carriageAt()`) → `houses.js` (дома: высоты на рельефе, общие стены, фасады к улице, проезды; `C.houses`) → `minimap.js` (`sitgesPaint()`); постройка `build.js` → `ground.js` (текстура земли, чанки рельефа, море, валуны, понтоны) → `roads3d.js` (полотно, тротуары с бордюрами и их сетка столкновений, угловые куски по дуге, разметка, мосты, ж/д с оградой, стена по границе) → `buildings.js` (стены кусками по `C.houses`, крыши, коллайдеры) с материалом `facade.js` (окна по этажам в шейдере, атрибут `aFac`) |
-| `tools/sitges/` | конвейер данных «Ситжеса»: `download.js` (OSM, кадастр — здания и участки, рельеф ICGC в `raw/`, не в git), `build.js` (→ `js/maps/sitges/data-*.js`), разбор `read-*.js`, `geo.js` (UTM, поворот), `util.js` (упаковка, упрощение) |
+| `tools/sitges/` | конвейер данных «Ситжеса»: `download.js` (OSM, кадастр — здания и участки, рельеф ICGC в `raw/`, не в git), `build.js` (→ `js/maps/sitges/data-*.js`), разбор `read-*.js`, `geo.js` (UTM, поворот), `util.js` (упаковка, упрощение); проверка карты `check.js` (`__sitgesCheck()`, `__sitgesShots()`, эталон `check-base.json`) |
+| `tools/cdp.js` | игра в безголовом Edge из командной строки: свой сервер, `--inject` / `--eval` / `--save` / `--compare` / `--dir` (ключи — в шапке) |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
 | `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `models-rural.js` типы «Побережья» (мотороллер, фургончик, трактор с тележкой), `traffic.js` объект `Traffic`, `driver.js` вождение ботов (и прицеп `follow`), `test.js` проверка поведения `__game.trafficTest()` |
 | `js/blobs.js` | пятна под машинами вместо теней на качестве «Минимум» (`QUAL.blobs`) |
@@ -41,7 +42,7 @@
 | `js/main.js` | главный цикл, `window.__game` |
 | `js/selftest.js` | `__game.selfTest()`, `__game.fingerprint()` |
 
-План карты «Ситжес» (реальный город, в работе) — `docs/sitges-plan.md`: статус, решения, этапы. Читать в начале каждой сессии по этой карте и обновлять в конце.
+План карты «Ситжес» (реальный город, в работе) — `docs/sitges-plan.md`: статус, следующий шаг, открытые огрехи, как проверять. Читать в начале каждой сессии по этой карте и обновлять в конце; держать коротким — подробности этапов и решения в архиве `docs/sitges/` (читать только нужный файл).
 
 ## Экономия токенов
 - Где определено имя и кто его использует: `node tools/deps.js --who ИМЯ`. Зависимости файла: `node tools/deps.js js/race.js`. Это дешевле, чем искать grep-ом по всем файлам.
@@ -63,9 +64,9 @@
 - Замер уровней качества стендом: `__setup({ px })` по умолчанию ставит px = 1,2 независимо от качества — для сравнения уровней передавай `px = Math.sqrt(1920*1200/(innerWidth*innerHeight)) * QUAL.scale`.
 
 ## Проверка изменений
-1. Сервер: `.claude/launch.json` (python http.server). Если порт занят другой сессией — заведи конфиг с другим портом.
+1. Сервер: `.claude/launch.json` (python http.server). Если порт занят другой сессией — заведи конфиг с другим портом. Без панели браузера: `node tools/cdp.js --eval "await __game.selfTest()"` — свой сервер и безголовый Edge с настоящей видеокартой.
 2. В консоли страницы: `await __game.selfTest()` — строит все карты, гоняет машины 4 с, включает ночь; отчёт текстом, «ошибок нет» = ок.
-3. Рефакторинг генерации карт — `__game.fingerprint('city')` до и после (см. выше).
+3. Рефакторинг генерации карт — `__game.fingerprint('city')` до и после (см. выше); «Ситжес» — `fingerprint('sitges')` и `__sitgesCheck()` с `--compare tools/sitges/check-base.json` (`docs/sitges-plan.md`, «Как проверять»).
 4. Правка трафика — `await __game.trafficTest()` (Побережье: серпантин, мосты, деревня, долгий прогон) и `trafficTest({ map: 'city' })`.
 5. Скриншот — только для визуальных правок. Быстрый старт заезда: `__game.startMatch('free')` (или `'race'`, `'solo'`, `'capture'`, `'bomb'`).
 6. `node tools/deps.js --check` — шапки файлов актуальны.

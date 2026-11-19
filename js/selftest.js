@@ -20,8 +20,9 @@ const _fpHash = s => {                       // FNV-1a, 32 бита → 8 hex-с
 };
 const _fpNum = v => Number.isFinite(v) ? Math.round(v * 1e4) / 1e4 : String(v);
 
-// JSON с отсортированными ключами; функции пропускаются, Map/Set — массивы, повторная ссылка — '^'
-function _fpJson(v, seen = new WeakSet()) {
+// JSON с отсортированными ключами; функции пропускаются, Map/Set — массивы, повторная ссылка — '^'.
+// fast — типизированные массивы хешируются числами, без строки (сетки высот в миллионы узлов), поле ms пропускается
+function _fpJson(v, seen = new WeakSet(), fast = false) {
   if (typeof v === 'number') return String(_fpNum(v));
   if (v === null || typeof v !== 'object') return typeof v === 'function' ? '' : JSON.stringify(v) ?? '';
   if (seen.has(v)) return '^';
@@ -31,19 +32,32 @@ function _fpJson(v, seen = new WeakSet()) {
     let s = 0; for (let i = 0; i < d.length; i += 7) s = (s * 31 + d[i]) >>> 0;
     return 'canvas' + v.width + 'x' + v.height + ':' + s;
   }
+  if (ArrayBuffer.isView(v) && fast) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < v.length; i++) { h ^= Math.round(v[i] * 1e4) | 0; h = Math.imul(h, 0x01000193); }
+    return 'ta' + v.length + ':' + (h >>> 0).toString(16);
+  }
   if (ArrayBuffer.isView(v)) return '[' + Array.from(v, _fpNum).join(',') + ']';
   if (v instanceof Map) v = [...v.entries()];
   else if (v instanceof Set) v = [...v];
-  if (Array.isArray(v)) return '[' + v.map(x => _fpJson(x, seen)).join(',') + ']';
-  return '{' + Object.keys(v).sort().map(k => k + ':' + _fpJson(v[k], seen)).join(',') + '}';
+  if (Array.isArray(v)) return '[' + v.map(x => _fpJson(x, seen, fast)).join(',') + ']';
+  // в режиме fast поле ms (время этапа в сводках, напр. C.evenStats.ms) не считается: оно разное от загрузки к загрузке
+  return '{' + Object.keys(v).sort().filter(k => !(fast && k === 'ms')).map(k => k + ':' + _fpJson(v[k], seen, fast)).join(',') + '}';
 }
 
-// раскладка: каждое поле отдельно (чтобы видеть, что именно поменялось) + функции рельефа на сетке
+// раскладка: каждое поле отдельно (чтобы видеть, что именно поменялось) + функции рельефа на сетке.
+// Карта может задать D.fp (сейчас — только «Ситжес»; у других карт хеши как раньше):
+//   { hx, hz } — область выборки ground() (иначе квадрат ±bounds); split — поле-контекст (C), которое хешируется
+//   по своим полям ('C.streets', 'C.corners', …); fast — типизированные массивы числами (см. _fpJson)
 function _fpData(D) {
-  const keys = {};
-  for (const k of Object.keys(D).sort()) if (typeof D[k] !== 'function') keys[k] = _fpHash(_fpJson(D[k]));
-  const b = D.bounds || D.BOUNDS || 500, samples = [];
-  if (typeof D.ground === 'function') for (let x = -b; x <= b; x += b / 24) for (let z = -b; z <= b; z += b / 24) {
+  const keys = {}, F = D.fp || {};
+  for (const k of Object.keys(D).sort()) {
+    if (typeof D[k] === 'function') continue;
+    if (k === F.split) { for (const c of Object.keys(D[k]).sort()) if (typeof D[k][c] !== 'function') keys[k + '.' + c] = _fpHash(_fpJson(D[k][c], undefined, F.fast)); }
+    else keys[k] = _fpHash(_fpJson(D[k], undefined, F.fast));
+  }
+  const b = D.bounds || D.BOUNDS || 500, bx = F.hx || b, bz = F.hz || b, samples = [];
+  if (typeof D.ground === 'function') for (let x = -bx; x <= bx; x += bx / 24) for (let z = -bz; z <= bz; z += bz / 24) {
     samples.push(_fpNum(D.ground(x, z)));
     if (D.blockAt) samples.push(D.blockAt(x, z)?.type || '-');
   }
@@ -68,12 +82,15 @@ function _fpWorld(w) {
   const items = new Set();
   for (const b of w.grid.cells.values()) for (const it of b) items.add(it);
   const gridRows = [...items].map(it => it.box ? [it.minX, it.maxX, it.minZ, it.maxZ, it.h].map(_fpNum).join(',') : [it.x, it.z, it.r, it.h].map(_fpNum).join(',')).sort();
-  return {
+  const out = {
     meshes: rows.length, meshHash: _fpHash(rows.join('\n')),
     gridItems: gridRows.length, gridHash: _fpHash(gridRows.join('\n')),
     decks: w.decks ? _fpHash(_fpJson(w.decks.list.map(d => [d.p0, d.p1, d.w, d.mat]))) : '-',
     breakables: (w.breakables || []).length,
   };
+  // сетки столкновений (тротуары «Ситжеса»): ключ — только если они есть, у других карт хеш как раньше
+  if (w.meshColliders) out.colliders = _fpHash(w.meshColliders.map(m => m.v.length + ':' + _fpJson(m.v, undefined, true) + _fpJson(m.i, undefined, true)).join('|'));
+  return out;
 }
 
 // __game.fingerprint('city') → { data: {поле: хеш}, dataHash, world: {...} }

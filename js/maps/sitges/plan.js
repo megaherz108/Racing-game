@@ -65,7 +65,10 @@ function sitgesData() {
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
   const roadSegs = [];
   for (const st of C.streets) if (st.drive) for (let i = 1; i < st.v.length; i++) roadSegs.push({ x0: st.v[i - 1].x, z0: st.v[i - 1].z, x1: st.v[i].x, z1: st.v[i].z });
-  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt, roadSegs, C };
+  // fp — настройки отпечатка (__game.fingerprint('sitges'), js/selftest.js): выборка по всему прямоугольнику,
+  // контекст C — по полям, сетки — числами
+  const fp = { hx: HX, hz: HZ, split: 'C', fast: true };
+  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt, roadSegs, C, fp };
 }
 
 function sitgesPlanBase(C) {

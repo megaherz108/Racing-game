@@ -96,6 +96,8 @@ function sitgesBuildWorld(K) {
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
     coinCount: 80, spawns,
+    // сводки постройки (tools/sitges/check.js)
+    stats: { roads: K.roadsStats }, walkAt,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;

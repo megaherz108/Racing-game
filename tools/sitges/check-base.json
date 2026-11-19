@@ -1,0 +1,154 @@
+{
+ "time": {
+  "data": 1098,
+  "world": 1479,
+  "even": 135,
+  "fresh": true
+ },
+ "counts": {
+  "streets": 1065,
+  "drive": 630,
+  "tracks": 15,
+  "xings": 0,
+  "unders": 27,
+  "corners": 1170,
+  "sharp": 96,
+  "snap": 122,
+  "houses": 12628,
+  "wallPieces": 60964,
+  "blind": 14312,
+  "streetWalls": 5553,
+  "passes": 5,
+  "roadTris": 644350,
+  "roadMeshes": 140,
+  "walkColliderTris": 125072,
+  "walkPieces": 21721,
+  "zebras": 543,
+  "evenNodes": 210102
+ },
+ "corners": {
+  "stats": {
+   "nodes": 710,
+   "pairs": 2193,
+   "made": 1170,
+   "skipAng": 631,
+   "skipWalk": 195,
+   "skipFar": 115,
+   "skipHouse": 34,
+   "shrunk": 165,
+   "skipBend": 48,
+   "offStrip": 42,
+   "sharp": 96
+  },
+  "skipped": {
+   "кривой рукав": 48,
+   "прямо": 564,
+   "пешеходная": 194,
+   "изгиб улицы": 55,
+   "r мал": 105,
+   "площадь": 1,
+   "острый": 12,
+   "мост": 22,
+   "K далеко": 10,
+   "дом или чужая улица": 34
+  }
+ },
+ "width": {
+  "points": 14272,
+  "pctLt5": 8.8,
+  "pct5to6": 4.9,
+  "pct6to8": 50.2,
+  "pctGe8": 36.1,
+  "pctWalkBoth": 85.5,
+  "enricMorera": {
+   "carriage": 6,
+   "walk": 1.56
+  }
+ },
+ "seams": {
+  "checked": 1859,
+  "gaps": 5,
+  "gapsCorner": 4,
+  "gapsStrip": 1,
+  "walkMiss": 0,
+  "gapsAt": [
+   {
+    "at": [
+     -1807.5,
+     -545.4
+    ],
+    "where": "угол",
+    "street": "Avinguda del Port d'Aiguadolç"
+   },
+   {
+    "at": [
+     -1807.8,
+     -541.4
+    ],
+    "where": "угол",
+    "street": "Avinguda del Port d'Aiguadolç"
+   },
+   {
+    "at": [
+     -1623,
+     -24.6
+    ],
+    "where": "полоса",
+    "street": "Carrer de les Corts d'Aragó"
+   },
+   {
+    "at": [
+     -197.8,
+     226.3
+    ],
+    "where": "угол",
+    "street": "Carrer d'Europa"
+   },
+   {
+    "at": [
+     1261.6,
+     167.7
+    ],
+    "where": "угол",
+    "street": "Carrer d'Antoni Muntañola"
+   }
+  ]
+ },
+ "even": {
+  "samples": 71383,
+  "devMed": 1.79,
+  "dev90": 9.22,
+  "dev99": 30.91,
+  "kink90": 1.11,
+  "cross90": 1.24
+ },
+ "steep": {
+  "count": 3,
+  "places": [
+   {
+    "at": [
+     237,
+     589
+    ],
+    "pct": 46,
+    "street": "Carrer del Mestre Manuel Torrens"
+   },
+   {
+    "at": [
+     195,
+     468
+    ],
+    "pct": 38,
+    "street": "Carrer de Frederic Montornés Pino"
+   },
+   {
+    "at": [
+     -1094,
+     232
+    ],
+    "pct": 27,
+    "street": "Avinguda de Josep Miró i Argenter"
+   }
+  ]
+ }
+}
