@@ -22,7 +22,9 @@
 //   fences   — заборы (4а.2, C.fenceStats и C.fenceStyleStats): км, сплошных, кусков по участкам, участков, комплексов
 //              (joined — склеено соседей), снято с участков без домов (bare: [участков, км] — зелень OSM, ж/д, пустырь),
 //              кусков 1 м перед домами от 3 этажей (front); км по видам верха (top) и цоколя (base), по классам участка
-//              (cls) и районам (zone); at — стиль у мест с фото (FENCE_AT, строки — не сравниваются)
+//              (cls) и районам (zone); geo — постройка (4а.4, fences3d.js): столбы, из них общих с почтовым ящиком
+//              (plates), створки, км изгороди, треугольники заборов; at — стиль у мест с фото (FENCE_AT, строки — не
+//              сравниваются)
 //   gates    — калитки и ворота (4а.3, C.fenceStats.gates): участков с забором, калиток (wicketSrc: ent — вход ≤ 2,5 м,
 //              entFar — 2,5–12 м) и участков с ними (wicketPct, %), ворот по источникам (carSrc: osm, svc, win) и
 //              участков (carPct), пар калитка + ворота, ширины (widths), створки (leaves); входы и ворота OSM без места
@@ -171,7 +173,7 @@
         at[name] = f ? `${f.f.style.top} / ${f.f.style.base} ${f.f.style.h0}–${f.f.style.h1} м, столбы ${f.f.style.posts}, участок ${f.f.lot}, ${f.d.toFixed(1)} м` : 'нет забора';
       }
       out.fences = { km: FS.km, runs: FS.runs, pieces: FS.pieces, lots: FS.lots, clusters: SS.clusters, joined: SS.joined,
-        bare: FS.bare, front: FS.no.front, top: SS.top, base: SS.base, cls: SS.cls, zone: SS.zone, at };
+        bare: FS.bare, front: FS.no.front, top: SS.top, base: SS.base, cls: SS.cls, zone: SS.zone, geo: RS.fences.geo, at };
     }
 
     /* ---------- калитки и ворота (4а.3) ---------- */

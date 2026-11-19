@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 1555,
-  "world": 1812,
-  "even": 130,
+  "data": 1804,
+  "world": 2546,
+  "even": 144,
   "fresh": true
  },
  "counts": {
@@ -19,8 +19,8 @@
   "blind": 14523,
   "streetWalls": 5553,
   "passes": 5,
-  "roadTris": 780628,
-  "roadMeshes": 420,
+  "roadTris": 1084792,
+  "roadMeshes": 511,
   "walkColliderTris": 182240,
   "walkPieces": 21721,
   "zebras": 543,
@@ -217,6 +217,13 @@
    "centre": 5.621,
    "vinyet": 14.461,
    "terramar": 14.633
+  },
+  "geo": {
+   "posts": 8161,
+   "plates": 259,
+   "leaves": 1691,
+   "hedgeKm": 13.2,
+   "tris": 440442
   },
   "at": {
    "balmes-39": "heath / white 0.5–1.8 м, столбы plaster, участок 801, 0.2 м",
