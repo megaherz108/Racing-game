@@ -4,6 +4,9 @@
 //   buildings — здания (building.gml): Map bid → { use, year, dwellings }
 // readParcels() — участки INSPIRE CP (raw/parcels/*.cadastralparcel.gml): [{ ref, rings: [внешнее, …дыры], rustic }];
 //   сельские участки с номером ≥ 9000 (дороги, ручьи — общественные земли) выброшены: это не «забор», а сама дорога
+// readAddresses() — адреса INSPIRE AD (raw/addresses/*.gml): { streets: Map id → название кадастра (« CL AIGUA»),
+//   list: [{ ref — кадастровый номер участка (= номер здания в BU), street — id улицы, num — номер дома (строка,
+//   «S-N» — без номера), x, y — точка входа или участка, UTM }] }
 const fs = require('fs');
 const path = require('path');
 const { RAW } = require('./geo');
@@ -75,4 +78,22 @@ function readParcels() {
   return { parcels: out, stat };
 }
 
-module.exports = { readCatastro, readParcels, USES };
+function readAddresses() {
+  const g = gmlFile('.gml', 'addresses');
+  const streets = new Map(), list = [];
+  for (const m of g.matchAll(/<AD:ThoroughfareName gml:id="ES\.SDGC\.TN\.([^"]+)">[\s\S]*?<GN:text>([^<]*)</g)) streets.set(m[1], m[2].trim());
+  for (const m of g.matchAll(/<AD:Address gml:id="ES\.SDGC\.AD\.[^"]+">([\s\S]*?)<\/AD:Address>/g)) {
+    const b = m[1];
+    // localId: провинция.муниципалитет.улица.номер.кадастровый номер (14 знаков)
+    const id = (b.match(/<base:localId>([^<]+)</) || [])[1] || '';
+    const pos = (b.match(/<gml:pos>([^<]+)</) || [])[1];
+    const num = (b.match(/<AD:LocatorDesignator>\s*<AD:designator>([^<]*)</) || [])[1];
+    const tn = (b.match(/xlink:href="#ES\.SDGC\.TN\.([^"]+)"/) || [])[1];
+    if (!pos || !tn) continue;
+    const [x, y] = pos.trim().split(/\s+/).map(Number);
+    list.push({ ref: id.slice(-14), street: tn, num: (num || '').trim(), x, y });
+  }
+  return { streets, list };
+}
+
+module.exports = { readCatastro, readParcels, readAddresses, USES };

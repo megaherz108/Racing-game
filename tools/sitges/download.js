@@ -8,6 +8,8 @@
 //                     зданий и их частей с этажностью (Fuente: Dirección General del Catastro)
 //   parcels/        — кадастр INSPIRE CP (участки) по тому же муниципалитету: границы участков — линия заборов,
 //                     промежуток между ними — ширина улицы «от забора до забора»
+//   addresses/      — кадастр INSPIRE AD (адреса) по тому же муниципалитету: улица, номер, точка и кадастровый
+//                     номер участка — подписи адресов над домами (отладка стиля города)
 //   dtm5.asc        — рельеф ICGC MET 5 × 5 м (WCS icc:met5, ARCGRID, EPSG:25831) на прямоугольник BBOX
 //                     (Institut Cartogràfic i Geològic de Catalunya, CC BY 4.0)
 // Печатает только сводку: что скачано и сколько весит.
@@ -65,10 +67,11 @@ out geom;`;
 }
 
 /* ---------- кадастр ---------- */
-// INSPIRE BU (здания) и CP (участки) — ATOM-ленты провинции 08, архив муниципалитета 08270
+// INSPIRE BU (здания), CP (участки) и AD (адреса) — ATOM-ленты провинции 08, архив муниципалитета 08270
 const CAT = {
   bu: { feed: 'https://www.catastro.hacienda.gob.es/INSPIRE/buildings/08/ES.SDGC.bu.atom_08.xml', dir: 'catastro', zip: 'catastro.zip', what: 'здания' },
   cp: { feed: 'https://www.catastro.hacienda.gob.es/INSPIRE/CadastralParcels/08/ES.SDGC.CP.atom_08.xml', dir: 'parcels', zip: 'parcels.zip', what: 'участки' },
+  ad: { feed: 'https://www.catastro.hacienda.gob.es/INSPIRE/Addresses/08/ES.SDGC.AD.atom_08.xml', dir: 'addresses', zip: 'addresses.zip', what: 'адреса' },
 };
 async function catastro({ feed, dir: d, zip: z, what }) {
   const dir = path.join(RAW, d), zip = path.join(RAW, z);
@@ -115,5 +118,6 @@ async function dtm() {
   await osm();
   await catastro(CAT.bu);
   await catastro(CAT.cp);
+  await catastro(CAT.ad);
   await dtm();
 })().catch(e => { console.error('Ошибка:', e.message); process.exit(1); });

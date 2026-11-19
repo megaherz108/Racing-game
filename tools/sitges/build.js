@@ -10,13 +10,15 @@
 //   4. улицы, ж/д, берег и море, площадные объекты, ориентиры из OSM;
 //   5. рельеф ICGC на сетке 10 м в локальных координатах (с запасом за границей — фон);
 //   5а. участки кадастра (INSPIRE CP) у игровой области: внешние контуры, упрощённые — линия заборов;
-//   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js.
+//   5б. адреса кадастра (INSPIRE AD) к зданиям по кадастровому номеру — подписи над домами (отладка);
+//   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
+//      data-addr.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
 const U = require('./util');
 const { readOSM, ROAD_CLASSES, SURFACES, AREA_KINDS, LINE_KINDS } = require('./read-osm');
-const { readCatastro, readParcels, USES } = require('./read-catastro');
+const { readCatastro, readParcels, readAddresses, USES } = require('./read-catastro');
 const { readDTM } = require('./read-dtm');
 
 const CFG = {
@@ -158,7 +160,7 @@ for (const [bid, parts] of byB) {
   const info = cat.buildings.get(bid) || { use: 0, year: 0 };
   const ob = osmAt(cx, cz);
   if (ob) osmMatched++;
-  blds.push({ cx, cz, parts: out, use: info.use, year: info.year, type: ob ? bTypes.id(osmType(ob.tags)) : 0, name: ob ? bNames.id(ob.tags.name || '') : 0 });
+  blds.push({ bid, cx, cz, parts: out, use: info.use, year: info.year, type: ob ? bTypes.id(osmType(ob.tags)) : 0, name: ob ? bNames.id(ob.tags.name || '') : 0 });
 }
 blds.sort((a, b) => morton(a.cx, a.cz) - morton(b.cx, b.cz));
 const bStream = [], bRings = [];
@@ -275,10 +277,45 @@ for (const p of pcl.parcels) {
 parcels.sort((a, b) => morton(...a.c) - morton(...b.c));
 
 /* =====================================================================
+   5б. АДРЕСА
+   ===================================================================== */
+// название кадастра « CL JOSEP SOLER I CARTRO» → «C/ Josep Soler i Cartro»: тип улицы — сокращением, слова — с заглавной
+const STREET_TYPE = { CL: 'C/', AV: 'Av.', PZ: 'Pl.', PS: 'Pg.', PJ: 'Ptge.', CR: 'Ctra.', CM: 'Camí', CJ: 'Carreró',
+  UR: 'Urb.', TR: 'Trav.', LG: '', DS: '', PQ: 'Parc', AU: 'Autovia' };
+const SMALL = new Set(['DE', 'DEL', 'DELS', 'LA', 'LES', 'EL', 'ELS', 'I', 'D', 'L', 'A', 'AL', 'Y', 'LOS', 'LAS']);
+function prettyStreet(raw) {
+  const w = raw.trim().split(/\s+/), t = w[0] in STREET_TYPE ? STREET_TYPE[w.shift()] : '';
+  const name = w.map((x, i) => i && SMALL.has(x) ? x.toLowerCase() : x[0] + x.slice(1).toLowerCase()).join(' ');
+  return (t ? t + ' ' : '') + name;
+}
+// номер дома → целое: номер · 32 + буква (A = 1 … Z = 26); 0 — без номера («S-N»)
+const numCode = s => { const m = /^(\d+)([A-Z]?)/.exec(s); return m ? +m[1] * 32 + (m[2] ? m[2].charCodeAt(0) - 64 : 0) : 0; };
+const ad = readAddresses();
+const adNames = strTable(), byRef = new Map();
+for (const a of ad.list) { if (!byRef.has(a.ref)) byRef.set(a.ref, []); byRef.get(a.ref).push(a); }
+const aStat = { all: ad.list.length, blds: 0, used: 0, noNum: 0 };
+const aStream = [];
+for (const b of blds) {
+  // по улицам: [улиц, затем на улицу: название, номеров, номера по возрастанию]
+  const st = new Map();
+  for (const a of byRef.get(b.bid) || []) {
+    const id = adNames.id(prettyStreet(ad.streets.get(a.street) || '')), n = numCode(a.num);
+    if (!st.has(id)) st.set(id, new Set());
+    st.get(id).add(n);
+    aStat.used++; if (!n) aStat.noNum++;
+  }
+  if (st.size) aStat.blds++;
+  aStream.push(st.size);
+  for (const [id, ns] of st) aStream.push(id, ns.size, ...[...ns].sort((p, q) => p - q));
+  // точка подписи — вход первого адреса (у кадастра — на линии фасада), дм
+  if (st.size) { const q = loc([byRef.get(b.bid)[0].x, byRef.get(b.bid)[0].y]); aStream.push(Math.round(q[0] * 10), Math.round(q[1] * 10)); }
+}
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
-const dOSM = date('osm.json'), dCat = date('catastro.zip'), dDTM = date('dtm5.asc'), dPcl = date('parcels.zip');
+const dOSM = date('osm.json'), dCat = date('catastro.zip'), dDTM = date('dtm5.asc'), dPcl = date('parcels.zip'), dAd = date('addresses.zip');
 const LIC_OSM = `// © участники OpenStreetMap (www.openstreetmap.org/copyright), лицензия ODbL 1.0 — этот файл данных остаётся открытым.`;
 const LIC_CAT = `// Fuente: Dirección General del Catastro (INSPIRE Buildings, муниципалитет 08270 Sitges).`;
 const LIC_ICGC = `// Institut Cartogràfic i Geològic de Catalunya (ICGC), CC BY 4.0.`;
@@ -378,6 +415,19 @@ write('data-parcels.js', [
 };
 `);
 
+write('data-addr.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: адреса зданий (улица и номера домов) — подписи над домами для отладки стиля города.',
+  `// Источник: кадастр Испании INSPIRE AD (ATOM, архив обновлён ${dAd}); к зданию — по кадастровому номеру участка.`,
+  LIC_CAT.replace('INSPIRE Buildings', 'INSPIRE Addresses'),
+  '// SITGES_ADR: streets — названия улиц (индекс + 1); m — поток целых: на каждое здание в порядке SITGES_BLD',
+  '//   [улиц, затем на улицу: название, номеров, номера по возрастанию; если улиц > 0 — x, z входа первого адреса, дм];',
+  '//   номер — номер · 32 + буква (A = 1 … Z = 26), 0 — без номера.',
+], 'SITGES_ADR', `const SITGES_ADR = {
+  streets: ${J(adNames.list)},
+  m: '${U.enc(aStream)}',
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -390,6 +440,7 @@ const fl = {}; for (const b of blds) for (const p of b.parts) fl[p.floors] = (fl
 console.log('  этажность частей:', Object.entries(fl).map(([k, v]) => k + ':' + v).join(' '));
 console.log(`OSM: улиц ${roads.length} (${km(roadLen)} км), ж/д ${rails.length}, берег ${coast.length}, площадных ${areas.length}${sea ? ' (с морем)' : ' (МОРЕ НЕ ПОСТРОЕНО)'}, линий ${lines.length}, ориентиров ${pois.length}`);
 console.log(`Участки кадастра: ${pcl.stat.all} (дорог и ручьёв сельского кадастра ${pcl.stat.publicRustic}, вне области ${pStat.outside}); на карте ${parcels.length} (сельских ${pStat.rustic}), дыр выброшено ${pStat.holes}; вершин было ${pStat.v0}, стало ${pStat.v1}`);
+console.log(`Адреса кадастра: ${aStat.all}, к зданиям на карте ${aStat.used} (без номера ${aStat.noNum}); с адресом ${aStat.blds} зданий из ${blds.length}, улиц ${adNames.list.length}`);
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 

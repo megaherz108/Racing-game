@@ -219,7 +219,7 @@ const QUALITY = {
   min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350 } };
 const cleanQuality = q => QUALITY[q] ? q : 'high';
 const defaultPlayer = () => ({ coins: 0, owned: ['corolla'], sel: 'corolla' });
-const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high', jumps: {} });
+const defaultSave = () => ({ players: [defaultPlayer(), defaultPlayer()], map: 'city', traffic: 'mid', mode: 'free', tod: 'day', rain: false, quality: 'high', jumps: {}, addr: false });
 // таблицы рекордов прыжков: { карта: [{ d: метров, p: игрок 0/1, car: короткое имя машины }] } — по убыванию d
 function cleanJumps(j) {
   const out = {};
@@ -243,7 +243,7 @@ function loadSave() {
     if (s && Array.isArray(s.players) && s.players.length === 2)
       return { players: s.players.map(cleanPlayer), map: MAP_IDS.includes(s.map) ? s.map : 'city', traffic: cleanTraffic(s.traffic),
         mode: MODES.includes(s.mode) ? s.mode : 'free', tod: cleanTime(s.tod), rain: s.rain === true, quality: cleanQuality(s.quality),
-        jumps: cleanJumps(s.jumps) };
+        jumps: cleanJumps(s.jumps), addr: s.addr === true };
   } catch (e) { /* повреждённое сохранение — начинаем заново */ }
   // перенос со старого формата с общим балансом: монеты делятся пополам, купленные машины есть у обоих
   try {

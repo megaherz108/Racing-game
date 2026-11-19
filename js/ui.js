@@ -2,8 +2,8 @@
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
 //   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, browseCar, buyCar, syncBrowse, JUMP_DESC, MODE_INFO,
 //   drawModePreview, renderMaps, renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime,
-//   renderWeather, setWeather, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps,
-//   setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
+//   renderWeather, setWeather, renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap,
+//   stepMap, openMaps, setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
 // Использует: save, persist, KMH, CARS, browse, derive, STATS, time100, HANDLING, carIndex, JUMP, KO_REWARD,
 //   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD,
 //   RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
@@ -276,7 +276,7 @@ function renderMaps() {
   $('modeLine').innerHTML = `Карта: ${PLAY_MAPS.map(id =>
     `<button class="tsel ${id === map ? 'on' : ''}" data-map="${id}">${MAP_INFO[id].name}</button>`).join('')}
     <span class="thint">C</span> · ← / → — режим, Enter — старт`;
-  renderJumps(map); renderTraffic(); renderTime(); renderWeather(); renderQuality();
+  renderJumps(map); renderTraffic(); renderTime(); renderWeather(); renderQuality(); renderAddr();
 }
 // таблица лучших прыжков выбранной карты (js/jumps.js)
 function renderJumps(map) {
@@ -315,6 +315,16 @@ function renderWeather() {
     <span class="thint">R</span>`;
 }
 function setWeather(v) { save.rain = !!v; persist(); renderWeather(); }
+// подписи адресов над домами «Ситжеса» — для отладки стиля города (js/maps/sitges/labels.js); строка — только на этой карте
+function renderAddr() {
+  const on = playMap(save.mode) === 'sitges';
+  $('addrLine').classList.toggle('hidden', !on);
+  if (!on) return;
+  $('addrLine').innerHTML = `Адреса домов: ${[[false, 'Выкл'], [true, 'Вкл']].map(([v, label]) =>
+    `<button class="tsel ${v === save.addr ? 'on' : ''}" data-addr="${v}">${label}</button>`).join('')}
+    <span class="thint">L · и в заезде</span>`;
+}
+function setAddr(v) { save.addr = !!v; persist(); renderAddr(); }
 // интенсивность трафика (на «Побережье» — своё число машин на всю карту, world.traffic)
 function renderTraffic() {
   $('trafficLine').innerHTML = `Трафик: ${TRAFFIC_LEVELS.map(([id, label]) =>
@@ -354,6 +364,7 @@ $('modeLine').addEventListener('click', e => { const b = e.target.closest('[data
 $('trafficLine').addEventListener('click', e => { const b = e.target.closest('[data-traffic]'); if (b) setTraffic(b.dataset.traffic); });
 $('timeLine').addEventListener('click', e => { const b = e.target.closest('[data-tod]'); if (b) setTime(b.dataset.tod); });
 $('weatherLine').addEventListener('click', e => { const b = e.target.closest('[data-rain]'); if (b) setWeather(b.dataset.rain === 'true'); });
+$('addrLine').addEventListener('click', e => { const b = e.target.closest('[data-addr]'); if (b) setAddr(b.dataset.addr === 'true'); });
 $('qualityLine').addEventListener('click', e => { const b = e.target.closest('[data-quality]'); if (b) setQuality(b.dataset.quality); });
 $('mapsGo').onclick = () => startMatch();
 function setPaused(v) { paused = v; $('pause').classList.toggle('hidden', !v); keys.clear(); }
@@ -389,6 +400,7 @@ addEventListener('keydown', e => {
   } else if (state === 'play') {
     if (e.code === 'Escape') setPaused(!paused);
     else if (!paused && e.code === 'KeyR' && cars[0].drown <= 0) cars[0].toRoad();
+    else if (e.code === 'KeyL' && world && world.id === 'sitges') { setAddr(!save.addr); toast(save.addr ? 'Адреса домов: вкл (L)' : 'Адреса домов: выкл (L)'); }
     else if (!paused && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
       const c = cars[cars.length - 1];        // в одиночной езде Enter тоже возвращает машину Игрока 1
       if (c.drown <= 0) c.toRoad();
@@ -409,6 +421,7 @@ addEventListener('keydown', e => {
     else if (e.code === 'KeyC') stepMap();
     else if (e.code === 'KeyR') setWeather(!save.rain);
     else if (e.code === 'KeyQ') stepQuality();
+    else if (e.code === 'KeyL' && playMap(save.mode) === 'sitges') setAddr(!save.addr);
     else if (e.code === 'Enter') startMatch();
     else if (e.code === 'Escape') setState('menu');
   } else if (state === 'menu') {

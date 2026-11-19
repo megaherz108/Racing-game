@@ -14,7 +14,8 @@
 //   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
 //   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
 //   (js/maps/sitges/walks3d.js); sitgesBuildFences (js/maps/sitges/fences3d.js); sitgesBuildRail
-//   (js/maps/sitges/rail3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js).
+//   (js/maps/sitges/rail3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesLabels
+//   (js/maps/sitges/labels.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -45,6 +46,8 @@ function sitgesBuildWorld(K) {
   const { D, group, grid, decks, landLod, rockLod, roadLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
   optimizeStatic(group);
   buildShadowProxies(group);
+  // подписи адресов над домами (js/maps/sitges/labels.js): строятся при первом включении, после склейки статики
+  const labels = sitgesLabels(C, group);
 
   // точка внутри здания или ближе m к его стене
   const inPoly = sitgesInPoly;
@@ -110,7 +113,7 @@ function sitgesBuildWorld(K) {
     occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg,
     reset() {},
-    update(dt, t) { seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; },
+    update(dt, t) { seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
     cullView(x, z) {
       for (const L of landLod) {
