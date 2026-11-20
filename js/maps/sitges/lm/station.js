@@ -44,12 +44,12 @@ function lmCWin(g, M, e, x, z, y, w, h, o = {}) {
   }
   if (M.sill) { const [sx, sz] = px(0.1); lmBox(g, M.sill, w + 0.3, 0.12, 0.25, sx, y - (o.arch ? fr * 0.5 : fr) - 0.12, sz, e.rot); }
 }
-// o: { wall, trim, plinth, win, roof, cap (материалы); plinthH, pil (шаг лопаток, 0 — нет), step, ww, wh, arch,
-//   ground: 'door' | 'win' | 'shop' | 'none', belt (материал межэтажного пояса), corn (вынос карниза), parapet (высота), pitch, skipWin(e, i) }
+// o: { wall, trim, plinth, win, roof, cap (материалы); plinthH, pil (шаг лопаток, 0 — нет), step, ww, wh, arch, garch (арки первого этажа),
+//   ground: 'door' | 'win' | 'shop' | 'none', belt (материал межэтажного пояса), corn (вынос карниза), parapet (высота), roofKind (вместо h.roof.kind), pitch, skipWin(e, i, n, f) — пропустить окно пролёта i этажа f }
 function lmCPart(K, g, h, o) {
   const C = K.D.C, ring = h.rings[0], base = h.base, y1 = h.y1, floors = Math.max(1, h.p.floors), fh = (y1 - base) / floors;
   const M = { win: o.win, trim: o.trim, sill: o.trim };
-  const sloped = h.roof && h.roof.kind !== 'flat' && h.roof.kind !== 'inset' && h.roof.kind !== 'shed';
+  const rk = o.roofKind || (h.roof && h.roof.kind), sloped = rk === 'gable' || rk === 'hip' || rk === 'pyramid';
   const par = sloped ? 0 : (o.parapet ?? 0.9);
   lmPrism(g, o.wall, ring, h.y0, y1 + par);
   if (o.plinthH) lmPrism(g, o.plinth || o.trim, lmInset(ring, -0.06), h.y0, base + o.plinthH, { cap: false });
@@ -75,15 +75,15 @@ function lmCPart(K, g, h, o) {
     const n = o.pil ? Math.max(1, Math.round(e.len / o.pil)) * Math.max(1, Math.round(o.pil / step)) * (e.len > ww + 1 ? 1 : 0)
       : Math.floor((e.len - 0.8) / step) || (e.len > ww + 1 ? 1 : 0);
     for (let i = 0; i < n; i++) {
-      if (o.skipWin && o.skipWin(e, i, n)) continue;
       const [x, z] = e.at((i + 0.5) / n);
       for (let f = 0; f < floors; f++) {
         const fy = base + f * fh;
+        if (o.skipWin && o.skipWin(e, i, n, f)) continue;
         if (f === 0 && o.ground && o.ground !== 'win') {
           if (o.ground === 'none') continue;
           if (!lmCOpen(C, x, z, e, fy + 0.2)) continue;
-          if (o.ground === 'door' && i % 2 === 0) lmCWin(g, M, e, x, z, fy + 0.05, Math.min(1.6, step * 0.5), Math.min(fh - 0.6, 3.2), { arch: o.arch });
-          else if (o.ground === 'door') lmCWin(g, M, e, x, z, fy + 0.9, ww, Math.min(wh + 0.3, fh - 1.4), { arch: o.arch });
+          if (o.ground === 'door' && i % 2 === 0) lmCWin(g, M, e, x, z, fy + 0.05, Math.min(1.6, step * 0.5), Math.min(fh - 0.6, 3.2), { arch: o.garch ?? o.arch });
+          else if (o.ground === 'door') lmCWin(g, M, e, x, z, fy + 0.9, ww, Math.min(wh + 0.3, fh - 1.4), { arch: o.garch ?? o.arch });
           continue;
         }
         const wy = fy + (fh - wh) * 0.55;
@@ -95,7 +95,7 @@ function lmCPart(K, g, h, o) {
       lmBox(g, o.win, e.len - 1.2, Math.min(fh - 0.8, 3.4), 0.12, mx + e.nx * 0.07, base + 0.1, mz + e.nz * 0.07, e.rot);
     }
   }
-  if (sloped) lmRoof(g, o.roof, lmFrame(ring), y1, { kind: h.roof.kind === 'gable' ? 'gable' : 'hip', pitch: o.pitch ?? 22, over: 0.5 });
+  if (sloped) lmRoof(g, o.roof, lmFrame(ring), y1, { kind: rk, pitch: o.pitch ?? 22, over: 0.5 });
   lmCollide(K, ring, h.pass ? h.y0 : h.y0 - 1, y1 + par);
 }
 

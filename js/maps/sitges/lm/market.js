@@ -6,8 +6,8 @@
 // круглый паркинг в тёмной ламельной сетке со светлыми поясами перекрытий, внизу открытый въезд (стены от h.y0 —
 // над проездом, как у домов с проездом). Низкие части (1–2 эт.) — бежевые пристройки. Высоты — из кадастра.
 // Определяет: SITGES_LM_MARKET.
-// Использует: lmMat, lmBox, lmPrism, lmInset, lmCollide (js/maps/sitges/landmarks3d.js); lmCEdges, lmCOpen
-//   (js/maps/sitges/lm/station.js).
+// Использует: lmCEdges, lmCOpen (js/maps/sitges/lm/station.js); lmMat, lmBox, lmFrame, lmPrism, lmInset, lmCollide
+//   (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
