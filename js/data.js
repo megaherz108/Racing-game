@@ -296,11 +296,12 @@ const cleanTraffic = t => TRAFFIC_LEVELS.some(l => l[0] === t) ? t : 'mid';
 // частицы перед камерой — главная нагрузка на заполнение пикселей); trails — светящиеся следы задних фонарей.
 // shadows — тени от солнца (карта теней, теневые копии; выключение задаётся до первой отрисовки), blobs — вместо
 // них тёмные пятна под машинами (js/blobs.js); lacquer — лаковый слой на кузовах игроков; trafficR — дальше скольких
-// метров от игрока не рисуется трафик (Traffic.cullView). Минимум — самое дешёвое для видеокарты, ценой картинки.
+// метров от игрока не рисуется трафик (Traffic.cullView); trees — деревья «Ситжеса» [ближе — полные модели, дальность
+// упрощённых], м (js/maps/sitges/trees3d.js). Минимум — самое дешёвое для видеокарты, ценой картинки.
 const QUALITY = {
-  high: { label: 'Высокое', aa: true, scale: 1, rain: 3200, fx: 1, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520 },
-  low: { label: 'Низкое', aa: false, scale: 0.8, rain: 1600, fx: 0.5, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520 },
-  min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350 } };
+  high: { label: 'Высокое', aa: true, scale: 1, rain: 3200, fx: 1, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520, trees: [120, 1000] },
+  low: { label: 'Низкое', aa: false, scale: 0.8, rain: 1600, fx: 0.5, trails: true, shadows: true, blobs: false, lacquer: true, trafficR: 520, trees: [120, 1000] },
+  min: { label: 'Минимум', aa: false, scale: 0.7, rain: 1000, fx: 0.5, trails: false, shadows: false, blobs: true, lacquer: false, trafficR: 350, trees: [60, 600] } };
 const cleanQuality = q => QUALITY[q] ? q : 'high';
 // paints — купленные цвета { машина: [id цветов] } (белый не пишется, он есть всегда); paint — выбранный цвет
 // { машина: id }, нет записи — белый. badges — открытые значки [id]; fit — расстановка { машина: { место: id } }

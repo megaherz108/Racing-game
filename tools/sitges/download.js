@@ -19,6 +19,12 @@
 //                     (тип крыши: уклоны; серый линеен по высоте, масштаб —
 //                     свой у каждой плитки: dsm/calib.json по трём точкам GetFeatureInfo); TILE м на плитку,
 //                     0,5 м на пиксель. CC BY 4.0 ICGC
+//   sup/, ir/       — для деревьев (этап 4б), только плитки с покрытием лидара (dsm/calib.json не null): модель
+//                     «поверхность» того же лидара (рельеф + здания + растительность; калибровка sup/calib.json, как
+//                     у dsm/) и инфракрасное ортофото 25 см 2024 (зелень — красная). CC BY 4.0 ICGC
+//   alc/            — запас для деревьев там, где прибрежного лидара нет (часть города за ж/д): высоты растительности
+//                     над землёй территориального лидара 1 м 2021–2023 (WMS elevacions-territorial), все плитки;
+//                     калибровка alc/calib.json. CC BY 4.0 ICGC
 // Печатает только сводку: что скачано и сколько весит.
 const fs = require('fs');
 const path = require('path');
@@ -151,7 +157,14 @@ const WMS = {
   orto: { url: 'https://geoserveis.icgc.cat/servei/catalunya/orto-territorial/wms', layer: 'ortofoto_25cm_color_2024', fmt: 'image/png; mode=8bit' },
   // рельеф + здания (без деревьев): серый линеен по высоте, но растянут под каждый запрос — калибровка ниже
   dsm: { url: LIT, layer: 'model-elevacions-terreny-edificis-litoral-lidar-50cm-202403-202404', fmt: 'image/png' },
+  // поверхность с растительностью (кроны деревьев): высота крон = sup − dsm; калибровка — как у dsm
+  sup: { url: LIT, layer: 'model-superficies-litoral-lidar-50cm-202403-202404', fmt: 'image/png', lidar: true },
+  // высота растительности над землёй (территориальный лидар 1 м, вся Каталония) — где нет прибрежного
+  alc: { url: 'https://geoserveis.icgc.cat/servei/catalunya/elevacions-territorial/wms', layer: 'model-alcaries-vegetacio-catalunya-lidar-1m-2021-2023', fmt: 'image/png' },
+  ir: { url: 'https://geoserveis.icgc.cat/servei/catalunya/orto-territorial/wms', layer: 'ortofoto_25cm_infraroig_2024', fmt: 'image/png; mode=8bit', lidar: true },
 };
+// плитки с покрытием лидара (по калибровке dsm/): для sup/ и ir/ остальные не нужны
+const lidarTiles = () => { const c = JSON.parse(fs.readFileSync(path.join(RAW, 'dsm', 'calib.json'), 'utf8')); return k => c[k[0] + '_' + k[1]]; };
 // плитки UTM, кратные TILE, покрывающие игровую область (+20 м); привязка — из data-geo.js (пишет build.js)
 function tileList() {
   const geo = fs.readFileSync(path.join(OUT, 'data-geo.js'), 'utf8');
@@ -165,7 +178,8 @@ function tileList() {
   return out;
 }
 async function tiles(kind) {
-  const { url, layer, fmt } = WMS[kind], dir = path.join(RAW, kind), list = tileList(), size = TILE / PX;
+  const { url, layer, fmt, lidar } = WMS[kind], dir = path.join(RAW, kind), size = TILE / PX;
+  const list = lidar ? tileList().filter(lidarTiles()) : tileList();
   fs.mkdirSync(dir, { recursive: true });
   let got = 0, bytes = 0;
   for (const [e, n] of list) {
@@ -182,14 +196,14 @@ async function tiles(kind) {
   }
   console.log(`${kind}/ — плиток ${list.length} (скачано сейчас ${got}), ${(bytes / 1048576).toFixed(0)} МБ`);
 }
-// калибровка плиток dsm/: серый = a · высота + b у каждой плитки свой. Точные высоты — GetFeatureInfo в самой тёмной,
-// самой светлой и средней точке плитки (тот же BBOX и размер); пишем dsm/calib.json { "e_n": [a, b, ошибка, м] }
-async function calibrate() {
+// калибровка плиток dsm/ (и sup/): серый = a · высота + b у каждой плитки свой. Точные высоты — GetFeatureInfo в самой тёмной,
+// самой светлой и средней точке плитки (тот же BBOX и размер); пишем <kind>/calib.json { "e_n": [a, b, ошибка, м] }
+async function calibrate(kind = 'dsm') {
   const { readPNG } = require('./png');
-  const { url, layer } = WMS.dsm, dir = path.join(RAW, 'dsm'), f = path.join(dir, 'calib.json'), size = TILE / PX;
+  const { url, layer, lidar } = WMS[kind], dir = path.join(RAW, kind), f = path.join(dir, 'calib.json'), size = TILE / PX;
   const cal = fs.existsSync(f) && !FORCE ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
   let done = 0, worst = 0;
-  for (const [e, n] of tileList()) {
+  for (const [e, n] of lidar ? tileList().filter(lidarTiles()) : tileList()) {
     const key = `${e}_${n}`;
     if (cal[key] !== undefined) continue;
     const im = readPNG(fs.readFileSync(path.join(dir, key + '.png')));
@@ -214,7 +228,7 @@ async function calibrate() {
   }
   fs.writeFileSync(f, JSON.stringify(cal));
   const steps = Object.values(cal).filter(Boolean).map(c => 1 / c[0]);
-  console.log(`dsm/calib.json — откалибровано сейчас ${done}, худшая ошибка в средней точке ${worst.toFixed(2)} м; ступень серого ${Math.min(...steps).toFixed(2)}…${Math.max(...steps).toFixed(2)} м`);
+  console.log(`${kind}/calib.json — откалибровано сейчас ${done}, худшая ошибка в средней точке ${worst.toFixed(2)} м; ступень серого ${Math.min(...steps).toFixed(2)}…${Math.max(...steps).toFixed(2)} м`);
 }
 
 (async () => {
@@ -225,6 +239,7 @@ async function calibrate() {
   await catastro(CAT.ad);
   await dtm();
   await points();
-  if (fs.existsSync(path.join(OUT, 'data-geo.js'))) { await tiles('orto'); await tiles('dsm'); await calibrate(); }
+  if (fs.existsSync(path.join(OUT, 'data-geo.js'))) { await tiles('orto'); await tiles('dsm'); await calibrate();
+    await tiles('sup'); await calibrate('sup'); await tiles('ir'); await tiles('alc'); await calibrate('alc'); }
   else console.log('orto/, dsm/ — нужен data-geo.js: запусти build.js и затем download.js ещё раз');
 })().catch(e => { console.error('Ошибка:', e.message); process.exit(1); });

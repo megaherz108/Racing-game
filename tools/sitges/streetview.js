@@ -147,11 +147,15 @@ const KINDS = [
     pick: () => targets('gate') },
   { name: 'wicket',  what: 'входы кадастра у линии забора — есть ли там калитка', k: 10, type: 'point',
     pick: () => targets('wicket') },
+  // этап 4б.1: цели — деревья из data-trees.js (пишет разовый скрипт в sv/targets.json, см. docs/sitges/stage-4b.md):
+  //   уличные — по 1–3 на ключевую улицу, сады вилл и парки; кадр — на дерево целиком (от земли до вершины)
+  { name: 'trees',   what: 'уличные деревья ключевых улиц — порода', k: 80, type: 'point', pick: () => targets('trees') },
+  { name: 'gardens', what: 'деревья садов вилл и парков — порода', k: 30, type: 'point', pick: () => targets('gardens') },
 ];
 function targets(kind) {
   const f = path.join(DIR, 'targets.json');
   if (!fs.existsSync(f)) return [];
-  return JSON.parse(fs.readFileSync(f, 'utf8')).filter(t => t.kind === kind).map(t => ({ id: t.id, p: t.p, name: `${kind} ${t.xz.join(' ')}` }));
+  return JSON.parse(fs.readFileSync(f, 'utf8')).filter(t => t.kind === kind).map(t => ({ id: t.id, p: t.p, name: t.name || `${kind} ${t.xz.join(' ')}`, h: t.h, r: t.r }));
 }
 
 /* ---------- запросы ---------- */
@@ -213,7 +217,10 @@ const link = (pano, h, p, f) => `https://www.google.com/maps/@?api=1&map_action=
         // взгляд прямо на точку забора; угол обзора — под ≈ 14 м забора
         const td = dist(camU, c.p);
         if (td > 30 || td < 2) { skip++; continue; }
-        views.push({ h: bearing(cam, wgs(...c.p)), p: 0, f: Math.max(55, Math.min(100, 2 * Math.atan(7 / td) * 180 / Math.PI)) });
+        if (c.h) {                            // дерево: в кадре от земли (камера ≈ 2,5 м) до вершины
+          const up = Math.atan((c.h + 1 - 2.5) / td), dn = Math.atan(2.5 / td), D = 180 / Math.PI;
+          views.push({ h: bearing(cam, wgs(...c.p)), p: Math.max(0, Math.min(35, (up - dn) / 2 * D)), f: Math.max(55, Math.min(110, (up + dn) * 1.15 * D)) });
+        } else views.push({ h: bearing(cam, wgs(...c.p)), p: 0, f: Math.max(55, Math.min(100, 2 * Math.atan(7 / td) * 180 / Math.PI)) });
       } else {
         let u = c.u;
         if (k.uphill && c.slope < 0) u = [-u[0], -u[1]];
@@ -231,7 +238,7 @@ const link = (pano, h, p, f) => `https://www.google.com/maps/@?api=1&map_action=
         else if (await shot(file, m.pano_id, v.h, v.p, v.f, K)) got++;
         else { skip++; continue; }
         const [x, z] = G.toLocal(...c.p).map(Math.round);
-        rows.push(`| ${k.name}/${name} | ${c.street ? `${c.street} ${c.num}` : c.name || '—'} | ${c.year ? c.year + ', ' + c.floors + ' эт.' : c.slope !== undefined ? 'уклон ' + Math.round(Math.abs(c.slope) * 100) + ' %' : ''} | ${x}, ${z} | ${m.date || '—'} | [панорама](${link(m.pano_id, v.h, v.p, v.f)}) |`);
+        rows.push(`| ${k.name}/${name} | ${c.street ? `${c.street} ${c.num}` : c.name || '—'} | ${c.year ? c.year + ', ' + c.floors + ' эт.' : c.h ? `дерево ${c.h} м, r ${c.r} м` : c.slope !== undefined ? 'уклон ' + Math.round(Math.abs(c.slope) * 100) + ' %' : ''} | ${x}, ${z} | ${m.date || '—'} | [панорама](${link(m.pano_id, v.h, v.p, v.f)}) |`);
       }
     }
     console.log(`  ${k.name}: ${n} кадров`);

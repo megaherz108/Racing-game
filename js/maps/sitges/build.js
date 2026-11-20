@@ -15,8 +15,9 @@
 //   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
 //   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
 //   (js/maps/sitges/walks3d.js); sitgesBuildFences (js/maps/sitges/fences3d.js); sitgesBuildFacades
-//   (js/maps/sitges/facades3d.js); sitgesBuildRail (js/maps/sitges/rail3d.js); sitgesBuildBuildings
-//   (js/maps/sitges/buildings.js); sitgesLabels (js/maps/sitges/labels.js).
+//   (js/maps/sitges/facades3d.js); sitgesBuildRail (js/maps/sitges/rail3d.js); sitgesBuildTrees
+//   (js/maps/sitges/trees3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesLabels
+//   (js/maps/sitges/labels.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -39,6 +40,7 @@ function buildSitges(D) {
   sitgesBuildRail(K);
   sitgesBuildRoadMeshes(K);
   sitgesBuildBuildings(K);
+  sitgesBuildTrees(K);
   return sitgesBuildWorld(K);
 }
 
@@ -95,7 +97,7 @@ function sitgesBuildWorld(K) {
     return green[k] ? 'grass' : 'dirt';
   };
   return {
-    id: 'sitges', group, grid, decks, meshColliders, barrels: [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
+    id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: K.treeBrk ? [K.treeBrk] : [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
     surface: (x, z, y = Infinity) => { const w = walkAt(x, z); return Math.max(D.ground(x, z), decks.surface(x, z, y), w <= y ? w : -Infinity); },
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
@@ -105,7 +107,7 @@ function sitgesBuildWorld(K) {
     look: { exposure: SITGES_LOOK.exposure, grade: true },
     coinCount: 80, spawns,
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats }, walkAt, roadLod,
+    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats }, walkAt, roadLod, treeTune: K.treeTune,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;
@@ -120,10 +122,11 @@ function sitgesBuildWorld(K) {
     // камера не уходит в стены узких улиц (js/match.js)
     occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg,
-    reset() {},
-    update(dt, t) { seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
+    reset() { if (K.treeReset) K.treeReset(); },
+    update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
-    cullView(x, z) {
+    cullView(x, z, p) {
+      if (K.treeCull) K.treeCull(x, z, p);                 // деревья: ближний набор, дальние квадраты
       for (const L of landLod) {
         const d = Math.hypot(L.x - x, L.z - z) - L.r;
         let on = 0; for (let q = 0; q < L.lods.length; q++) if (d > L.lods[q].from) on = q;

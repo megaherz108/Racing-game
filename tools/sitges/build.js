@@ -13,8 +13,9 @@
 //   5б. адреса кадастра (INSPIRE AD) к зданиям по кадастровому номеру — подписи над домами (отладка);
 //   5в. крыши частей по плиткам ICGC (тип — лидар, цвет — ортофото; tools/sitges/read-roofs.js), точки OSM;
 //   5г. калитки и ворота: входы кадастра, окна съездов по ортофото, служебные проезды (tools/sitges/read-gates.js);
+//   5д. деревья: кроны из лидара ICGC — место, высота, радиус, признаки формы (tools/sitges/read-trees.js);
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
-//      data-addr.js, data-roofs.js, data-points.js, data-gates.js.
+//      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
@@ -24,6 +25,7 @@ const { readCatastro, readParcels, readAddresses, USES } = require('./read-catas
 const { readDTM } = require('./read-dtm');
 const { readRoofs, ROOF_TYPES, ROOF } = require('./read-roofs');
 const { readGates, GATE } = require('./read-gates');
+const { readTrees, TREE } = require('./read-trees');
 
 const CFG = {
   north: 400,        // граница на севере: ж/д + 400 м…
@@ -358,6 +360,15 @@ const gEnt = byLot(gates.ent), gWin = byLot(gates.win), gSvc = byLot(gates.svc);
 const lotDelta = l => l.map((g, i) => g.p - (i ? l[i - 1].p : 0));
 
 /* =====================================================================
+   5д. ДЕРЕВЬЯ (лидар ICGC: поверхность − рельеф с домами, tools/sitges/read-trees.js)
+   ===================================================================== */
+const haveTrees = ['sup', 'dsm', 'alc'].every(k => fs.existsSync(path.join(G.RAW, k, 'calib.json'))) && fs.existsSync(path.join(G.RAW, 'ir'));
+const treesAll = haveTrees ? readTrees(allParts) : null;
+const trees = treesAll ? treesAll.trees.filter(t => inside(t.x, t.z, 20)).map(t => ({ ...t, x: r1(t.x), z: r1(t.z) }))
+  .sort((a, b) => morton(a.x, a.z) - morton(b.x, b.z)) : [];
+const trStream = trees.flatMap(t => [Math.round(t.h * 10), Math.round(t.r * 10), Math.min(99, Math.round(t.el * 10)), Math.round(t.fl * 100), Math.round(t.gp * 100), t.src]);
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
@@ -516,6 +527,23 @@ write('data-gates.js', [
 };
 `);
 
+if (treesAll) write('data-trees.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: деревья (этап 4б.0) — место, высота и крона каждого дерева выше ' + TREE.minH + ' м, без пород.',
+  `// Источник: ICGC — прибрежный лидар 50 см 2024: модели «поверхность» и «рельеф + здания» (WMS elevacions-litoral),`,
+  `//   инфракрасное ортофото 25 см 2024 (WMS orto-territorial); где прибрежного лидара нет — высоты растительности`,
+  `//   территориального лидара 1 м 2021–2023 (WMS elevacions-territorial); скачано ${date('sup')}. Разбор — tools/sitges/read-trees.js.`,
+  LIC_ICGC,
+  '// SITGES_TREES: n — деревьев; p — середины крон (поток точек); m — на каждое дерево по порядку [высота вершины, дм;',
+  '//   радиус кроны (по площади), дм; вытянутость × 10 (1 — круг, ≥ 20 — ряд или изгородь, не больше 99); полнота',
+  '//   профиля × 100 (средняя высота кроны / вершина); просветы × 100 (% круга кроны ниже трети высоты); источник',
+  '//   (1 — лидар 2024, 2 — территориальный 2021–2023)]. Съёмка март–апрель: платаны и каркасы без листвы — кроны реже.',
+], 'SITGES_TREES', `const SITGES_TREES = {
+  n: ${trees.length},
+  m: '${U.enc(trStream)}',
+  p: '${U.encPoints([trees.map(t => [t.x, t.z])])}',
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -539,6 +567,13 @@ if (roofs) {
 else console.log('Крыши: нет плиток orto/ и dsm/ — запусти download.js (data-roofs.js не записан)');
 console.log(`Точки OSM: ${PT_KINDS.map((k, i) => k + ' ' + pts.filter(p => p.k === i).length).join(', ')}`);
 console.log(`Калитки и ворота: входов Entrance ${gates.stat.ent} (без участка на карте ${gates.stat.entNoParcel}); окон съездов ${gates.stat.win} у ${gates.stat.winLots} участков${gates.stat.noTiles ? ' (НЕТ ПЛИТОК orto/)' : ''}; служебных проездов через границу ${gates.stat.svc}`);
+if (treesAll) {
+  const st = treesAll.stat, q = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
+  const hs = trees.map(t => t.h).sort((a, b) => a - b), rs = trees.map(t => t.r).sort((a, b) => a - b);
+  console.log(`Деревья: на карте ${trees.length} (всего по плиткам ${treesAll.trees.length}; от территориального лидара ${trees.filter(t => t.src === 2).length}); крон-кандидатов ${st.segs}, ниже ${TREE.minH} м ${st.low}, выше ${TREE.maxH} м ${st.high}, мельче ${TREE.minArea} м² ${st.small}`);
+  console.log(`  высота: 10 % ${q(hs, 0.1).toFixed(1)}, медиана ${q(hs, 0.5).toFixed(1)}, 90 % ${q(hs, 0.9).toFixed(1)}, макс ${q(hs, 1).toFixed(1)} м; радиус: 10 % ${q(rs, 0.1).toFixed(1)}, медиана ${q(rs, 0.5).toFixed(1)}, 90 % ${q(rs, 0.9).toFixed(1)}, макс ${q(rs, 1).toFixed(1)} м`);
+}
+else console.log('Деревья: нет плиток sup/, dsm/, ir/, alc/ — запусти download.js (data-trees.js не записан)');
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 

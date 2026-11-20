@@ -108,7 +108,7 @@ function frameBody(now) {
       else if (p === 0) aimSun((c.x + cars[1].x) / 2, (c.y + cars[1].y) / 2, (c.z + cars[1].z) / 2);
       Traffic.cullView(cams[p], c.x, c.z);
       Blobs.view(c.x, c.z);                // пятна под машинами вместо теней (только «Минимум», js/blobs.js)
-      if (world.cullView) world.cullView(cams[p].position.x, cams[p].position.z);
+      if (world.cullView) world.cullView(cams[p].position.x, cams[p].position.z, p);
       renderer.shadowMap.needsUpdate = !shadowShared || p === 0;
       renderer.setViewport(p * VW, 0, VW, H);
       renderer.setScissor(p * VW, 0, VW, H);
