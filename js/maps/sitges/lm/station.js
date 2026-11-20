@@ -92,7 +92,9 @@ function lmCPart(K, g, h, o) {
       }
     }
     if (o.ground === 'shop' && e.len > 3 && lmCOpen(C, mx, mz, e, base + 0.5)) {
-      lmBox(g, o.win, e.len - 1.2, Math.min(fh - 0.8, 3.4), 0.12, mx + e.nx * 0.07, base + 0.1, mz + e.nz * 0.07, e.rot);
+      // витрины по пролётам, между ними — простенки
+      const k = Math.max(1, Math.round(e.len / ((o.step || 3.2) * 1.6))), sw = e.len / k * 0.62;
+      for (let i = 0; i < k; i++) { const [x, z] = e.at((i + 0.5) / k); lmBox(g, o.win, sw, Math.min(fh - 0.9, 2.9), 0.12, x + e.nx * 0.07, base + 0.1, z + e.nz * 0.07, e.rot); }
     }
   }
   if (sloped) lmRoof(g, o.roof, lmFrame(ring), y1, { kind: rk, pitch: o.pitch ?? 22, over: 0.5 });
