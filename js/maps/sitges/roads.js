@@ -5,6 +5,8 @@
 //     с обеих сторон (медиана по соседним точкам). Внутри — тротуары по норме класса, проезжая часть — остаток (не уже
 //     полос старой нормы, если влезает до фасадов, — старый город; не шире cwMax); участков нет — норма cw.
 //     Тротуар — что осталось до границы, не шире нормы класса; уже minWalk — улица в одном уровне от стены до стены.
+//     Дом на границе своего участка ближе face м от края мостовой — тротуар до стены (набережная Pg. de la Ribera,
+//     2026-11-20: полоса между мостовой и домами — общая земля, не палисадник; без этого — пустая полоса и забор).
 //     Ось OSM сдвигается к середине между границами (shift).
 // Следующие этапы улиц (порядок — sitgesData() в js/maps/sitges/plan.js): ровное полотно и уровни (levels.js),
 // скруглённые углы (corners.js), проезжая часть под точкой (carriage.js), тротуары с обрезкой (walks.js).
@@ -38,6 +40,11 @@ const SITGES_R = {
   minHalf: 1.4,       // проезжая часть не уже 2,8 м (дальше — стены домов)
   minWalk: 0.9,       // тротуар уже — не делаем
   swMin: 1.2,         // тесно: тротуары ужимаются до стольких метров ради проезжей части по норме cw
+  // тротуар до фасада: где дом стоит на границе своего участка (участок начинается не дальше faceLot м перед стеной;
+  // палисадник — нет), тротуар идёт от края мостовой до стены, если она не дальше стольких метров (по классу; шире
+  // нормы sw и у классов без тротуара) — набережная Pg. de la Ribera: living_street 5 м и residential с тротуаром 2,4 м,
+  // дома в 5–9 м от края, между ними — тротуар с террасами (без этого — пустая полоса и забор у кромки)
+  face: { secondary: 12, tertiary: 12, unclassified: 12, residential: 12, living_street: 12 }, faceLot: 1,
   shift: { max: 1.5, taper: 12 },   // ось к середине между границами: не дальше max м, у концов улицы — на taper м
   // скруглённые углы: r — радиус бордюра по классу, м; касание не дальше dMax м от K и не дальше доли share рукава
   // до соседнего узла; look — направление рукава по точке не ближе стольких метров; угол между рукавами — в пределах
@@ -179,15 +186,16 @@ function sitgesPlanStreets(C) {
     return w.length ? w[w.length >> 1] : Infinity;
   };
   const fin = Number.isFinite;
-  const wst = { pts: 0, lot: 0, inLot: 0, fallback: 0, shifted: 0 };
+  const wst = { pts: 0, lot: 0, inLot: 0, fallback: 0, shifted: 0, face: 0, faceFill: 0 };
   for (const st of streets) {
     const { K, v, oneway } = st;
     if (st.flat) { for (const q of v) { q.hw = K.w / 2; q.sw = [0, 0]; } continue; }
     // фасады; участки — если точка оси не внутри участка (улица по частной земле или сдвиг OSM — не в счёт)
+    const face = P.face[st.cls] || 0, byLot = !!K.cw || face > 0;
     const L = v.map(q => ray(walls, q.x, q.z, -q.tz, q.tx)), R = v.map(q => ray(walls, q.x, q.z, q.tz, -q.tx));
-    const own = v.map(q => !!K.cw && !!lotAt(q.x, q.z));
-    const PL = v.map((q, i) => own[i] ? NaN : K.cw ? ray(lots, q.x, q.z, -q.tz, q.tx) : Infinity);
-    const PR = v.map((q, i) => own[i] ? NaN : K.cw ? ray(lots, q.x, q.z, q.tz, -q.tx) : Infinity);
+    const own = v.map(q => byLot && !!lotAt(q.x, q.z));
+    const PL = v.map((q, i) => own[i] ? NaN : byLot ? ray(lots, q.x, q.z, -q.tz, q.tx) : Infinity);
+    const PR = v.map((q, i) => own[i] ? NaN : byLot ? ray(lots, q.x, q.z, q.tz, -q.tx) : Infinity);
     const d = v.map((q, i) => ({ l: median(L, i), r: median(R, i), pl: median(PL, i), pr: median(PR, i) }));
     // ось — к середине между границами (ось OSM сдвинута от неё в среднем на ≈ 1 м): сдвиг до shift.max, у концов
     // улицы (узлы перекрёстков) и на мостах / в тоннелях — плавно до нуля; улицы, где не помещаются полосы старой
@@ -217,7 +225,7 @@ function sitgesPlanStreets(C) {
       }
       st.len = s;
     }
-    const o = oneway ? 0 : 1;
+    const o = oneway ? 0 : 1, G = v.map(() => [0, 0]);   // G — от края мостовой до границы улицы с каждой стороны
     v.forEach((q, i) => {
       const { l, r, pl, pr } = d[i];
       q.fac = [l, r]; q.lot = [pl, pr];
@@ -237,10 +245,30 @@ function sitgesPlanStreets(C) {
         if (own[i]) wst.inLot++;
         if (fin(pl) || fin(pr)) wst.lot++; else if (!fin(W)) wst.fallback++;
       }
-      // тротуар: до границы улицы, не шире нормы класса; граница не найдена — по норме; на мостах — узкий
-      const side = b => { const s = Math.min(K.sw, fin(b) ? b - q.hw : K.swN || K.sw); return s >= P.minWalk ? s : 0; };
-      q.sw = q.br ? [Math.min(1.5, K.sw), Math.min(1.5, K.sw)] : [side(bl), side(br)];
+      // тротуар: до границы улицы, не шире нормы класса; граница не найдена — по норме; на мостах — узкий;
+      // дом на границе участка (f — фасад) не дальше face м от края мостовой — до стены
+      const side = (b, f) => {
+        const g = fin(b) ? b - q.hw : 0;
+        if (face && fin(f) && f - b <= P.faceLot && g >= P.minWalk && g <= face && g > K.sw) { wst.face++; return g; }
+        const s = Math.min(K.sw, fin(b) ? g : K.swN || K.sw); return s >= P.minWalk ? s : 0;
+      };
+      q.sw = q.br ? [Math.min(1.5, K.sw), Math.min(1.5, K.sw)] : [side(bl, l), side(br, r)];
+      G[i] = [fin(bl) ? bl - q.hw : 0, fin(br) ? br - q.hw : 0];
     });
+    // тротуар до стены: провал в 1–2 точки между расширенными соседями (там фасад глубже — пустой участок, проезд во
+    // двор) — до меньшего из соседей, но не дальше границы улицы (иначе между широкими кусками «зуб», забор по его контуру)
+    // У конца улицы (узел, улица дальше — другой записью) — по одному соседу
+    if (face) for (const sd of [0, 1]) {
+      const w = v.map(q => q.sw[sd]), N = v.length, wide = k => k < 0 || k >= N ? Infinity : w[k] > K.sw ? w[k] : 0;
+      for (let i = 0; i < N; i++) for (const n of [1, 2]) {
+        const a = wide(i - 1), b = wide(i + n);
+        if (i + n > N || !a || !b || (a === Infinity && b === Infinity)) continue;
+        const m = Math.min(a, b);
+        let ok = true;
+        for (let k = i; k < i + n; k++) if (w[k] >= m || v[k].br || G[k][sd] < P.minWalk) ok = false;
+        if (ok) for (let k = i; k < i + n; k++) { v[k].sw[sd] = Math.max(w[k], Math.min(m, G[k][sd])); wst.faceFill++; }
+      }
+    }
     // одиночный провал тротуара (луч задел угол участка) или одиночный кусок посреди «без тротуара» — убрать
     for (const sd of [0, 1]) {
       const w0 = v.map(q => q.sw[sd]);

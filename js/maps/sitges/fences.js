@@ -35,7 +35,7 @@
 //   продолжается соседним куском), s — расстояние от начала сплошного забора, м. Стиль (style) — fencestyle.js.
 // C.fenceLots — участки за заборами: { [индекс в C.parcels]: { bi — главное здание участка (индекс в C.blds), у пустого
 //   — ближайшее (−1 — нет), empty — своих домов нет } }.
-// C.fenceStats — { runs, km, edges, chains, lots, pieces, yards (кусков за общим двором), no: { причина: кусков }, bare: { причина: [участков, км] },
+// C.fenceStats — { runs, km, edges, chains, lots, pieces, yards (кусков за общим двором), towns (кусков без забора: дальний участок перед домом центра), no: { причина: кусков }, bare: { причина: [участков, км] },
 //   ends: { corners, cornersM, yards, yardsM, house, houseM, joins, chords, joinM }, ms }; bare — участки без домов, с которых снят забор (км — до заполнения
 //   дыр); ends — заполненные дыры вокруг углов, доводки до стены дома и сведения концов (число, из них перемычек,
 //   и метры).
@@ -64,7 +64,8 @@ const SITGES_FENCE = {
   // перехода у угла — нет); у границы участка дорожка с углом к ней ≤ pathAlong° — вдоль (велодорожка у тротуара)
   pathIn: 1.0, pathNear: 3, pathAlong: 25,
   yard: 20,         // участка за линией нет, но в yard м вглубь — дом раньше улицы и зон OSM: общий двор комплекса, забор есть
-  yardNot: ['old', 'eixample'],   // стили домов центра — у них двора без участка не бывает
+  yardNot: ['old', 'eixample'],   // стили домов центра — у них двора без участка и палисадника за общей полосой не бывает
+  townLook: 15,     // дальний участок (> lotFar) в старом городе: первый дом в стольких метрах за его границей в стиле центра — забора нет
   yardGap: 25, yardFar: 60,  // дыру между заборами короче yardGap, где так же дом в yardFar м (глубокий двор), — заполнить
   house: [0.15, 0.6, 1.2], // дом ближе — забора нет (фасад вплотную)
   front: [1.5, 2.0, 2.5],  // дом от frontFloors этажей ближе — забора нет (витрины, крыльцо, терраса кафе)
@@ -158,6 +159,17 @@ function sitgesPlanFences(C) {
   // только вне старого города (SITGES_OLDTOWN) и отдельно стоящий дом не в стиле центра (старый город, Эйшампле):
   // пустой треугольник у угла, площадь у набережной (−470, −136) — мостовая, не двор
   const TOWN = new Set(F.yardNot);
+  // в старом городе (SITGES_OLDTOWN) первый дом за границей участка (от dl м вглубь, до townLook м) — в стиле центра;
+  // вне старого города не смотрим: большие дома за оградой усадьбы в Террамаре (у (1657, −402)) — тоже «центр» по стилю
+  let towns = 0;
+  const townAhead = (x, z, n, dl) => {
+    if (!SITGES_OLDTOWN.some(([cx, cz, rr]) => (x - cx) ** 2 + (z - cz) ** 2 < rr * rr)) return false;
+    for (let d = dl; d <= dl + F.townLook; d += 1) {
+      const h = houseAt(x + n[0] * d, z + n[1] * d);
+      if (h) return TOWN.has(SITGES_STYLES[blds[h.bi].style.id].name);
+    }
+    return false;
+  };
   let yards = 0;
   // есть ли часть дома, чья рамка задевает отрезок пробы (x, z) → (x1, z1) (без неё проход вглубь не нужен)
   const partNear = (x, z, x1, z1) => {
@@ -190,6 +202,9 @@ function sitgesPlanFences(C) {
     }
     // дальний участок со своей линией границы (kind 'lot': между тротуаром и участком дорожка) — забор там, не здесь
     if (lot >= 0 && dl > F.lotFar && kind !== 'lot' && crossEdge(x + n[0] * 0.3, z + n[1] * 0.3, x + n[0] * (dl + 0.3), z + n[1] * (dl + 0.3))) lot = -1;
+    // дальний участок перед домом центра (стили yardNot: старый город, Эйшампле; первый дом в townLook м за границей
+    // участка) — площадка или терраса, открытая к улице, не палисадник (Pg. Ribera 14)
+    if (lot >= 0 && dl > F.lotFar && townAhead(x, z, n, dl)) { lot = -1; towns++; }
     if (lot < 0 && (lot = yardLot(x, z, n)) >= 0) yards++;
     if (lot < 0) { why[wy = 'lot']++; return -1; }
     // край полотна улицы, чья середина (cd м от края) внутри участка, — внутренняя дорога порта, кемпинга, комплекса
@@ -606,7 +621,7 @@ function sitgesPlanFences(C) {
   Object.assign(C, {
     fenceLine: line, fences, fenceLots, fenceWhy: whyOf,
     fenceStats: { runs: stat.runs, km: Math.round(stat.len) / 1000, edges: line.length, chains: chains.length,
-      lots: Object.keys(fenceLots).length, pieces: stat.pieces, yards, no: why, bare: bareSt,
+      lots: Object.keys(fenceLots).length, pieces: stat.pieces, yards, towns, no: why, bare: bareSt,
       ends: { corners: stat.corners, cornersM: Math.round(stat.cornerLen), yards: stat.yardHoles, yardsM: Math.round(stat.yardLen), house: stat.house, houseM: Math.round(stat.houseLen), joins: stat.joins, chords: stat.chords, joinM: Math.round(stat.joinLen) },
       ms: Math.round(performance.now() - t0) },
   });
