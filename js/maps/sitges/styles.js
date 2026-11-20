@@ -111,7 +111,7 @@ function sitgesPlanFacades(C) {
   const st = { balconies: 0, doors: 0, solid: 0, cornices: 0, corniceLen: 0, byStyle: {} };
   for (const h of houses) {
     const b = h.b, bi = h.bi, S = SITGES_STYLES[b.style.id];
-    if (SITGES_PLAIN.has(b.use)) continue;
+    if (SITGES_PLAIN.has(b.use) || h.lm) continue;              // строения (landmarks.js) — своя модель
     const wall = b.style.wall.getHex();
     // ограждение здания: сплошное или решётка (её цвет)
     const solid = S.slab && (bi * 13 + 5) % 100 < S.slab.solid;

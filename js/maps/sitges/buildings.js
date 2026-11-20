@@ -26,6 +26,7 @@ function sitgesBuildBuildings(K) {
   };
   let tris = 0;
   for (const h of D.C.houses) {
+    if (h.lm) continue;                            // достопримечательность — своя модель (landmarks3d.js)
     const { b, p, bi } = h, pal = SITGES_BCOLORS[b.use];
     // цвет: стиля здания (склады — по назначению), части чуть различаются
     if (pal) col.setHex(pal[(bi * 7 + 3) % pal.length]); else col.copy(b.style.wall);

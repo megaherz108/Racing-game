@@ -2,6 +2,9 @@
 //   node tools/sitges/streetview.js                 — подобрать точки, проверить панорамы, скачать кадры
 //   node tools/sitges/streetview.js --plan          — только подобрать точки и напечатать сводку (без запросов)
 //   node tools/sitges/streetview.js --only fence,slope --limit 3   — выбрать виды и число кадров на вид
+//   node tools/sitges/streetview.js --lm church --look -579,-194 --cams "-540,-170;-600,-230" [--pitch 15] [--fov 90]
+//     — кадры достопримечательности (этапы 5–6): с ближайшей панорамы (до 30 м) к каждой точке камеры (координаты
+//     игры) взгляд на look → raw/photos/landmarks/<id>/sv-NN.jpg и sv-index.md там же (общий sv/index.md не трогает)
 // Ключ: переменная окружения GMAPS_KEY или файл tools/sitges/raw/gmaps-key.txt (raw/ в .gitignore). Ключ не
 //   печатается. Запрос «есть ли панорама» (metadata) бесплатный, платный только сам кадр (640 × 640).
 // Пишет tools/sitges/raw/photos/sv/<вид>/NN-улица.jpg и sv/index.md (адрес, год и этажи, координаты игры x z,
@@ -181,7 +184,37 @@ async function shot(file, pano, heading, pitch, fov, K) {
 const slug = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'x';
 const link = (pano, h, p, f) => `https://www.google.com/maps/@?api=1&map_action=pano&pano=${pano}&heading=${h.toFixed(0)}&pitch=${p.toFixed(0)}&fov=${f.toFixed(0)}`;
 
+// кадры достопримечательности: --lm id --look x,z --cams "x,z;x,z" (см. шапку)
+async function landmarkShots() {
+  const id = opt('--lm'), look = opt('--look').split(',').map(Number), pitch = +(opt('--pitch') || 12), fov = +(opt('--fov') || 90);
+  const cams = opt('--cams').split(';').map(s => s.split(',').map(Number));
+  const dir = path.join(G.RAW, 'photos', 'landmarks', id), K = key(), rows = [], tq = wgs(...G.toUTM(...look));
+  fs.mkdirSync(dir, { recursive: true });
+  const old = fs.readdirSync(dir).filter(f => /^sv-\d+\.jpg$/.test(f)).length;
+  let n = old, got = 0;
+  for (const [x, z] of cams) {
+    const ll = wgs(...G.toUTM(x, z)), m = await meta(ll[0], ll[1], 30, K);
+    if (!m) { console.log(`  ${x}, ${z}: панорамы нет`); continue; }
+    const cam = [m.location.lat, m.location.lng], h = bearing(cam, tq), name = `sv-${String(++n).padStart(2, '0')}.jpg`;
+    if (!(await shot(path.join(dir, name), m.pano_id, h, pitch, fov, K))) { n--; continue; }
+    got++;
+    const [cx, cz] = G.toLocal(...G.utm(...cam)).map(Math.round);
+    rows.push(`| ${name} | камера ${cx}, ${cz} → ${look.join(', ')} | ${m.date || '—'} | [панорама](${link(m.pano_id, h, pitch, fov)}) |`);
+  }
+  const idx = path.join(dir, 'sv-index.md');
+  if (!fs.existsSync(idx)) fs.writeFileSync(idx, `# ${id}: кадры Street View (tools/sitges/streetview.js --lm)
+
+Образцы для глаз; в данные не переносим.
+
+| файл | откуда → куда (игра) | дата | ссылка |
+|---|---|---|---|
+`);
+  if (rows.length) fs.appendFileSync(idx, rows.join('\n') + '\n');
+  console.log(`Скачано ${got} кадров → ${dir}`);
+}
+
 (async () => {
+  if (opt('--lm')) return landmarkShots();
   const kinds = KINDS.filter(k => !ONLY || ONLY.includes(k.name));
   for (const k of kinds) { k.list = spread(k.pick(), LIMIT || k.k); }
   console.log(kinds.map(k => `  ${k.name.padEnd(9)} ${String(k.list.length).padStart(3)} из ${k.pick().length} кандидатов — ${k.what}`).join('\n'));

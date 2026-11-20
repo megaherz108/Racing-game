@@ -9,7 +9,8 @@
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const RAW = path.join(__dirname, 'raw');                 // сырые данные, в git не попадают (.gitignore)
+// сырые данные, в git не попадают (.gitignore); SITGES_RAW — другая папка (рабочая копия git worktree без raw/)
+const RAW = process.env.SITGES_RAW || path.join(__dirname, 'raw');
 const OUT = path.join(ROOT, 'js', 'maps', 'sitges');     // готовые data-*.js
 
 // прямоугольник скачивания (с запасом вокруг карты: за границей — фон, холмы)

@@ -22,9 +22,10 @@
 //   (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels (js/maps/sitges/levels.js); sitgesPlanCorners
 //   (js/maps/sitges/corners.js); sitgesPlanCarriage (js/maps/sitges/carriage.js); sitgesPlanWalks
 //   (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
-//   (js/maps/sitges/houses.js); sitgesPlanFences (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades
-//   (js/maps/sitges/styles.js); sitgesPlanFenceStyles (js/maps/sitges/fencestyle.js); sitgesPlanGates
-//   (js/maps/sitges/gates.js); sitgesPlanTrees (js/maps/sitges/trees.js).
+//   (js/maps/sitges/houses.js); sitgesPlanLandmarks (js/maps/sitges/landmarks.js); sitgesPlanFences
+//   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
+//   (js/maps/sitges/fencestyle.js); sitgesPlanGates (js/maps/sitges/gates.js); sitgesPlanTrees
+//   (js/maps/sitges/trees.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -76,6 +77,7 @@ function sitgesData() {
   sitgesPlanCarriage(C);
   sitgesPlanWalks(C);
   sitgesPlanHouses(C);
+  sitgesPlanLandmarks(C);
   sitgesPlanStyles(C);
   sitgesPlanFences(C);
   sitgesPlanFenceStyles(C);

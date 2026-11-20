@@ -8,6 +8,7 @@
 //   (после тротуаров)            простые заборы по C.fences раскладки (js/maps/sitges/fences3d.js)
 //   sitgesBuildFacades           балконы и карнизы (js/maps/sitges/facades3d.js) — в ту же копилку K.rk
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
+//   sitgesBuildLandmarks         достопримечательности по C.landmarks (js/maps/sitges/landmarks3d.js, lm/*.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
 // Определяет: SITGES_LANE, SITGES_LOOK, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
@@ -16,8 +17,8 @@
 //   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
 //   (js/maps/sitges/walks3d.js); sitgesBuildFences (js/maps/sitges/fences3d.js); sitgesBuildFacades
 //   (js/maps/sitges/facades3d.js); sitgesBuildRail (js/maps/sitges/rail3d.js); sitgesBuildTrees
-//   (js/maps/sitges/trees3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesLabels
-//   (js/maps/sitges/labels.js).
+//   (js/maps/sitges/trees3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesBuildLandmarks
+//   (js/maps/sitges/landmarks3d.js); sitgesLabels (js/maps/sitges/labels.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -40,6 +41,7 @@ function buildSitges(D) {
   sitgesBuildRail(K);
   sitgesBuildRoadMeshes(K);
   sitgesBuildBuildings(K);
+  sitgesBuildLandmarks(K);
   sitgesBuildTrees(K);
   return sitgesBuildWorld(K);
 }
@@ -107,7 +109,7 @@ function sitgesBuildWorld(K) {
     look: { exposure: SITGES_LOOK.exposure, grade: true },
     coinCount: 80, spawns,
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats }, walkAt, roadLod, treeTune: K.treeTune,
+    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats }, walkAt, roadLod, treeTune: K.treeTune,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;
