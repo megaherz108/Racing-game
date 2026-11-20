@@ -1,6 +1,7 @@
 // Ситжес — РАСКЛАДКА: достопримечательности (этапы 5–6, docs/sitges/stage-5.md). После домов (houses.js), до стилей
 // фасадов (styles.js): балконы и карнизы на зданиях строений не ставятся.
-//   SITGES_LM — список строений: id, здания кадастра (bld — регулярное выражение по названию здания из OSM / кадастра,
+//   SITGES_LM — список строений: id, icon (значок на мини-карте — эмодзи, data.mmMarks → drawMarks в js/ui.js),
+//   здания кадастра (bld — регулярное выражение по названию здания из OSM / кадастра,
 //   at — точки [x, z] внутри зданий; можно оба), объект строения из js/maps/sitges/lm/<файл>.js:
 //     { ready, plan(C, L), build(K, L, group) } — ready: false — заготовка, дом кадастра остаётся как был.
 //   У готового строения части его зданий помечаются h.lm = id: их не строят buildings.js (стены, крыша, коллайдер)
@@ -26,22 +27,22 @@
 // Названия — как в кадастре / OSM (C.blds[i].name); точки — координаты игры внутри здания
 const SITGES_LM = [
   // этап 5 — мыс и старый город
-  { id: 'church', name: 'Sant Bartomeu i Santa Tecla', bld: /^Sant Bartomeu i Santa Tecla$/, def: SITGES_LM_CHURCH },
-  { id: 'townhall', name: 'Ajuntament de Sitges', bld: /^Ajuntament de Sitges$/, def: SITGES_LM_TOWNHALL },
-  { id: 'mercatvell', name: 'Mercat Vell', bld: /^Mercat Vell$/, def: SITGES_LM_MERCATVELL },
-  { id: 'maricel', name: 'Palau de Maricel', bld: /^Palau de Maricel$/, def: SITGES_LM_MARICEL },
-  { id: 'cauferrat', name: 'Museu del Cau Ferrat', bld: /^Museu del Cau Ferrat$/, def: SITGES_LM_CAUFERRAT },
-  { id: 'miramar', name: 'Edifici Miramar', bld: /^Edifici Miramar$/, def: SITGES_LM_MIRAMAR },
+  { id: 'church', icon: '⛪', name: 'Sant Bartomeu i Santa Tecla', bld: /^Sant Bartomeu i Santa Tecla$/, def: SITGES_LM_CHURCH },
+  { id: 'townhall', icon: '🏛️', name: 'Ajuntament de Sitges', bld: /^Ajuntament de Sitges$/, def: SITGES_LM_TOWNHALL },
+  { id: 'mercatvell', icon: '🧺', name: 'Mercat Vell', bld: /^Mercat Vell$/, def: SITGES_LM_MERCATVELL },
+  { id: 'maricel', icon: '🏰', name: 'Palau de Maricel', bld: /^Palau de Maricel$/, def: SITGES_LM_MARICEL },
+  { id: 'cauferrat', icon: '🎨', name: 'Museu del Cau Ferrat', bld: /^Museu del Cau Ferrat$/, def: SITGES_LM_CAUFERRAT },
+  { id: 'miramar', icon: '🖼️', name: 'Edifici Miramar', bld: /^Edifici Miramar$/, def: SITGES_LM_MIRAMAR },
   // этап 6 — центр и окраины
-  { id: 'market', name: 'Mercat Municipal de Sitges', bld: /^Mercat Municipal de Sitges$/, def: SITGES_LM_MARKET },
-  { id: 'station', name: 'Estació de Sitges', bld: /^Estació de Sitges$/, def: SITGES_LM_STATION },
-  { id: 'prado', name: 'Casino Prado', bld: /^Casino Prado$/, def: SITGES_LM_PRADO },
-  { id: 'retiro', name: 'El Retiro', bld: /^el Retiro$/, def: SITGES_LM_RETIRO },
-  { id: 'terramar', name: 'Hotel Terramar', bld: /^Hotel Terramar$/, def: SITGES_LM_TERRAMAR },
-  { id: 'vinyet', name: 'Santuari del Vinyet', bld: /^Santuari Nostra Senyora del Vinyet$/, def: SITGES_LM_VINYET },
-  { id: 'clot', name: 'Torre del Clot dels Frares', at: [[1752, 962]], def: SITGES_LM_CLOT },
-  { id: 'sebastia', name: 'Sant Sebastià', bld: /^Sant Sebastià$/, def: SITGES_LM_SEBASTIA },
-  { id: 'marina', name: "Port d'Aiguadolç", at: [], def: SITGES_LM_MARINA },
+  { id: 'market', icon: '🛒', name: 'Mercat Municipal de Sitges', bld: /^Mercat Municipal de Sitges$/, def: SITGES_LM_MARKET },
+  { id: 'station', icon: '🚉', name: 'Estació de Sitges', bld: /^Estació de Sitges$/, def: SITGES_LM_STATION },
+  { id: 'prado', icon: '🎭', name: 'Casino Prado', bld: /^Casino Prado$/, def: SITGES_LM_PRADO },
+  { id: 'retiro', icon: '🎬', name: 'El Retiro', bld: /^el Retiro$/, def: SITGES_LM_RETIRO },
+  { id: 'terramar', icon: '🏨', name: 'Hotel Terramar', bld: /^Hotel Terramar$/, def: SITGES_LM_TERRAMAR },
+  { id: 'vinyet', icon: '🔔', name: 'Santuari del Vinyet', bld: /^Santuari Nostra Senyora del Vinyet$/, def: SITGES_LM_VINYET },
+  { id: 'clot', icon: '🗼', name: 'Torre del Clot dels Frares', at: [[1752, 962]], def: SITGES_LM_CLOT },
+  { id: 'sebastia', icon: '🕊️', name: 'Sant Sebastià', bld: /^Sant Sebastià$/, def: SITGES_LM_SEBASTIA },
+  { id: 'marina', icon: '⚓', name: "Port d'Aiguadolç", at: [], def: SITGES_LM_MARINA },
 ];
 
 function sitgesPlanLandmarks(C) {
@@ -55,7 +56,7 @@ function sitgesPlanLandmarks(C) {
       : (e.at && e.at.length ? [e.at[0][0], e.at[0][0], e.at[0][1], e.at[0][1]] : [0, 0, 0, 0]);
     const cx = (bb[0] + bb[1]) / 2, cz = (bb[2] + bb[3]) / 2;
     const def = e.def || { ready: false }, ready = !!def.ready;
-    const L = { id: e.id, name: e.name, def, ready, bis: [...bis], parts, rings, bb, cx, cz,
+    const L = { id: e.id, name: e.name, icon: e.icon, def, ready, bis: [...bis], parts, rings, bb, cx, cz,
       g: C.ground(cx, cz),
       top: parts.reduce((m, h) => Math.max(m, h.top), -Infinity) };
     if (ready) { for (const h of parts) h.lm = e.id; if (def.plan) def.plan(C, L); }

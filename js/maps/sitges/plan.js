@@ -92,7 +92,9 @@ function sitgesData() {
   // fp — настройки отпечатка (__game.fingerprint('sitges'), js/selftest.js): выборка по всему прямоугольнику,
   // контекст C — по полям, сетки — числами
   const fp = { hx: HX, hz: HZ, split: 'C', fast: true };
-  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt, roadSegs, C, fp };
+  // значки достопримечательностей на мини-карте (js/ui.js, drawMarks): только готовые строения
+  const mmMarks = C.landmarks.filter(L => L.ready && L.icon).map(L => ({ x: L.cx, z: L.cz, icon: L.icon, name: L.name }));
+  return { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, mmMarks, ground, waterAt, roadSegs, C, fp };
 }
 
 function sitgesPlanBase(C) {

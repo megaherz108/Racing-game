@@ -123,7 +123,7 @@ function sitgesBuildWorld(K) {
     },
     // камера не уходит в стены узких улиц (js/match.js)
     occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
-    minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg,
+    minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg, mmMarks: D.mmMarks,
     reset() { if (K.treeReset) K.treeReset(); },
     update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи

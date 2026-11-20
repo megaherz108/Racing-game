@@ -1,9 +1,9 @@
 // Интерфейс: меню, гараж, выбор карты, HUD, мини-карта, ввод
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
-//   setText, updateHUD, MM_R, PCSS, drawMinimap, renderGarage, badgeRow, cycleBadge, browseCar, showCar, pickPaint,
-//   stepPaint, buyPaint, buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview, renderMaps, renderJumps,
-//   renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime, renderWeather, setWeather, renderAddr,
-//   setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps, setPaused,
+//   setText, updateHUD, MM_R, PCSS, MM_MARK, drawMarks, drawMinimap, renderGarage, badgeRow, cycleBadge, browseCar,
+//   showCar, pickPaint, stepPaint, buyPaint, buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview, renderMaps,
+//   renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime, renderWeather, setWeather,
+//   renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps, setPaused,
 //   raceEndOpen, closeRaceEnd, keys, BLOCK.
 // Использует: paintView, save, persist, KMH, CARS, browse, derive, STATS, paintOf, paintDef, PAINTS, hasPaint,
 //   time100, HANDLING, fitOf, BADGES, hasBadge, BADGE_SPOTS, fitSet, PAINT_FREE, paintBuy, carIndex, JUMP, KO_REWARD,
@@ -102,6 +102,36 @@ function updateHUD() {
 // мини-карта, повёрнутая по направлению машины
 const MM_R = 173;                        // радиус обзора, м (больше — мельче масштаб)
 const PCSS = ['#38c8ff', '#ff8a2a'];
+// значки мест (world.mmMarks / data.mmMarks: [{ x, z, icon, name }], пока — достопримечательности «Ситжеса»):
+// эмодзи в белом кружке радиуса r пикселей; дальше края мини-карты, но ближе far м — маленький значок на краю
+const MM_MARK = { r: 8, rim: 6, far: 600, font: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif' };
+// list: [{ x, y, r, icon, a }] в пикселях; наложенные значки раздвигаются (попарно, несколько проходов),
+// сдвинутый дальше своего радиуса — с тонкой линией к своему месту
+function drawMarks(ctx, list) {
+  for (const m of list) { m.ox = m.x; m.oy = m.y; }
+  for (let it = 0; it < 12; it++) for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j], min = a.r + b.r + 1;
+    let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d >= min) continue;
+    if (d < 0.01) { dx = Math.cos(i * 2.4 + j); dy = Math.sin(i * 2.4 + j); d = 1; }
+    const f = (min - d) / 2 / d;
+    a.x -= dx * f; a.y -= dy * f; b.x += dx * f; b.y += dy * f;
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1;
+  for (const m of list) if (Math.hypot(m.x - m.ox, m.y - m.oy) > m.r) {
+    ctx.beginPath(); ctx.moveTo(m.ox, m.oy); ctx.lineTo(m.x, m.y); ctx.stroke();
+    ctx.beginPath(); ctx.arc(m.ox, m.oy, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+  for (const m of list) {
+    ctx.globalAlpha = m.a ?? 1;
+    ctx.fillStyle = 'rgba(255,255,255,.93)'; ctx.strokeStyle = 'rgba(40,32,24,.9)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.font = `${Math.round(m.r * 1.3)}px ${MM_MARK.font}`; ctx.fillStyle = '#000';
+    ctx.fillText(m.icon, m.x, m.y + m.r * 0.08);
+  }
+  ctx.globalAlpha = 1;
+}
 function drawMinimap(p) {
   const { mm, mmx: ctx } = HUD[p], S = mm.width, c = cars[p], o = cars[1 - p];
   const img = world.minimap, ext = world.mmExt, extZ = world.mmExtZ ?? ext, sc = img.width / (2 * ext), k = S / (2 * MM_R);
@@ -129,6 +159,18 @@ function drawMinimap(p) {
   }
   ctx.restore();
   ctx.save(); ctx.translate(S / 2, S / 2);
+  if (world.mmMarks) {                        // значки мест: не поворачиваются вместе с картой
+    const cs = Math.cos(c.h), sn = Math.sin(c.h), lim = S / 2 - MM_MARK.rim - 2, list = [];
+    for (const m of world.mmMarks) {
+      const dx = (c.x - m.x) * k, dz = (c.z - m.z) * k, d = Math.hypot(dx, dz);
+      let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
+      if (d <= lim - MM_MARK.r + MM_MARK.rim) { list.push({ x, y, r: MM_MARK.r, icon: m.icon }); continue; }
+      if (d / k > MM_MARK.far) continue;
+      x *= lim / d; y *= lim / d;
+      list.push({ x, y, r: MM_MARK.rim, icon: m.icon, a: 0.8 });
+    }
+    drawMarks(ctx, list);
+  }
   Race.minimap(ctx, p, S / 2, k);
   Capture.minimap(ctx, p, S / 2, k);
   Bomb.minimap(ctx, p, S / 2, k);
@@ -264,62 +306,67 @@ function drawModePreview(cv, mode) {
   ctx.drawImage(D.minimap, 0, oy, S, 2 * extZ * sc);
   ctx.fillStyle = 'rgba(8,12,18,.35)'; ctx.fillRect(0, 0, S, S);
   const P = (x, z) => [(D.mmExt - x) * sc, (extZ - z) * sc + oy];
-  const rng = mulberry32(mode === 'race' ? 7 : mode === 'solo' ? 5 : 3);
-  if (mode === 'capture') {                        // пять зон с номерами
+  // картинка режима (зоны, погоня, монеты, трасса), поверх — значки мест
+  const scene = () => {
+    const rng = mulberry32(mode === 'race' ? 7 : mode === 'solo' ? 5 : 3);
+    if (mode === 'capture') {                        // пять зон с номерами
+      ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const zn of D.C.zones) {
+        const [x, y] = P(zn.x, zn.z), r = Math.max(6, zn.r * sc);
+        ctx.fillStyle = 'rgba(255,210,58,.3)'; ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffd23a'; ctx.strokeStyle = '#141008';
+        ctx.beginPath(); ctx.arc(x + r * 0.8, y - r * 0.8, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#141008'; ctx.fillText(String(zn.id), x + r * 0.8, y - r * 0.8 + 0.5);
+      }
+      return;
+    }
+    if (mode === 'bomb') {                           // погоня: две машины и бомба
+      // концы погони — два места на дорогах в 60–200 м друг от друга (на «Побережье» куски дорог короче 20 м)
+      const segs = D.roadSegs, a = segs[Math.floor(rng() * segs.length)];
+      if (!a) return;
+      const near = segs.filter(s => { const d = Math.hypot(s.x1 - a.x0, s.z1 - a.z0); return d > 60 && d < 200; });
+      const b = near.length ? near[Math.floor(rng() * near.length)] : a;
+      const [ax, ay] = P(a.x0, a.z0), [bx, by] = P(b.x1, b.z1), mx = (ax + bx) / 2 + (ay - by) * 0.25, my = (ay + by) / 2 + (bx - ax) * 0.25;
+      ctx.strokeStyle = 'rgba(255,59,59,.8)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(mx, my, bx, by); ctx.stroke(); ctx.setLineDash([]);
+      for (const [x, y, col] of [[ax, ay, '#ff8a2a'], [bx, by, '#38c8ff']]) {
+        ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('💣', ax, ay - 20);
+      return;
+    }
+    if (mode !== 'race') {
+      ctx.fillStyle = '#ffd23a';
+      for (let i = 0; i < 70; i++) {
+        const s = D.roadSegs[Math.floor(rng() * D.roadSegs.length)], t = rng();
+        const [x, y] = P(lerp(s.x0, s.x1, t), lerp(s.z0, s.z1, t));
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      return;
+    }
+    // пример трассы: 10 перекрёстков по 320–620 м друг от друга
+    const nodes = D.nodes.filter(n => n.deg >= 2), pts = [];
+    let px = -320, pz = 38;
+    for (let i = 0; i < RACE_CPS; i++) {
+      const pool = nodes.filter(n => { const d = Math.hypot(n.x - px, n.z - pz); return d > 320 && d < 620 && pts.every(q => Math.hypot(q.x - n.x, q.z - n.z) > 220); });
+      const n = (pool.length ? pool : nodes)[Math.floor(rng() * (pool.length || nodes.length))];
+      pts.push(n); px = n.x; pz = n.z;
+    }
+    ctx.strokeStyle = 'rgba(53,255,160,.7)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.moveTo(...P(-320, 38)); for (const n of pts) ctx.lineTo(...P(n.x, n.z)); ctx.stroke(); ctx.setLineDash([]);
     ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (const zn of D.C.zones) {
-      const [x, y] = P(zn.x, zn.z), r = Math.max(6, zn.r * sc);
-      ctx.fillStyle = 'rgba(255,210,58,.3)'; ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#ffd23a'; ctx.strokeStyle = '#141008';
-      ctx.beginPath(); ctx.arc(x + r * 0.8, y - r * 0.8, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#141008'; ctx.fillText(String(zn.id), x + r * 0.8, y - r * 0.8 + 0.5);
-    }
-    return;
-  }
-  if (mode === 'bomb') {                           // погоня: две машины и бомба
-    // концы погони — два места на дорогах в 60–200 м друг от друга (на «Побережье» куски дорог короче 20 м)
-    const segs = D.roadSegs, a = segs[Math.floor(rng() * segs.length)];
-    if (!a) return;
-    const near = segs.filter(s => { const d = Math.hypot(s.x1 - a.x0, s.z1 - a.z0); return d > 60 && d < 200; });
-    const b = near.length ? near[Math.floor(rng() * near.length)] : a;
-    const [ax, ay] = P(a.x0, a.z0), [bx, by] = P(b.x1, b.z1), mx = (ax + bx) / 2 + (ay - by) * 0.25, my = (ay + by) / 2 + (bx - ax) * 0.25;
-    ctx.strokeStyle = 'rgba(255,59,59,.8)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(mx, my, bx, by); ctx.stroke(); ctx.setLineDash([]);
-    for (const [x, y, col] of [[ax, ay, '#ff8a2a'], [bx, by, '#38c8ff']]) {
-      ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    }
-    ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('💣', ax, ay - 20);
-    return;
-  }
-  if (mode !== 'race') {
-    ctx.fillStyle = '#ffd23a';
-    for (let i = 0; i < 70; i++) {
-      const s = D.roadSegs[Math.floor(rng() * D.roadSegs.length)], t = rng();
-      const [x, y] = P(lerp(s.x0, s.x1, t), lerp(s.z0, s.z1, t));
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-    }
-    return;
-  }
-  // пример трассы: 10 перекрёстков по 320–620 м друг от друга
-  const nodes = D.nodes.filter(n => n.deg >= 2), pts = [];
-  let px = -320, pz = 38;
-  for (let i = 0; i < RACE_CPS; i++) {
-    const pool = nodes.filter(n => { const d = Math.hypot(n.x - px, n.z - pz); return d > 320 && d < 620 && pts.every(q => Math.hypot(q.x - n.x, q.z - n.z) > 220); });
-    const n = (pool.length ? pool : nodes)[Math.floor(rng() * (pool.length || nodes.length))];
-    pts.push(n); px = n.x; pz = n.z;
-  }
-  ctx.strokeStyle = 'rgba(53,255,160,.7)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
-  ctx.beginPath(); ctx.moveTo(...P(-320, 38)); for (const n of pts) ctx.lineTo(...P(n.x, n.z)); ctx.stroke(); ctx.setLineDash([]);
-  ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  pts.forEach((n, i) => {
-    const [x, y] = P(n.x, n.z), fin = i === pts.length - 1;
-    ctx.fillStyle = fin ? '#ffd23a' : '#35ffa0'; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#0b1a12'; ctx.fillText(fin ? 'F' : String(i + 1), x, y + 0.5);
-  });
+    pts.forEach((n, i) => {
+      const [x, y] = P(n.x, n.z), fin = i === pts.length - 1;
+      ctx.fillStyle = fin ? '#ffd23a' : '#35ffa0'; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#0b1a12'; ctx.fillText(fin ? 'F' : String(i + 1), x, y + 0.5);
+    });
+  };
+  scene();
+  if (D.mmMarks) drawMarks(ctx, D.mmMarks.map(m => { const [x, y] = P(m.x, m.z); return { x, y, r: Math.max(6, S / 34), icon: m.icon }; }));
 }
 function renderMaps() {
   const grid = $('mapGrid'), map = playMap('free');
