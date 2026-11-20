@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 2311,
-  "world": 2439,
-  "even": 127,
+  "data": 2395,
+  "world": 2496,
+  "even": 135,
   "fresh": true
  },
  "counts": {
@@ -19,14 +19,14 @@
   "blind": 14523,
   "streetWalls": 5553,
   "passes": 5,
-  "roadTris": 1340316,
+  "roadTris": 1355606,
   "roadMeshes": 552,
-  "walkColliderTris": 247724,
+  "walkColliderTris": 250408,
   "walkPieces": 21721,
   "zebras": 543,
   "evenNodes": 210102,
-  "fenceKm": 63.138,
-  "fenceRuns": 1099
+  "fenceKm": 64.783,
+  "fenceRuns": 1096
  },
  "roofs": {
   "flat": 5762,
@@ -166,64 +166,64 @@
   ]
  },
  "fences": {
-  "km": 63.138,
-  "runs": 1099,
-  "pieces": 2142,
-  "lots": 1377,
-  "clusters": 1267,
-  "joined": 110,
+  "km": 64.783,
+  "runs": 1096,
+  "pieces": 2167,
+  "lots": 1394,
+  "clusters": 1279,
+  "joined": 115,
   "bare": {
    "green": [
-    65,
-    5.531
+    67,
+    6.251
    ],
    "rail": [
-    10,
-    1.695
+    9,
+    1.374
    ],
    "vacant": [
-    107,
-    7.517
+    106,
+    7.474
    ]
   },
-  "front": 2060,
+  "front": 2099,
   "top": {
-   "wall": 5.622,
-   "heath": 13.074,
-   "mesh": 4.907,
-   "grille": 7.252,
-   "hedge": 21.363,
-   "slats": 9.267,
-   "low": 2.854
+   "wall": 5.819,
+   "heath": 13.247,
+   "mesh": 5.014,
+   "grille": 7.524,
+   "hedge": 21.969,
+   "slats": 9.404,
+   "low": 2.991
   },
   "base": {
-   "white": 31.779,
-   "brick": 3.012,
-   "rubble": 9.758,
-   "cream": 13.179,
-   "tile": 3.834,
-   "concrete": 2.776
+   "rubble": 9.886,
+   "white": 32.76,
+   "brick": 3.104,
+   "cream": 13.449,
+   "tile": 3.949,
+   "concrete": 2.818
   },
   "cls": {
-   "villa": 16.291,
-   "block": 25.695,
-   "modern": 18.979,
-   "oldvilla": 2.518,
-   "old": 0.856
+   "villa": 16.66,
+   "block": 26.458,
+   "modern": 19.345,
+   "oldvilla": 2.648,
+   "old": 0.857
   },
   "zone": {
-   "marina": 5.075,
-   "east": 9.348,
-   "centre": 11.255,
-   "vinyet": 17.229,
-   "terramar": 21.431
+   "marina": 5.398,
+   "east": 9.633,
+   "centre": 11.691,
+   "vinyet": 17.386,
+   "terramar": 21.86
   },
   "geo": {
-   "posts": 11584,
-   "plates": 282,
-   "leaves": 2088,
-   "hedgeKm": 19.6,
-   "tris": 672772
+   "posts": 11788,
+   "plates": 284,
+   "leaves": 2113,
+   "hedgeKm": 20.2,
+   "tris": 687914
   },
   "at": {
    "balmes-39": "heath / white 0.5–1.8 м, столбы plaster, участок 801, 0.2 м",
@@ -238,24 +238,21 @@
  },
  "holes": {
   "pairs": {
-   "<1": 64,
-   "1-3": 142,
-   "3-6": 255,
-   "6-8": 95
+   "<1": 67,
+   "1-3": 146,
+   "3-6": 256,
+   "6-8": 94
   },
-  "arcs": 15,
-  "arcsM": 32.6,
+  "arcs": 12,
+  "arcsM": 25.7,
   "arcsAt": [
-   "39, 304 · 4.8 м без забора",
+   "1050, 664 · 4.2 м без забора",
    "-1096, -65 · 3.6 м без забора",
    "-712, 219 · 3.1 м без забора",
    "394, 277 · 2.6 м без забора",
-   "380, 278 · 2.4 м без забора",
-   "57, -64 · 2.3 м без забора",
    "829, 525 · 2.3 м без забора",
    "1025, 460 · 2.0 м без забора",
-   "1244, 168 · 1.7 м без забора",
-   "74, -64 · 1.5 м без забора",
+   "1054, 675 · 1.7 м без забора",
    "-186, 224 · 1.4 м без забора",
    "-1076, -48 · 1.4 м без забора",
    "-420, -119 · 1.3 м без забора",
@@ -274,11 +271,13 @@
    "1299, -4 · 1.1 м",
    "-374, -86 · 1.1 м",
    "1361, -115 · 1.1 м",
+   "42, 304 · 1.1 м",
    "893, 713 · 1.1 м",
    "-1677, 41 · 1.1 м",
    "-775, 341 · 1.1 м",
    "-1534, -145 · 1.1 м",
    "-1723, -382 · 1.1 м",
+   "-249, 312 · 1.1 м",
    "-923, -135 · 1.1 м",
    "281, 215 · 1.1 м",
    "-215, 833 · 1.2 м",
@@ -290,61 +289,59 @@
    "1080, 14 · 1.2 м",
    "-36, 160 · 1.2 м",
    "-230, 827 · 1.3 м",
-   "59, 339 · 1.3 м",
-   "-305, 849 · 1.3 м",
-   "1312, -4 · 1.3 м"
+   "59, 339 · 1.3 м"
   ]
  },
  "gates": {
-  "lots": 1377,
-  "wickets": 1319,
-  "wicketLots": 1133,
+  "lots": 1394,
+  "wickets": 1341,
+  "wicketLots": 1147,
   "wicketPct": 82.3,
   "wicketSrc": {
-   "ent": 1095,
-   "entFar": 224
+   "ent": 1108,
+   "entFar": 233
   },
-  "entNoFence": 1934,
-  "entFar": 197,
-  "entNoPlace": 61,
-  "cars": 769,
-  "carLots": 769,
-  "carPct": 55.8,
+  "entNoFence": 1915,
+  "entFar": 200,
+  "entNoPlace": 56,
+  "cars": 772,
+  "carLots": 772,
+  "carPct": 55.4,
   "carSrc": {
    "osm": 3,
-   "svc": 0,
-   "win": 766
+   "svc": 1,
+   "win": 768
   },
   "osmPts": 18,
   "osmOff": 13,
-  "svcOff": 43,
-  "winElig": 1073,
-  "winNone": 283,
+  "svcOff": 42,
+  "winElig": 1086,
+  "winNone": 293,
   "carNoPlace": 23,
-  "pairs": 282,
+  "pairs": 284,
   "widths": {
-   "1": 1319,
-   "3": 13,
-   "3.5": 756
+   "1": 1341,
+   "3": 12,
+   "3.5": 760
   },
   "leaves": {
-   "wicket:slats": 522,
-   "wicket:mesh": 105,
-   "wicket:wood": 246,
-   "wicket:wrought": 282,
+   "wicket:slats": 534,
+   "wicket:mesh": 109,
+   "wicket:wood": 251,
+   "wicket:wrought": 283,
    "wicket:sheet": 126,
    "wicket:door": 38,
    "car:slats": 309,
    "car:mesh": 62,
-   "car:wood": 157,
-   "car:wrought": 165,
+   "car:wood": 159,
+   "car:wrought": 166,
    "car:sheet": 76
   },
   "drops": {
-   "gates": 769,
-   "ramps": 644,
+   "gates": 772,
+   "ramps": 648,
    "noWalk": 107,
-   "partial": 18
+   "partial": 17
   },
   "at": {
    "balmes-39": "калитка 0.4 м (ent, wrought, пара); ворота 2.3 м (win, wrought, пара)",
@@ -354,7 +351,7 @@
    "corral-fal-6": "калитка 1.1 м (ent, slats, пара); ворота 2.6 м (win, slats, пара)",
    "pere-pau-sagarra-19": "калитка 0.8 м (ent, wood); ворота 14.8 м (win, wood)",
    "roma-11": "калитка 0.3 м (ent, wood, пара); ворота 2.6 м (win, wood, пара)",
-   "carreta-14": "калитка 2.0 м (ent, door); ворота 20.2 м (win, wood)"
+   "carreta-14": "калитка 2.0 м (ent, door); ворота 28.9 м (win, wood)"
   }
  }
 }

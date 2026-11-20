@@ -7,14 +7,15 @@
 //   нет соседнего участка, а до улицы, тротуара или дорожки ≤ 10 м — линии: проезд без тротуара, полоса до дорожки) —
 //   сама граница (kind 'lot', высота — по рельефу). Мосты и настилы — без заборов.
 //   Забор стоит там, где за линией участок кадастра (не сельский; дальше 2,2 м — если до него ни улицы, ни зоны OSM:
-//   полоса без участка между тротуаром и оградой), но не дом (фасад вплотную — старый город), не
-//   другая улица, тротуар, дорожка или вода, и не узкая полоса перед домом от 3 этажей (витрины, крыльцо). Решение —
+//   полоса без участка между тротуаром и оградой; участка нет, но в yard м вглубь раньше улицы и зон OSM — отдельный дом:
+//   общий двор комплекса без участка, 2026-11-20), но не дом (фасад вплотную — старый город), не
+//   другая улица, тротуар, дорожка (только уходящая в квартал, не вдоль кромки) или вода, и не узкая полоса перед домом от 3 этажей (витрины, крыльцо). Решение —
 //   по кускам ≈ 1 м; кусок помнит участок за линией (самый маленький из вложенных). Участок без домов — без забора
 //   (4а.2: сквер, газон, пустырь у кольца, откос ж/д): зелень OSM за линией, ж/д ближе rail м или ни одного дома
 //   ближе site м к участку; иначе (стройплощадка между домами, общий двор комплекса) — с забором. Куски вдоль кромки
 //   сцеплены в цепочки (общий конец отрезков линии ± 5 см; отрезок бывает развёрнут; у кольца квартала начало —
 //   с начала забора), дыры короче SITGES_FENCE.gap заполняются (вокруг угла, если дыра только из-за «нет участка», —
-//   короче cornerGap), огрызки короче minRun убираются; забор режется по границам участков (куски короче minLot —
+//   короче cornerGap; с глубоким двором за ней — короче yardGap), огрызки короче minRun убираются; забор режется по границам участков (куски короче minLot —
 //   к соседу). Концы (2026-11-20, дыры у домов и на углах): забор, оборванный домом, доводится до ближайшей точки его
 //   стены (≤ close м); концы соседних заборов сводятся: на углу — до пересечения линий (≤ join м: участок не доходит
 //   до угла), иначе перемычкой от конца к концу (≤ chord м: острый угол развилки, разрыв линии).
@@ -34,13 +35,13 @@
 //   продолжается соседним куском), s — расстояние от начала сплошного забора, м. Стиль (style) — fencestyle.js.
 // C.fenceLots — участки за заборами: { [индекс в C.parcels]: { bi — главное здание участка (индекс в C.blds), у пустого
 //   — ближайшее (−1 — нет), empty — своих домов нет } }.
-// C.fenceStats — { runs, km, edges, chains, lots, pieces, no: { причина: кусков }, bare: { причина: [участков, км] },
-//   ends: { corners, cornersM, house, houseM, joins, chords, joinM }, ms }; bare — участки без домов, с которых снят забор (км — до заполнения
+// C.fenceStats — { runs, km, edges, chains, lots, pieces, yards (кусков за общим двором), no: { причина: кусков }, bare: { причина: [участков, км] },
+//   ends: { corners, cornersM, yards, yardsM, house, houseM, joins, chords, joinM }, ms }; bare — участки без домов, с которых снят забор (км — до заполнения
 //   дыр); ends — заполненные дыры вокруг углов, доводки до стены дома и сведения концов (число, из них перемычек,
 //   и метры).
 // Определяет: SITGES_FENCE, sitgesPlanFences.
 // Использует: sitgesCells, sitgesBBox, sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesInFillet
-//   (js/maps/sitges/corners.js).
+//   (js/maps/sitges/corners.js); SITGES_OLDTOWN, SITGES_STYLES (js/maps/sitges/styles.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -59,13 +60,20 @@ const SITGES_FENCE = {
   // участок ищется за линией на таких расстояниях; дальше lotFar м — только если до него нет улицы, тротуара, дорожки и
   // зоны OSM, кроме бассейна (полоса без участка между тротуаром и оградой — Francesc Armengol: забор у тротуара)
   lot: [0.4, 1.2, 2.2, 3.2, 4.2, 5.2, 6.2, 7.6, 9], lotFar: 2.2,
+  // дорожка снимает забор, только если в pathNear м от точки уходит в квартал глубже pathIn м (вдоль кромки, конец
+  // перехода у угла — нет); у границы участка дорожка с углом к ней ≤ pathAlong° — вдоль (велодорожка у тротуара)
+  pathIn: 1.0, pathNear: 3, pathAlong: 25,
+  yard: 20,         // участка за линией нет, но в yard м вглубь — дом раньше улицы и зон OSM: общий двор комплекса, забор есть
+  yardNot: ['old', 'eixample'],   // стили домов центра — у них двора без участка не бывает
+  yardGap: 25, yardFar: 60,  // дыру между заборами короче yardGap, где так же дом в yardFar м (глубокий двор), — заполнить
   house: [0.15, 0.6, 1.2], // дом ближе — забора нет (фасад вплотную)
   front: [1.5, 2.0, 2.5],  // дом от frontFloors этажей ближе — забора нет (витрины, крыльцо, терраса кафе)
   frontFloors: 3,
   minLot: 1.5,      // кусок участка в заборе короче — к соседнему участку
   // граница участка, открытая наружу (проезд без тротуара, пустая полоса): куски по edgeStep м; линия ближе edgeNear м
-  // (у границы или наружу до edgeLook м) — там уже решает она; ж/д ближе edgeRail м — своя ограда (rail3d.js)
-  edgeStep: 2, edgeNear: 1.5, edgeLook: 10, edgeRail: 8,
+  // (у границы или наружу до edgeLook м) — там уже решает она (за дорожкой вдоль границы — только ближе edgeAlong м);
+  // ж/д ближе edgeRail м — своя ограда (rail3d.js)
+  edgeStep: 2, edgeNear: 1.5, edgeLook: 10, edgeRail: 8, edgeAlong: 3,
   close: 2.8,       // забор, оборванный домом (house, front), доводится до стены дома не дальше close м
   // концы соседних заборов сводятся: до пересечения линий, если продление каждого ≤ join м (угол без скругления,
   // участок не доходит до угла); иначе перемычкой от конца к концу ≤ chord м (острый угол развилки, разрыв линии)
@@ -76,7 +84,7 @@ const SITGES_FENCE = {
 };
 
 function sitgesPlanFences(C) {
-  const { streets, walks, cornerWalks, parcels, houses, partCells, areas, rails, houseAt, carriageAt, cornersAt, inside, waterAt } = C;
+  const { streets, walks, cornerWalks, parcels, houses, partCells, areas, rails, blds, houseAt, carriageAt, cornersAt, inside, waterAt } = C;
   const F = SITGES_FENCE, t0 = performance.now();
   const offs = (q, d) => [q.x - q.tz * d, q.z + q.tx * d];   // d > 0 — сторона 0 (левая)
 
@@ -96,7 +104,25 @@ function sitgesPlanFences(C) {
       paths.add(Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m, Math.min(a.z, b.z) - m, Math.max(a.z, b.z) + m, [a, b]);
     }
   }
-  const onPath = (x, z) => paths.at(x, z).some(([a, b]) => sitgesSeg(x, z, a.x, a.z, b.x, b.z) < Math.max(a.hw, b.hw) + 0.6);
+  const pathSegs = (x, z) => paths.at(x, z).filter(([a, b]) => sitgesSeg(x, z, a.x, a.z, b.x, b.z) < Math.max(a.hw, b.hw) + 0.6);
+  const onPath = (x, z) => pathSegs(x, z).length > 0;
+  // дорожка у (x, z) уходит в квартал: в pathNear м от точки линии (x0, z0) ось глубже pathIn м по нормали n. Вдоль
+  // кромки (велодорожка, тротуар отдельной линией OSM: Pg. Vilanova 30, 38D) или обрываясь у неё (конец перехода
+  // у угла) — забор не снимает
+  const pathInto = (x, z, x0, z0, n) => pathSegs(x, z).some(([a, b]) => {
+    const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1, R = F.pathNear;
+    // часть отрезка в круге R: t1…t2 (не пересекает — ближайшая точка)
+    const ox = a.x - x0, oz = a.z - z0, pb = (ox * dx + oz * dz) / l2, D = pb * pb - (ox * ox + oz * oz - R * R) / l2;
+    let t1 = Math.max(0, Math.min(1, -pb)), t2 = t1;
+    if (D > 0) { t1 = Math.max(0, -pb - Math.sqrt(D)); t2 = Math.min(1, -pb + Math.sqrt(D)); if (t1 > t2) t1 = t2 = Math.max(0, Math.min(1, -pb)); }
+    const dep = t => (ox + dx * t) * n[0] + (oz + dz * t) * n[1];
+    return Math.max(dep(t1), dep(t2)) > F.pathIn;
+  });
+  // дорожка у (x, z) поперёк направления с нормалью n (угол с ним > pathAlong)
+  const pathAcross = (x, z, n) => pathSegs(x, z).some(([a, b]) => {
+    const dx = b.x - a.x, dz = b.z - a.z;
+    return Math.abs(dx * n[1] - dz * n[0]) / (Math.hypot(dx, dz) || 1) < Math.cos(F.pathAlong * Math.PI / 180);
+  });
   // тротуар (любой улицы) под точкой — куски полос и углов, как их строит walks3d.js (поиск world.walkAt)
   const pieces = sitgesCells(8);
   const addPiece = pts => {
@@ -127,6 +153,31 @@ function sitgesPlanFences(C) {
   const nearRail = (x, z, R = RD) => railC.at(x, z).some(([a, b]) => sitgesSeg(x, z, a[0], a[1], b[0], b[1]) < R);
   const why = { lot: 0, inner: 0, house: 0, road: 0, walk: 0, path: 0, water: 0, front: 0 };
   let wy = null;   // причина последнего «забора нет» (ключ why)
+  // общий двор комплекса без участка кадастра (у домов участок = контур дома; Pg. Vilanova 30, бульвар к югу): идя от
+  // линии в квартал до yard м, раньше улицы, тротуара, дорожки, зоны OSM, воды и ж/д упёрлись в дом — участок этого дома;
+  // только вне старого города (SITGES_OLDTOWN) и отдельно стоящий дом не в стиле центра (старый город, Эйшампле):
+  // пустой треугольник у угла, площадь у набережной (−470, −136) — мостовая, не двор
+  const TOWN = new Set(F.yardNot);
+  let yards = 0;
+  // есть ли часть дома, чья рамка задевает отрезок пробы (x, z) → (x1, z1) (без неё проход вглубь не нужен)
+  const partNear = (x, z, x1, z1) => {
+    const b0 = Math.min(x, x1), b1 = Math.max(x, x1), b2 = Math.min(z, z1), b3 = Math.max(z, z1);
+    for (let f = 0; f <= 1; f += 0.25)
+      for (const o of partCells.at(x + (x1 - x) * f, z + (z1 - z) * f)) if (o.bb[0] <= b1 && o.bb[1] >= b0 && o.bb[2] <= b3 && o.bb[3] >= b2) return true;
+    return false;
+  };
+  const yardLot = (x, z, n, D = F.yard) => {
+    if (SITGES_OLDTOWN.some(([cx, cz, rr]) => (x - cx) ** 2 + (z - cz) ** 2 < rr * rr) || !partNear(x, z, x + n[0] * D, z + n[1] * D)) return -1;
+    for (let d = 0.5, i = 0; d <= D; d += 1, i++) {
+      const lx = x + n[0] * d, lz = z + n[1] * d;
+      if (!inside(lx, lz) || waterAt(lx, lz) > -1 || onRoad(lx, lz, 0) || onWalk(lx, lz) || pathInto(lx, lz, x, z, n) || nearRail(lx, lz, 3)) return -1;
+      const h = houseAt(lx, lz);
+      // зоны OSM (сквер, школа, стоянка) — крупные: через 3 м и там, где дом (проверка дорогая)
+      if ((h || i % 3 === 0) && zoneAt(lx, lz)) return -1;
+      if (h) return h.attached || TOWN.has(SITGES_STYLES[blds[h.bi].style.id].name) ? -1 : lotAt(lx, lz);
+    }
+    return -1;
+  };
   // забор в точке (x, z) линии с нормалью n к кварталу: участок за линией (индекс в parcels) или −1 — забора нет
   const want = (x, z, n, kind, cd) => {
     if (!inside(x, z) || waterAt(x, z) > -1) { why[wy = 'water']++; return -1; }
@@ -137,6 +188,9 @@ function sitgesPlanFences(C) {
       const lx = x + n[0] * d, lz = z + n[1] * d;
       if (onRoad(lx, lz, 0) || onWalk(lx, lz) || onPath(lx, lz) || zoneAt(lx, lz)) lot = -1;
     }
+    // дальний участок со своей линией границы (kind 'lot': между тротуаром и участком дорожка) — забор там, не здесь
+    if (lot >= 0 && dl > F.lotFar && kind !== 'lot' && crossEdge(x + n[0] * 0.3, z + n[1] * 0.3, x + n[0] * (dl + 0.3), z + n[1] * (dl + 0.3))) lot = -1;
+    if (lot < 0 && (lot = yardLot(x, z, n)) >= 0) yards++;
     if (lot < 0) { why[wy = 'lot']++; return -1; }
     // край полотна улицы, чья середина (cd м от края) внутри участка, — внутренняя дорога порта, кемпинга, комплекса
     if (cd && lotAt(x - n[0] * cd, z - n[1] * cd) >= 0) { why[wy = 'inner']++; return -1; }
@@ -145,7 +199,7 @@ function sitgesPlanFences(C) {
     const edge = kind === 'lot';   // граница участка: проезд и дорожка вплотную снаружи — забор есть
     if (edge ? onRoad(bx, bz, 0) : onRoad(bx, bz, 0.3) || onRoad(x, z, 0)) { why[wy = 'road']++; return -1; }
     if (onWalk(bx, bz)) { why[wy = 'walk']++; return -1; }
-    if ((!edge && onPath(x, z)) || onPath(bx, bz)) { why[wy = 'path']++; return -1; }
+    if ((!edge && pathInto(x, z, x, z, n)) || pathInto(bx, bz, x, z, n)) { why[wy = 'path']++; return -1; }
     if (F.front.some(d => { const h = houseAt(x + n[0] * d, z + n[1] * d); return h && h.p.floors >= F.frontFloors; })) { why[wy = 'front']++; return -1; }
     return lot;
   };
@@ -194,13 +248,17 @@ function sitgesPlanFences(C) {
       if (nearLine(x, z) || nearRail(x, z, F.edgeRail)) return false;
       const qx = x + m[0] * 0.6, qz = z + m[1] * 0.6;
       if (!inside(qx, qz) || waterAt(qx, qz) > -1 || inAny(qx, qz) || houseAt(qx, qz)) return false;
+      // дорожка вдоль границы (велодорожка у тротуара) — проход, только если линия тротуара за ней не ближе edgeAlong м
+      // (иначе решает линия, и забор один — у тротуара: Pg. Vilanova у (−265, 314))
+      let along = false;
       for (let d = 0.6; d <= F.edgeLook; d += 1) {
         const px = x + m[0] * d, pz = z + m[1] * d;
-        if (nearLine(px, pz)) return false;
-        if (onRoad(px, pz, 0) || onWalk(px, pz) || onPath(px, pz)) return true;
-        if (d > 0.6 && inAny(px, pz)) return false;
+        if (nearLine(px, pz)) return along && d > F.edgeAlong;
+        if (onRoad(px, pz, 0) || onWalk(px, pz)) return true;
+        if (onPath(px, pz)) { if (pathAcross(px, pz, m)) return true; along = true; }
+        if (d > 0.6 && inAny(px, pz)) return along;
       }
-      return false;
+      return along;
     };
     const S = F.edgeStep;
     for (const p of parcels) {
@@ -221,6 +279,16 @@ function sitgesPlanFences(C) {
         }
       }
     }
+  }
+
+  // отрезки границ участков (kind 'lot') по клеткам: забор у тротуара перед такой границей не нужен (want)
+  const lotEdges = sitgesCells(16);
+  for (const e of line) if (e.kind === 'lot') lotEdges.add(Math.min(e.A[0], e.B[0]), Math.max(e.A[0], e.B[0]), Math.min(e.A[1], e.B[1]), Math.max(e.A[1], e.B[1]), e);
+  const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  function crossEdge(x0, z0, x1, z1) {
+    const P = [x0, z0], Q = [x1, z1];
+    const hit = e => cr(P, Q, e.A) * cr(P, Q, e.B) <= 0 && cr(e.A, e.B, P) * cr(e.A, e.B, Q) <= 0;
+    return [P, Q, [(x0 + x1) / 2, (z0 + z1) / 2]].some(p => lotEdges.at(p[0], p[1]).some(hit));
   }
 
   /* ---------- куски ≈ 1 м и решение ---------- */
@@ -326,7 +394,7 @@ function sitgesPlanFences(C) {
   }
 
   /* ---------- дыры и огрызки, ломаные заборов, разрез по участкам ---------- */
-  const fences = [], stat = { runs: 0, len: 0, pieces: 0, house: 0, houseLen: 0, joins: 0, joinLen: 0, chords: 0, corners: 0, cornerLen: 0 }, fenceLots = {};
+  const fences = [], stat = { runs: 0, len: 0, pieces: 0, house: 0, houseLen: 0, joins: 0, joinLen: 0, chords: 0, corners: 0, cornerLen: 0, yardHoles: 0, yardLen: 0 }, fenceLots = {};
   for (const ch of chains) {
     // куски цепочки по порядку: { e — номер отрезка, t0, t1, len, on, lot }
     const pc = [];
@@ -343,10 +411,21 @@ function sitgesPlanFences(C) {
     // cornerGap; заборы короче minRun — убрать
     const runs = v => { const r = []; for (let i = 0; i < pc.length;) { if (pc[i].on !== v) { i++; continue; } let j = i, l = 0; while (j < pc.length && pc[j].on === v) l += pc[j++].len; r.push([i, j, l]); i = j; } return r; };
     const aroundCorner = (i, j) => { let c = false; for (let q = i; q < j; q++) { if (pc[q].why !== 'lot') return false; if (line[pc[q].e].kind === 'corner') c = true; } return c; };
+    // дыра только из-за «нет участка», за которой глубокий общий двор (дом в yardFar м вглубь от каждого куска)
+    const deepYard = (i, j) => {
+      for (let q = i; q < j; q++) {
+        const c = pc[q], e = line[c.e], t = (c.t0 + c.t1) / 2;
+        if (c.why !== 'lot' || yardLot(e.A[0] + (e.B[0] - e.A[0]) * t, e.A[1] + (e.B[1] - e.A[1]) * t, e.n, F.yardFar) < 0) return false;
+      }
+      return true;
+    };
     for (const [i, j, l] of runs(false)) {
       // у кольца хвост (после разворота pc[0] — начало забора) — тоже дыра между заборами
-      if (i === 0 || (j === pc.length && !ch.ring) || !(l < F.gap || (l < F.cornerGap && aroundCorner(i, j)))) continue;
-      if (l >= F.gap) { stat.corners++; stat.cornerLen += l; }
+      if (i === 0 || (j === pc.length && !ch.ring)) continue;
+      const fill = l < F.gap ? 'gap' : l < F.cornerGap && aroundCorner(i, j) ? 'corner' : l < F.yardGap && deepYard(i, j) ? 'yard' : null;
+      if (!fill) continue;
+      if (fill === 'corner') { stat.corners++; stat.cornerLen += l; }
+      if (fill === 'yard') { stat.yardHoles++; stat.yardLen += l; }
       for (let q = i; q < j; q++) pc[q].on = true;
     }
     for (const [i, j, l] of runs(true)) if (l < F.minRun) for (let q = i; q < j; q++) pc[q].on = false;
@@ -527,8 +606,8 @@ function sitgesPlanFences(C) {
   Object.assign(C, {
     fenceLine: line, fences, fenceLots, fenceWhy: whyOf,
     fenceStats: { runs: stat.runs, km: Math.round(stat.len) / 1000, edges: line.length, chains: chains.length,
-      lots: Object.keys(fenceLots).length, pieces: stat.pieces, no: why, bare: bareSt,
-      ends: { corners: stat.corners, cornersM: Math.round(stat.cornerLen), house: stat.house, houseM: Math.round(stat.houseLen), joins: stat.joins, chords: stat.chords, joinM: Math.round(stat.joinLen) },
+      lots: Object.keys(fenceLots).length, pieces: stat.pieces, yards, no: why, bare: bareSt,
+      ends: { corners: stat.corners, cornersM: Math.round(stat.cornerLen), yards: stat.yardHoles, yardsM: Math.round(stat.yardLen), house: stat.house, houseM: Math.round(stat.houseLen), joins: stat.joins, chords: stat.chords, joinM: Math.round(stat.joinLen) },
       ms: Math.round(performance.now() - t0) },
   });
 }
