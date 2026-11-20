@@ -2,8 +2,9 @@
 // C.fences с участком lot, C.fenceLots) и их стилей (fencestyle.js: f.style, C.fenceLotCls). Данные — C.gateData
 // (data-gates.js, конвейер tools/sitges/read-gates.js) и ворота OSM C.points.gate (data-points.js).
 //   Фронт участка — его куски заборов. Проём (калитка, ворота) — на одном куске, не ближе end м к концу забора
-//   (на разрезе по участкам — можно вплотную) и к дуге угла, не через излом линии круче bend°; в запретном месте —
-//   сдвиг вдоль забора не дальше shift м, иначе проёма нет. Проёмы не перекрываются.
+//   (на разрезе по участкам — можно вплотную), к дуге угла и к отрезку не вдоль линии (доводка до стены дома,
+//   ступенька между концами — fences.js), не через излом линии круче bend°; в запретном месте — сдвиг вдоль забора
+//   не дальше shift м, иначе проёма нет. Проёмы не перекрываются.
 //   Калитка (wicket, 1 м) — ближайшая к точке входа кадастра (Entrance своего участка) точка фронта: вход ≤ near м
 //   от забора — src 'ent', near…far м — 'entFar' (вход у двери дома); калиток на участок — по одной на wicketPer м
 //   фронта, не ближе wicketGap м друг к другу. Нет входа — нет калитки.
@@ -61,7 +62,13 @@ function sitgesPlanGates(C) {
     const { P, at, cut } = f, S = [0];
     for (let k = 1; k < P.length; k++) S.push(S[k - 1] + Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]));
     const L = S[S.length - 1], ban = [];
-    for (let k = 0; k + 1 < P.length; k++) if (fenceLine[at[k + 1][0]].kind === 'corner') ban.push([S[k] - G.end, S[k + 1] + G.end]);
+    for (let k = 0; k + 1 < P.length; k++) {
+      const e = fenceLine[at[k + 1][0]];
+      if (e.kind === 'corner') { ban.push([S[k] - G.end, S[k + 1] + G.end]); continue; }
+      // отрезок не вдоль своей линии — доводка забора до стены дома, ступенька между концами (fences.js)
+      const ux = P[k + 1][0] - P[k][0], uz = P[k + 1][1] - P[k][1], vx = e.B[0] - e.A[0], vz = e.B[1] - e.A[1], l = Math.hypot(ux, uz) * Math.hypot(vx, vz);
+      if (l > 1e-9 && Math.abs(ux * vx + uz * vz) / l < cosB) ban.push([S[k] - G.end, S[k + 1] + G.end]);
+    }
     for (let k = 1; k + 1 < P.length; k++) {
       const a = P[k - 1], b = P[k], c = P[k + 1], ux = b[0] - a[0], uz = b[1] - a[1], vx = c[0] - b[0], vz = c[1] - b[1];
       const l = Math.hypot(ux, uz) * Math.hypot(vx, vz);

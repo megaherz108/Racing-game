@@ -30,6 +30,10 @@
 //              участков (carPct), пар калитка + ворота, ширины (widths), створки (leaves); входы и ворота OSM без места
 //              (entNoFence, entFar, entNoPlace, osmOff, svcOff, carNoPlace); drops — съезды у ворот (4а.5, walks3d.js): ворот, со
 //              съездом, без (угол, край проезжей части без тротуара); at — ближайшие калитка и ворота у мест с фото
+//   holes    — дыры в заборах (2026-11-20): pairs — пары концов двух заборов (не разрезы) по расстоянию, м (<1, 1–3,
+//              3–6, 6–8; часть законна: проход, въезд, дорожка, участок кончился), pairsAt — 30 самых близких пар 1–6 м;
+//              arcs — дуги углов, где без забора ≥ 1 м, хотя забор подходит к обоим концам дуги (≤ 1,5 м), arcsM — их
+//              метры без забора, arcsAt — места, сначала длинные (строки — не сравниваются). Разбор места — tools/sitges/fence-debug.js
 // __sitgesShots({ w, h, only }) → { png: { имя: dataURL } } — кадры контрольных мест (PLACES ниже) с высоты;
 //   tools/cdp.js --dir папка пишет их в файлы. Тени — вокруг каждой точки (aimSun), время суток — из меню.
 (() => {
@@ -175,6 +179,48 @@
       }
       out.fences = { km: FS.km, runs: FS.runs, pieces: FS.pieces, lots: FS.lots, clusters: SS.clusters, joined: SS.joined,
         bare: FS.bare, front: FS.no.front, top: SS.top, base: SS.base, cls: SS.cls, zone: SS.zone, geo: RS.fences.geo, at };
+    }
+
+    /* ---------- дыры в заборах (2026-11-20) ---------- */
+    {
+      const L = C.fenceLine, covered = new Set(), pts = sitgesCells(4), ends = [], ec = sitgesCells(8);
+      for (const f of C.fences) {
+        for (let k = 1; k < f.at.length; k++) covered.add(f.at[k][0]);
+        for (let k = 0; k + 1 < f.P.length; k++) {
+          const a = f.P[k], b = f.P[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1])));
+          for (let i = 0; i <= n; i++) { const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n; pts.add(x, x, z, z, [x, z]); }
+        }
+        for (const end of [0, 1]) if (!f.cut[end]) { const E = f.P[end ? f.P.length - 1 : 0], o = { E }; ends.push(o); ec.add(E[0] - 8, E[0] + 8, E[1] - 8, E[1] + 8, o); }
+      }
+      const fenceNear = (x, z, R) => pts.at(x, z).some(p => Math.hypot(p[0] - x, p[1] - z) < R) ||
+        [[R, 0], [-R, 0], [0, R], [0, -R]].some(([dx, dz]) => pts.at(x + dx, z + dz).some(p => Math.hypot(p[0] - x, p[1] - z) < R));
+      const fmt = (x, z, s) => `${Math.round(x)}, ${Math.round(z)}${s ? ' · ' + s : ''}`;
+      // пары концов (не разрезы) двух заборов ближе 8 м: часть законна (проход, въезд, дорожка, участок кончился)
+      const pairs = { '<1': 0, '1-3': 0, '3-6': 0, '6-8': 0 }, pairsAt = [];
+      for (const a of ends) {
+        let bd = 1e9, b = null;
+        for (const o of ec.at(a.E[0], a.E[1])) if (o !== a) { const d = Math.hypot(o.E[0] - a.E[0], o.E[1] - a.E[1]); if (d < bd) { bd = d; b = o; } }
+        if (bd < 0.05 || bd > 8 || a.E[0] > b.E[0] || (a.E[0] === b.E[0] && a.E[1] > b.E[1])) continue;
+        pairs[bd < 1 ? '<1' : bd < 3 ? '1-3' : bd < 6 ? '3-6' : '6-8']++;
+        if (bd >= 1 && bd < 6) pairsAt.push([bd, fmt((a.E[0] + b.E[0]) / 2, (a.E[1] + b.E[1]) / 2, bd.toFixed(1) + ' м')]);
+      }
+      // дуги углов, где без забора ≥ 1 м, хотя забор подходит к обоим концам дуги (≤ 1,5 м) — главный признак дыры
+      // на углу; arcsM — сколько метров дуг без забора
+      const rings = new Map(), len = i => Math.hypot(L[i].B[0] - L[i].A[0], L[i].B[1] - L[i].A[1]);
+      L.forEach((e, i) => { if (e.kind === 'corner') { if (!rings.has(e.ring)) rings.set(e.ring, []); rings.get(e.ring).push(i); } });
+      let arcs = 0, arcsM = 0;
+      const arcsAt = [];
+      for (const es of rings.values()) {
+        const open = es.reduce((m, i) => m + (covered.has(i) ? 0 : len(i)), 0);
+        if (open < 1) continue;
+        const A = L[es[0]].A, B = L[es[es.length - 1]].B;
+        if (!fenceNear(A[0], A[1], 1.5) || !fenceNear(B[0], B[1], 1.5)) continue;
+        arcs++; arcsM += open;
+        arcsAt.push([open, fmt((A[0] + B[0]) / 2, (A[1] + B[1]) / 2, open.toFixed(1) + ' м без забора')]);
+      }
+      pairsAt.sort((p, q) => p[0] - q[0]);
+      arcsAt.sort((p, q) => q[0] - p[0]);
+      out.holes = { pairs, arcs, arcsM: r(arcsM), arcsAt: arcsAt.slice(0, 30).map(p => p[1]), pairsAt: pairsAt.slice(0, 30).map(p => p[1]) };
     }
 
     /* ---------- калитки и ворота (4а.3) ---------- */
