@@ -6,7 +6,7 @@
 // бампер, каждое колесо) — один меш, так что значки почти не добавляют вызовов отрисовки.
 // Определяет: BADGE_PLATE, BADGE_MAT, BADGE_HALO, badgeNight, badgeColors, badgeGeo, haloGeo, BADGE_FIX, BADGE_R,
 //   badgeAnchors, badgeMatrix, fitBadges, badgeSVG, unlockBadge.
-// Использует: BADGE_SPOTS, save, badgeGive, persist, badgeDef, CARS (js/data.js); clamp, lerp, MAT (js/core.js);
+// Использует: BADGE_SPOTS, save, badgeGive, persist, badgeDef, CARS (js/data.js); clamp, MAT, lerp (js/core.js);
 //   buildCarModel, carFaces, disposeTree (js/car-models.js); notify (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -70,13 +70,12 @@ function haloGeo(def) {
 // (выхлопные трубы, противотуманки), лучше на пластике бампера.
 // BADGE_FIX — ручные поправки для отдельных машин: { машина: { место: { x, y, z, r } } } (вместо найденного перебором)
 const BADGE_FIX = {
-  // над задним бампером: на самом бампере значок заслоняют выхлопные трубы
-  mustang: { rear: { x: 0.42, y: 0.52 } }, golf: { rear: { x: 0.45, y: 0.58 } }, p911: { rear: { x: 0.45, y: 0.5 } },
   accord: { front: { x: 0.42, y: 0.55 } },          // на решётке, а не на тонкой губе внизу
   wrx: { front: { x: 0.39, y: 0.415, r: 0.065 } },  // между номером, решёткой и противотуманкой
-  niva: { front: { r: 0.062 }, rear: { r: 0.062 } }, // бамперы узкие (13 см)
+  niva: { front: { r: 0.062 } },                    // бампер узкий (13 см)
 };
-const BADGE_R = { hood: 0.18, lip: 0.075, front: 0.075, rear: 0.075 };
+// задний — такой же, как на капоте: на низком бампере он не помещается и встаёт на заднюю стенку над ним
+const BADGE_R = { hood: 0.18, lip: 0.075, front: 0.075, rear: 0.18 };
 const _bgAnchors = {};
 const _bgRay = new THREE.Raycaster(), _bgO = new THREE.Vector3(), _bgD = new THREE.Vector3();
 function badgeAnchors(def) {
@@ -117,18 +116,26 @@ function badgeAnchors(def) {
   // плоскость значка в точке hit. Край (0,95 r): up — насколько поверхность выступает над плоскостью (столько
   // значок пришлось бы приподнять), flat — сколько точек лежит в плоскости. Кольцо снаружи (1,6 r): block —
   // насколько рядом что-то торчит над плоскостью (заслоняет значок сбоку)
-  function probe(hit, r) {
+  function probe(hit, r, inner = false) {
     const n = hit.n, t1 = new THREE.Vector3(), t2 = new THREE.Vector3();
     t1.set(Math.abs(n.y) > 0.9 ? 1 : 0, Math.abs(n.y) > 0.9 ? 0 : 1, 0).cross(n).normalize(); t2.crossVectors(n, t1);
-    let up = 0, flat = 0, block = 0;
-    for (const [k0, rr] of [[0.95, 12], [1.6, 10]]) for (let k = 0; k < rr; k++) {
+    let up = 0, flat = 0, block = 0, bad = 0;
+    // у крупного значка кольцо снаружи — в 2 см от края (1,6 r было бы почти 30 см: мешало бы всё вокруг)
+    for (const [k0, rr] of [[0.95, 12], [inner ? 1 + 0.02 / r : 1.6, inner ? 16 : 10]]) for (let k = 0; k < rr; k++) {
       const a = k / rr * Math.PI * 2, q = hit.p.clone().addScaledVector(t1, Math.cos(a) * r * k0).addScaledVector(t2, Math.sin(a) * r * k0);
       const h = cast(q.addScaledVector(n, 0.4), n.clone().negate());
       if (!h) continue;
       const e = h.p.sub(hit.p).dot(n);
-      if (k0 < 1) { up = Math.max(up, e); if (Math.abs(e) < 0.012) flat++; } else block = Math.max(block, e);
+      if (k0 < 1) { up = Math.max(up, e); if (Math.abs(e) < 0.012) flat++; if (NOT_ON.includes(h.obj.material)) bad++; }
+      else block = Math.max(block, e);
     }
-    return { up, flat, block };
+    // крупный значок: ещё и внутри круга — не задевает ли узкие полоски фонарей
+    if (inner) for (const [k0, rr] of [[0.75, 16], [0.4, 8]]) for (let k = 0; k < rr; k++) {
+      const a = (k + 0.5) / rr * Math.PI * 2, q = hit.p.clone().addScaledVector(t1, Math.cos(a) * r * k0).addScaledVector(t2, Math.sin(a) * r * k0);
+      const h = cast(q.addScaledVector(n, 0.4), n.clone().negate());
+      if (h && NOT_ON.includes(h.obj.material)) bad++;
+    }
+    return { up, flat, block, bad };
   }
   // upZ — верх рисунка вперёд (значок лежит), иначе вверх (значок стоит)
   const place = (grp, hit, r, upZ) => {
@@ -139,6 +146,7 @@ function badgeAnchors(def) {
     return { grp, p: p.toArray(), n: hit.n.toArray(), up: up.toArray(), r, lift: pr.up, flat: pr.flat };
   };
   const fix = BADGE_FIX[def.id] || {}, out = {};
+  const NOT_ON = [MAT.head, MAT.tail, MAT.amber, MAT.plate, MAT.glass, MAT.chrome];   // не на фарах, номере, хроме
   // передний край капота: первая (спереди) точка профиля, после которой контур идёт почти горизонтально назад
   let ie = 0;
   for (let i = 0; i + 1 < g.top.length; i++) {
@@ -170,30 +178,52 @@ function badgeAnchors(def) {
     if (hit) out.lip = place('body', hit, r, upZ);
   }
   for (const [spot, end, sg] of [['front', 'f', 1], ['rear', 'r', -1]]) {
-    const f = fix[spot] || {}, r = f.r || BADGE_R[spot], grp = m.bumpers[end], [fF, rF] = carFaces(g);
-    const NOT_ON = [MAT.head, MAT.tail, MAT.amber, MAT.plate, MAT.glass, MAT.chrome];   // не на фарах, номере, хроме
+    const f = fix[spot] || {}, grp = m.bumpers[end], [fF, rF] = carFaces(g);
+    // задний значок крупный (как на капоте) — ищется по всей задней стенке, не только на бампере; если чистого места
+    // такого размера нет (фонари, номер, выхлопные трубы), радиус уменьшается до 0,1 м
+    const tall = sg < 0;
+    let r = f.r || BADGE_R[spot];
     tgt = region(v => sg > 0 ? v.z > fF - 0.6 : v.z < rF + 0.6);
     let best = null;
     if (f.y != null) {
       const hit = cast(V(f.x ?? 0.45, f.y, sg * 6), V(0, 0, -sg));
-      if (hit) best = { hit };
+      if (hit) best = { hit, r };
     } else {
       // сначала одни центральные лучи (дёшево), потом по порядку удобства — проверка всего круга значка; первая
       // точка, где всё хорошо, побеждает
       const box = new THREE.Box3().setFromObject(grp), mid = (box.min.y + box.max.y) / 2, cands = [];
-      for (let x = 0.3; x <= g.W / 2 - r - 0.06; x += 0.03) for (let y = box.min.y; y <= box.max.y + 0.1; y += 0.02) {
+      const y1 = box.max.y + (tall ? 0.8 : 0.1);
+      for (let x = tall ? 0 : 0.3; x <= g.W / 2 - 0.06 - Math.min(r, 0.1); x += tall ? 0.04 : 0.03) for (let y = box.min.y; y <= y1; y += tall ? 0.03 : 0.02) {
         const hit = cast(V(x, y, sg * 6), V(0, 0, -sg));
         // удобство: ближе к x = 0,45 и к середине бампера по высоте, на пластике бампера — лучше, чем на кузове
-        if (hit && hit.n.z * sg > 0.8 && hit.p.y > r + 0.12 && !NOT_ON.includes(hit.obj.material)) cands.push({ hit, pref: Math.abs(x - 0.45) + Math.abs(y - mid) * 0.5 - (isIn(hit.obj, grp) ? 0.05 : 0) });
+        if (hit && hit.n.z * sg > 0.8 && !NOT_ON.includes(hit.obj.material)) cands.push({ x, hit, pref: Math.abs(x - 0.45) + Math.abs(y - mid) * 0.5 - (isIn(hit.obj, grp) ? 0.05 : 0) });
       }
       cands.sort((a, b) => a.pref - b.pref);
-      for (const c of cands.slice(0, 50)) {
-        const pr = probe(c.hit, r), score = pr.flat * 10 - pr.up * 100 - (pr.block > 0.008 ? 60 : 0) - c.pref * 10;
-        if (!best || score > best.score) best = { hit: c.hit, score };
-        if (pr.flat >= 12 && pr.up < 0.004 && pr.block < 0.006) break;
+      // крупный значок: уступ в пару сантиметров рядом (край бампера) не мешает, выхлопные трубы — мешают
+      const blk = tall ? 0.03 : 0.006, rs = tall ? [r, 0.17, 0.16, 0.14, 0.12, 0.1] : [r];
+      // быстрая предпроверка крупного значка: четыре точки края (слева, справа, сверху, снизу) — в той же плоскости
+      // и не на фонарях / номере; полный круг проверяется только у прошедших
+      const cross = (c, r) => {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const h = cast(V(c.hit.p.x + dx * r * 0.95, c.hit.p.y + dy * r * 0.95, sg * 6), V(0, 0, -sg));
+          if (!h || Math.abs(h.p.z - c.hit.p.z) > 0.012 || NOT_ON.includes(h.obj.material)) return false;
+        }
+        return true;
+      };
+      for (r of rs) {
+        let clean = false;
+        let fits = cands.filter(c => c.x <= g.W / 2 - r - 0.06 && c.hit.p.y > r + 0.12);
+        if (tall) fits = fits.filter(c => cross(c, r));
+        for (const c of fits.slice(0, 50)) {
+          const pr = probe(c.hit, r, tall), score = pr.flat * 10 - pr.up * 100 - (pr.block > blk + 0.002 ? 60 : 0) - pr.bad * 30 - c.pref * 10;
+          if (!best || score > best.score) best = { hit: c.hit, score, r };
+          if (pr.flat >= 12 && pr.up < 0.004 && pr.block < blk && !pr.bad) { best = { hit: c.hit, score, r }; clean = true; break; }
+        }
+        if (clean) break;
       }
     }
-    if (best) out[spot] = place(end, best.hit, r, false);
+    // крупный задний значок над бампером держится на кузове (бампер отвалится — значок останется)
+    if (best) out[spot] = place(tall && !isIn(best.hit.obj, grp) ? 'body' : end, best.hit, best.r, false);
     tgt.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
     tgt = m.body;
   }

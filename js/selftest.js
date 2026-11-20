@@ -313,8 +313,10 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
           }
           const m = buildCarModel(def, 0xffffff, { bumpers: true });
           fitBadges(m, def, Object.fromEntries(BADGE_SPOTS.map(([s], i) => [s, BADGES[i % BADGES.length]])));
-          // кузов (капот + кромка), два бампера, четыре колеса — по мешу значков и мешу ореолов
-          if (m.badges.length !== 14) bad.push(`${def.short}: мешей значков ${m.badges.length}, ждали 14`);
+          // по мешу значков и мешу ореолов на группу: кузов (капот + кромка), бамперы (задний значок бывает и на
+          // кузове над бампером), четыре колеса
+          const want = 2 * (new Set(['body', ...['front', 'rear'].map(s => A[s].grp)]).size + 4);
+          if (m.badges.length !== want) bad.push(`${def.short}: мешей значков ${m.badges.length}, ждали ${want}`);
           disposeTree(m.root);
         }
         errors.push(...bad.map(t => 'значок: ' + t));
