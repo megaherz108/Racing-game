@@ -153,7 +153,7 @@ function cityPlanInfra(C) {
 }
 
 function cityPlanPort(C) {
-  const { PC, BRIDGES, DRAW_X, coastD, ground, plain, solids, keepOut, deckPlan } = C;
+  const { PC, BRIDGES, DRAW_X, coastD, ground, plain, solids, keepOut, deckPlan, segs } = C;
   /* ---------- порт: краны у воды ---------- */
   const cranes = [];
   // za — нога у воды, zb — дальняя нога, zBack…zTip — стрела (над водой со стороны zTip)
@@ -181,19 +181,19 @@ function cityPlanPort(C) {
   });
 
   /* ---------- мосты (настилы) ---------- */
-  // точки задаются как [x, y, z] верхней грани по оси дороги
-  const DW = 22;
+  // точки задаются как [x, y, z] верхней грани по оси дороги; ширина настила — ширина улицы моста + 2 м
   for (const bx of BRIDGES) {
     if (bx === DRAW_X) continue;
+    const DW = segs.find(s => s.kind === 'bridge' && s.x0 === bx).w + 2, RX = DW / 2 + 0.3;
     // плавный «горб»: на гребне на скорости больше ~95 км/ч машина отрывается от земли
     const Y = z => 0.03 + 4.2 * (1 + Math.cos(Math.PI * z / 33)) / 2;
     for (let z = 33; z > -33; z -= 3) {
       const z2 = z - 3;
       deckPlan.push({ kind: 'slab', p0: [bx, Y(z), z], p1: [bx, Y(z2), z2], w: DW, t: 1.2, mat: 'deck' });
-      for (const s of [1, -1]) deckPlan.push({ kind: 'slab', p0: [bx + s * 11.3, Y(z) + 1.05, z], p1: [bx + s * 11.3, Y(z2) + 1.05, z2], w: 0.4, t: 1.4, walk: false, mat: 'rail' });
+      for (const s of [1, -1]) deckPlan.push({ kind: 'slab', p0: [bx + s * RX, Y(z) + 1.05, z], p1: [bx + s * RX, Y(z2) + 1.05, z2], w: 0.4, t: 1.4, walk: false, mat: 'rail' });
     }
     for (const z of [-17, 17]) plain.push({ x: bx, y: -7, z, w: DW - 4, h: 7 + 4.2 * (1 + Math.cos(Math.PI * z / 33)) / 2 - 1.1, d: 3, color: 0x9b9a94 });
-    keepOut.push([bx - 14, bx + 14, -48, 48]);
+    keepOut.push([bx - DW / 2 - 3, bx + DW / 2 + 3, -48, 48]);
   }
   // разводной мост: обе половины подняты — трамплин через канал (разрыв 24 м, нужно ~95 км/ч)
   for (const s of [1, -1]) {
@@ -201,7 +201,7 @@ function cityPlanPort(C) {
     const mats = ['steel', 'steel', 'hazard'];
     for (let k = 0; k < 3; k++) {
       const [za, ya] = pts[k], [zb, yb] = pts[k + 1];
-      deckPlan.push({ kind: 'slab', p0: [DRAW_X, ya, s * za], p1: [DRAW_X, yb, s * zb], w: DW, t: 1.0, mat: mats[k] });
+      deckPlan.push({ kind: 'slab', p0: [DRAW_X, ya, s * za], p1: [DRAW_X, yb, s * zb], w: 22, t: 1.0, mat: mats[k] });
       if (k < 2) for (const q of [1, -1]) deckPlan.push({ kind: 'slab', p0: [DRAW_X + q * 11.3, ya + 1.05, s * za], p1: [DRAW_X + q * 11.3, yb + 1.05, s * zb], w: 0.4, t: 1.4, walk: false, mat: 'rail' });
     }
     // башни механизма подъёма по бокам
