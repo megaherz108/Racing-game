@@ -40,7 +40,7 @@
 //   дыр); ends — заполненные дыры вокруг углов, доводки до стены дома и сведения концов (число, из них перемычек,
 //   и метры).
 // Определяет: SITGES_FENCE, sitgesPlanFences.
-// Использует: sitgesCells, sitgesBBox, sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesInFillet
+// Использует: sitgesCells, sitgesBBox, sitgesArea, sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesInFillet
 //   (js/maps/sitges/corners.js); SITGES_OLDTOWN, SITGES_STYLES (js/maps/sitges/styles.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -91,9 +91,8 @@ function sitgesPlanFences(C) {
 
   /* ---------- что за линией ---------- */
   // участки кадастра (не сельские) по клеткам; под точкой — самый маленький (дом-участок внутри общего двора)
-  const area = r => { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return Math.abs(a) / 2; };
   const lots = sitgesCells(32);
-  parcels.forEach((p, i) => { if (!p.rustic) { const bb = sitgesBBox(p.ring); lots.add(...bb, { i, r: p.ring, bb, A: area(p.ring) }); } });
+  parcels.forEach((p, i) => { if (!p.rustic) { const bb = sitgesBBox(p.ring); lots.add(...bb, { i, r: p.ring, bb, A: Math.abs(sitgesArea(p.ring)) }); } });
   const lotsAt = (x, z) => lots.at(x, z).filter(o => x >= o.bb[0] && x <= o.bb[1] && z >= o.bb[2] && z <= o.bb[3] && sitgesInPoly(x, z, o.r));
   const lotAt = (x, z) => { let b = null; for (const o of lotsAt(x, z)) if (!b || o.A < b.A) b = o; return b ? b.i : -1; };
   // дорожки, лестницы, велодорожки (не проезжие и не пешеходные улицы — их знает C.carriageAt)
@@ -328,7 +327,7 @@ function sitgesPlanFences(C) {
     if (!ls.length) continue;
     let m = ls[0];
     for (const o of ls) { built.add(o.i); if (o.A < m.A) m = o; }
-    const a = area(r), cur = own.get(m.i);
+    const a = Math.abs(sitgesArea(r)), cur = own.get(m.i);
     if (!cur || a > cur.a) own.set(m.i, { bi: h.bi, a });
   }
   // пустые участки за линией: длина, доля зелени OSM за линией (в 3 м), ж/д рядом

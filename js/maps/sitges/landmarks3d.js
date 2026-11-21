@@ -20,7 +20,7 @@
 //   lmCollide(K, ring, y0, y1), lmCollideBox(K, x, z, w, d, rot, y0, y1) — столкновения.
 // Определяет: LMK, lmTex, lmMat, lmBox, lmPrism, lmCyl, lmArch, lmExtrude, lmFrame, lmRoof, lmInset, lmAlong,
 //   lmCollide, lmCollideBox, sitgesBuildLandmarks.
-// Использует: canvasTex (js/maps/city/textures.js).
+// Использует: canvasTex (js/maps/city/textures.js); sitgesArea (js/maps/sitges/geom.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -99,9 +99,7 @@ function lmBox(parent, mat, w, h, d, x, y, z, rot = 0) {
 }
 function lmPrism(parent, mat, ring, y0, y1, { cap = true, bottom = false } = {}) {
   const pos = [], uv = [], idx = [], U = LMK.uv, n = ring.length;
-  let area = 0;
-  for (let i = 0; i < n; i++) { const a = ring[i], b = ring[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
-  const ccw = area > 0;                                         // в плоскости x–z
+  const ccw = sitgesArea(ring) > 0;                             // в плоскости x–z
   let s = 0;
   for (let i = 0; i < n; i++) {
     const a = ring[i], b = ring[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = pos.length / 3;
@@ -217,10 +215,7 @@ function lmRoof(parent, mat, F, y, { kind = 'hip', pitch = 25, over = 0.4 } = {}
 }
 // контур, сдвинутый внутрь на d (по биссектрисам; для выпуклых и мягко невыпуклых контуров)
 function lmInset(ring, d) {
-  const n = ring.length;
-  let area = 0;
-  for (let i = 0; i < n; i++) { const a = ring[i], b = ring[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
-  const s = area > 0 ? 1 : -1;
+  const n = ring.length, s = sitgesArea(ring) > 0 ? 1 : -1;
   return ring.map((p, i) => {
     const a = ring[(i + n - 1) % n], b = ring[(i + 1) % n];
     const n1 = norm(p[0] - a[0], p[1] - a[1]), n2 = norm(b[0] - p[0], b[1] - p[1]);

@@ -8,16 +8,14 @@
 //   lmCPart(K, g, h, o) — часть кадастра целиком: стены, цоколь, лопатки, окна по этажам, карниз, парапет, крыша,
 //   столкновение.
 // Определяет: lmCEdges, lmCOpen, lmCWin, lmCPart, SITGES_LM_STATION.
-// Использует: lmExtrude, lmArch, lmBox, lmPrism, lmInset, lmRoof, lmFrame, lmCollide, lmMat, lmCyl, lmCollideBox
-//   (js/maps/sitges/landmarks3d.js).
+// Использует: sitgesArea (js/maps/sitges/geom.js); lmExtrude, lmArch, lmBox, lmPrism, lmInset, lmRoof, lmFrame,
+//   lmCollide, lmMat, lmCyl, lmCollideBox (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
 /* ---------- помощники группы C ---------- */
 function lmCEdges(ring) {
-  let area = 0; const n = ring.length, out = [];
-  for (let i = 0; i < n; i++) { const a = ring[i], b = ring[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
-  const s = area > 0 ? 1 : -1;
+  const n = ring.length, out = [], s = sitgesArea(ring) > 0 ? 1 : -1;
   for (let i = 0; i < n; i++) {
     const a = ring[i], b = ring[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (len < 0.3) continue;

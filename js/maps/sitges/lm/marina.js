@@ -9,9 +9,9 @@
 //     на суше в сторону n до воды), тумбы — на кромке причалов, пальмы — по внутреннему молу (фото h-port-06, c-01).
 // Лодки, мачты, тумбы, пальмы, цветные верхи маяков — InstancedMesh одного материала (цвет — instanceColor).
 // Определяет: SITGES_LM_MARINA.
-// Использует: mulberry32 (js/world.js); sitgesInPoly (js/maps/sitges/geom.js); SITGES_G (js/maps/sitges/ground.js);
-//   lmFrame, lmMat, lmPrism, lmRoof, lmCollide, lmBox, lmCyl, lmExtrude, lmArch, lmCollideBox
-//   (js/maps/sitges/landmarks3d.js).
+// Использует: mulberry32 (js/world.js); sitgesInPoly, sitgesArea (js/maps/sitges/geom.js); SITGES_G
+//   (js/maps/sitges/ground.js); lmFrame, lmMat, lmPrism, lmRoof, lmCollide, lmBox, lmCyl, lmExtrude, lmArch,
+//   lmCollideBox (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -130,7 +130,7 @@ const SITGES_LM_MARINA = {
       lmRoof(group, M.roof, lmFrame(rg), p.y1, { kind: 'hip', pitch: 22, over: 0.45 });
       lmCollide(K, rg, p.y0, p.y1);
       // окна в синих рамах на наружных стенах
-      let ar = 0; rg.forEach((a, i) => { const b = rg[(i + 1) % rg.length]; ar += a[0] * b[1] - b[0] * a[1]; });
+      const ar = sitgesArea(rg);
       const nf = Math.max(1, p.p.floors), st = (p.y1 - p.y0) / nf;
       rg.forEach((a, i) => {
         const b = rg[(i + 1) % rg.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);

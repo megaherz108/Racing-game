@@ -15,16 +15,14 @@
 //   lmBPart(K, g, h, o) — часть кадастра целиком: стены (с бутовым низом под первым этажом), окна по этажам на открытых
 //     стенах, свес / карниз, верх (parapet, bal, merlon, roof), крыша, столкновение.
 // Определяет: lmBEdges, lmBOpen, lmBSolid, lmBExt, lmBWin, lmBBal, lmBMerlons, lmBPart, SITGES_LM_MARICEL.
-// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmBox, lmArch, lmInset, lmFrame, lmRoof,
-//   lmCollide, lmMat, lmCyl (js/maps/sitges/landmarks3d.js).
+// Использует: sitgesArea, sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmBox, lmArch, lmInset, lmFrame,
+//   lmRoof, lmCollide, lmMat, lmCyl (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
 /* ---------- помощники группы B ---------- */
 function lmBEdges(ring) {
-  let area = 0; const n = ring.length, out = [];
-  for (let i = 0; i < n; i++) { const a = ring[i], b = ring[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
-  const s = area > 0 ? 1 : -1;
+  const n = ring.length, out = [], s = sitgesArea(ring) > 0 ? 1 : -1;
   for (let i = 0; i < n; i++) {
     const a = ring[i], b = ring[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (len < 0.3) continue;
@@ -40,10 +38,9 @@ function lmBOpen(C, x, z, e, y) {
 }
 function lmBSolid(g, mat, rings, y0, y1, { cap = true, bottom = false, walls = true } = {}) {
   const pos = [], uv = [], idx = [], U = LMK.uv;
-  const sgn = r => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a; };
   if (walls) rings.forEach((ring, ri) => {
     // наружу у внешнего контура, в двор — у дыр
-    const out = (sgn(ring) > 0) !== (ri > 0);
+    const out = (sitgesArea(ring) > 0) !== (ri > 0);
     let s = 0;
     for (let i = 0; i < ring.length; i++) {
       const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = pos.length / 3;

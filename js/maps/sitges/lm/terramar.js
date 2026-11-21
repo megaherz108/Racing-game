@@ -8,7 +8,7 @@
 //   (плита slab + парапет parapet, наружу на out), пол террасы; у первого этажа — цоколь plinth; на крыше — надстройка.
 //   Столкновения — по контурам частей кадастра.
 // Определяет: SITGES_LM_TERRAMAR.
-// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmMat, lmInset, lmCollide
+// Использует: sitgesArea, sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmMat, lmInset, lmCollide
 //   (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -33,12 +33,11 @@ const SITGES_LM_TERRAMAR = {
 
   plan(C, L) {
     const P = this.cfg, parts = L.parts;
-    const area = r => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
     const maxF = Math.max(...parts.map(h => h.p.floors));
     // высоты уровней: Y[0] — низ, Y[s] — верх s-го этажа (по частям с этим числом этажей)
     const Y = [Math.min(...parts.map(h => h.y0))];
     for (let s = 1; s <= maxF; s++) {
-      const ys = parts.filter(h => h.p.floors === s && Math.abs(area(h.rings[0])) > 40).map(h => h.y1);
+      const ys = parts.filter(h => h.p.floors === s && Math.abs(sitgesArea(h.rings[0])) > 40).map(h => h.y1);
       Y[s] = ys.length ? Math.max(...ys) : Y[s - 1] + 3;
     }
     // растр: наибольшее число этажей под клеткой
@@ -56,7 +55,7 @@ const SITGES_LM_TERRAMAR = {
       for (let k = 0; k < m.length; k++) m[k] = grid[k] >= s ? 1 : 0;
       m = this._close(m, nx, nz);
       const rings = this._trace(m, nx, nz).map(r => r.map(([i, j]) => [x0 + i * c, z0 + j * c]))
-        .map(r => this._simplify(r, P.eps)).filter(r => r.length >= 3 && area(r) > P.minArea);
+        .map(r => this._simplify(r, P.eps)).filter(r => r.length >= 3 && sitgesArea(r) > P.minArea);
       L.levels.push({ s, b: Y[s - 1], t: Y[s], rings });
     }
     L.roofTop = Math.max(...parts.map(h => h.top));
@@ -147,7 +146,7 @@ const SITGES_LM_TERRAMAR = {
       for (const p of [A, B, Cc]) { g.p.push(...p); g.uv.push(flat ? p[0] / U : (p[0] * tx + p[2] * tz) / U, flat ? p[2] / U : p[1] / U); }
     };
     const quad = (m, A, B, Cc, D, ny) => { tri(m, A, B, Cc, ny); tri(m, A, Cc, D, ny); };
-    const sgn = r => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a > 0 ? 1 : -1; };
+    const sgn = r => sitgesArea(r) > 0 ? 1 : -1;
     // стены кольца от y0 до y1: dir = 1 — наружу, −1 — внутрь
     const walls = (m, r, y0, y1, dir = 1) => {
       const s = sgn(r);

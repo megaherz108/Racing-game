@@ -7,7 +7,8 @@
 
 - `data-*.js` — данные, их пишет `tools/sitges/build.js`. **Не читать и не искать по ним** (формат — в шапке файла
   и в скрипте-генераторе).
-- `geom.js` — общая геометрия: `sitgesCells` (сетка по клеткам), `sitgesInPoly`, `sitgesBBox`, `sitgesSeg`.
+- `geom.js` — общая геометрия: `sitgesCells` (сетка по клеткам), `sitgesInPoly`, `sitgesArea` (площадь со знаком), `sitgesBBox`,
+  `sitgesSeg`. Новый общий расчёт по контурам — сюда, а не копией в этап.
 
 ## Раскладка (по порядку; порядок задаёт `sitgesData()` в `plan.js`)
 

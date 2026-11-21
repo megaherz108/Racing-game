@@ -6,8 +6,8 @@
 //   к дому. Апсида — полуэллипс по точкам контура кадастра за торцом нефа. Высоты — над землёй у фасада, по лидару
 //   (неф ≈ 12–13 м, верх купола колокольни ≈ 25 м; в кадастре неф ниже — 1 этаж).
 // Определяет: SITGES_LM_VINYET.
-// Использует: lmFrame, lmMat, lmBox, lmExtrude, lmPrism, lmRoof, lmInset, lmCyl, lmCollide
-//   (js/maps/sitges/landmarks3d.js).
+// Использует: sitgesArea (js/maps/sitges/geom.js); lmFrame, lmMat, lmBox, lmExtrude, lmPrism, lmRoof, lmInset, lmCyl,
+//   lmCollide (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -23,7 +23,7 @@ const SITGES_LM_VINYET = {
   },
 
   plan(C, L) {
-    const area = r => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a / 2); };
+    const area = r => Math.abs(sitgesArea(r));
     const nave = L.parts.reduce((a, h) => area(h.rings[0]) > area(a.rings[0]) ? h : a);
     const F = lmFrame(nave.rings[0]);
     let { ux, uz } = F;

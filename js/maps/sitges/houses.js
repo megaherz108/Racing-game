@@ -15,7 +15,7 @@
 //   lo, hi, nx, nz, kind }: концы, номер оконной оси на концах, земля у концов, низ и верх, нормаль наружу, вид.
 //   C.houseAt(x, z) — часть дома под точкой (или undefined).
 // Определяет: SITGES_H, SITGES_WALL, SITGES_SHOPS, sitgesPlanHouses.
-// Использует: sitgesBBox, sitgesInPoly, sitgesCells (js/maps/sitges/geom.js); SITGES_DRIVE
+// Использует: sitgesBBox, sitgesInPoly, sitgesCells, sitgesArea (js/maps/sitges/geom.js); SITGES_DRIVE
 //   (js/maps/sitges/minimap.js); sitgesRoofPlan (js/maps/sitges/roofs.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -78,9 +78,7 @@ function sitgesPlanHouses(C) {
   const E = [], ecell = sitgesCells(8);
   houses.forEach((h, hi) => h.rings.forEach((r, ri) => {
     // внешнее кольцо — против часовой (в осях x, z), дыры — по часовой; знак — по площади, на случай исключений
-    let A = 0;
-    for (let i = 0; i < r.length; i++) { const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length]; A += ax * bz - bx * az; }
-    const sgn = (ri === 0) === (A > 0) ? 1 : -1;
+    const sgn = (ri === 0) === (sitgesArea(r) > 0) ? 1 : -1;
     for (let i = 0; i < r.length; i++) {
       const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length], L = Math.hypot(bx - ax, bz - az);
       if (L < 0.01) continue;

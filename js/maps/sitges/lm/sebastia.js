@@ -7,8 +7,8 @@
 //   (эспаданья) с крестом на коньке; черепичная двускатная кровля; башенка у задней части с восьмигранным
 //   зеленовато-серым шпилем (верх по лидару ≈ 17 м над площадью); стены ниш ≈ 4,5 м с каменным верхом.
 // Определяет: SITGES_LM_SEBASTIA.
-// Использует: sitgesInPoly (js/maps/sitges/geom.js); lmFrame, lmMat, lmBox, lmExtrude, lmPrism, lmArch, lmCyl,
-//   lmRoof, lmCollide, lmInset (js/maps/sitges/landmarks3d.js).
+// Использует: sitgesArea, sitgesInPoly (js/maps/sitges/geom.js); lmFrame, lmMat, lmBox, lmExtrude, lmPrism, lmArch,
+//   lmCyl, lmRoof, lmCollide, lmInset (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -26,7 +26,7 @@ const SITGES_LM_SEBASTIA = {
       for (const p of C.houses) if (p.bi === h85.bi) { p.lm = L.id; L.parts.push(p); L.rings.push(p.rings[0]); L.cemetery.push(p); }
       L.bis.push(h85.bi);
     }
-    const area = r => { let s = 0; r.forEach((a, i) => { const b = r[(i + 1) % r.length]; s += a[0] * b[1] - b[0] * a[1]; }); return Math.abs(s) / 2; };
+    const area = r => Math.abs(sitgesArea(r));
     const main = L.chapel.reduce((a, p) => (area(p.rings[0]) > area(a.rings[0]) ? p : a)), tower = L.chapel.find(p => p !== main);
     const ring = main.rings[0];
     // ось нефа — длинное ребро контура; направление — к башенке (она у задней части)

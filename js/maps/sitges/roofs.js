@@ -8,7 +8,8 @@
 //     плоская площадка (как вальма с террасой); не вышло — плоская цвета черепицы.
 // h.roof = { kind, col: THREE.Color (sRGB → линейный), tile, eave, ridge, … }; h.top — верх крыши (подписи, камера).
 // Определяет: SITGES_ROOFS, sitgesInset, sitgesRoofFrame, sitgesRoofPlan.
-// Использует: sitgesBBox, sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); SITGES_FLOOR (js/maps/sitges/plan.js).
+// Использует: sitgesArea, sitgesBBox, sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); SITGES_FLOOR
+//   (js/maps/sitges/plan.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -79,7 +80,7 @@ function sitgesRoofPlan(h, k) {
   // ортофото — снимок под солнцем: его цвет светлее самого материала, в линейном пространстве — множитель albedo
   if (D && type) col.setRGB(D.col[0], D.col[1], D.col[2], THREE.SRGBColorSpace).multiplyScalar(P.albedo);
   else col.setHex(type === 5 ? P.tileCol : P.flatCol);
-  const area = Math.abs(r.reduce((s, [ax, az], i) => { const [bx, bz] = r[(i + 1) % r.length]; return s + ax * bz - bx * az; }, 0)) / 2;
+  const area = Math.abs(sitgesArea(r));
   const flat = () => {
     // настил ниже верха стены на парапет — у частей от parapetA м² (у маленьких грани парапета — лишние треугольники)
     const roof = { kind: 'flat', col, tile: type >= 2, deck: area >= P.parapetA ? h.y1 - F.parapet + 0.08 : h.y1 };
