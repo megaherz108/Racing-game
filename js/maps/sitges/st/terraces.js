@@ -2,7 +2,7 @@
 // Что входит: столики, стулья, зонты, кадки и штендеры у заведений с едой и напитками (C.signs: ресторан, кафе, бар,
 // мороженое; пекарня и фастфуд — малые, по хешу; клуб — нет); вынос маркиз над террасой 3–5 м — данные awn,
 // рисует signs3d.js (вывески строятся раньше мелочей улиц, раскладка к тому времени готова).
-// Место — перед стеной вывески: лучи по нормали от стены (у краёв и посередине доски) до дома напротив, проезжей
+// Место — перед стеной вывески: лучи S.probe по нормали от стены (у краёв и посередине доски) до дома напротив, проезжей
 // части, забора, перепада или воды → глубина U; терраса — от стены на T = U − проход (тротуар у мостовой — 1,5 м;
 // пешеходная улица — половина ширины без 0,75 м: проход посередине; площадь, променад — до 5 м). Проход к двери
 // заведения (C.doors) свободен (полоса занята 'F'). Столики рядами: узкая терраса — у стены, стулья по бокам
@@ -22,8 +22,7 @@
 //   build(K, S, L) — постройка (js/maps/sitges/street3d.js): S — помощники постройки (K.st), L — данные из plan.
 // Всё сбиваемое (стулья, столы и зонты лёгкие — улетают; кадки тяжёлые). Случайного нет: S.hash по месту.
 // Определяет: stTerrCfg, SITGES_ST_F, stTerrTents, stTerrModels.
-// Использует: clamp (js/core.js); sitgesCells, sitgesSeg (js/maps/sitges/geom.js); SITGES_SIGNS
-//   (js/maps/sitges/signs.js); frame (js/main.js).
+// Использует: clamp (js/core.js); SITGES_SIGNS (js/maps/sitges/signs.js); frame (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -31,7 +30,6 @@ const stTerrCfg = {
   // виды вывесок: терраса всегда / малая по хешу (доля) / нет
   cats: { restaurant: 1, cafe: 1, bar: 1, icecream: 1, bakery: 0.5, fastfood: 0.5 },
   generic: 0.5,          // типовая вывеска («Bar», «Restaurant») — терраса с такой долей
-  probe: { step: 0.25, max: 8, start: 0.3, drop: 0.6, sea: 0.2 },   // лучи от стены; перепад рельефа и вода — конец
   pass: 1.5,             // проход у бордюра, м
   lane: 0.75,            // пешеходная улица: от середины до террасы, м
   maxT: 5, minT: 0.8,    // глубина террасы, м
@@ -73,68 +71,22 @@ const SITGES_ST_F = {
   id: 'F', name: 'террасы', ready: true,
 
   plan(C, S) {
-    const F = stTerrCfg, P = F.probe, r2 = v => Math.round(v * 100) / 100;
+    const F = stTerrCfg, r2 = v => Math.round(v * 100) / 100;
     const out = { table: [], chair: [], parasol: [], planter: [], board: [], awn: [], tent: [],
       stats: { signs: 0, venues: 0, terraces: 0, bistro: 0, rows: 0, noRoom: 0, noDoor: 0, skipGeneric: 0, skipSmall: 0, awn: 0, awnLow: 0, tentSkip: 0,
         stop: {}, tableBusy: 0 } };
     const st = out.stats;
 
-    /* ---------- заборы и берег по клеткам ---------- */
-    const fcell = sitgesCells(16);
-    for (const f of C.fences || []) for (let k = 1; k < f.P.length; k++) {
-      const a = f.P[k - 1], b = f.P[k];
-      fcell.add(Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1]), [a, b]);
-    }
-    const cross = (ax, az, bx, bz, cx, cz, dx, dz) => {
-      const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
-      const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
-      return d1 * d2 < 0 && d3 * d4 < 0;
-    };
-    const fenceCut = (x0, z0, x1, z1) => {
-      let hit = false;
-      fcell.each(Math.min(x0, x1), Math.max(x0, x1), Math.min(z0, z1), Math.max(z0, z1), l => {
-        if (!hit) for (const [a, b] of l) if (cross(x0, z0, x1, z1, a[0], a[1], b[0], b[1])) { hit = true; break; }
-      });
-      return hit;
-    };
-    const ccell = sitgesCells(64);
-    for (const l of C.coast || []) for (let i = 1; i < l.length; i++) { const a = l[i - 1], b = l[i]; ccell.add(Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1]), [a, b]); }
-    const coastD = (x, z, R) => {
-      let d = R;
-      ccell.each(x - R, x + R, z - R, z + R, list => { for (const [a, b] of list) d = Math.min(d, sitgesSeg(x, z, a[0], a[1], b[0], b[1])); });
-      return d;
-    };
-
-    /* ---------- луч от стены: до чего свободно ---------- */
-    // → { U, why: house | road | fence | drop | open, ped } — ped: по пути была пешеходная улица
-    const probe = (bx, bz, nx, nz, g0) => {
-      let px = bx + nx * (P.start - P.step), pz = bz + nz * (P.start - P.step), ped = false;
-      for (let v = P.start; v <= P.max; v += P.step) {
-        const x = bx + nx * v, z = bz + nz * v;
-        const stop = why => ({ U: v - P.step, why, ped });
-        if (C.houseAt(x, z)) return stop('house');
-        const c = S.carriage(x, z);
-        if (c) { if (c.corner || c.st.cls !== 'pedestrian') return stop('road'); ped = true; }
-        const g = C.ground(x, z);
-        if (g < P.sea || Math.abs(g - g0) > P.drop) return stop('drop');
-        if (fenceCut(px, pz, x, z)) return stop('fence');
-        px = x; pz = z;
-      }
-      return { U: P.max, why: 'open', ped };
-    };
-    // свободно ли место: занятость всех групп, кроме кронштейнов фонарей на стене (малый круг у стены — высоко)
-    // и полосы перед своей дверью (её проход — своя полоса 'F' шириной 2 · door, столики не ближе door + 0,7 к оси)
+    // свободно ли место: занятость всех групп, кроме кронштейнов фонарей на стене (малый круг у стены — высоко),
+    // полосы перед своей дверью (её проход — своя полоса 'F' шириной 2 · door, столики не ближе door + 0,7 к оси)
+    // и перехода OSM у стены (капсула поперёк улицы до стены: дальше crossD от бордюра терраса не мешает)
     let own = null;                                       // середина полосы своей двери
-    const freeAt = (x, z, r, x2 = x, z2 = z, wx = 0, wz = 0, nx = 0, nz = 0) => {
-      for (const o of S.hits(x, z, r, null, x2, z2)) {
-        if (o.who === 'A' && o.r <= 0.2 && (o.x - wx) * nx + (o.z - wz) * nz < 0.6) continue;
-        if (o.who === 'door' && own && Math.hypot((o.x + o.x2) / 2 - own[0], (o.z + o.z2) / 2 - own[1]) < 0.5) continue;
-        // переход OSM — капсула поперёк улицы до стены: у стены, дальше crossD от бордюра, терраса не мешает
-        if (o.who === 'cross') { const w = S.onWalk(x, z), w2 = S.onWalk(x2, z2); if (w && w2 && Math.min(w.d, w2.d) - r > F.crossD) continue; }
-        return false;
-      }
-      return true;
-    };
+    const freeAt = (x, z, r, x2 = x, z2 = z, wx = 0, wz = 0, nx = 0, nz = 0) => S.free(x, z, r, (who, o) => {
+      if (who === 'A') return o.r <= 0.2 && (o.x - wx) * nx + (o.z - wz) * nz < 0.6;
+      if (who === 'door') return !!own && Math.hypot((o.x + o.x2) / 2 - own[0], (o.z + o.z2) / 2 - own[1]) < 0.5;
+      if (who === 'cross') { const w = S.onWalk(x, z), w2 = S.onWalk(x2, z2); return !!(w && w2 && Math.min(w.d, w2.d) - r > F.crossD); }
+      return false;
+    }, x2, z2);
     const take = (x, z, r, x2 = x, z2 = z) => S.reserve(x, z, r, 'F', x2, z2);
     const ok = (x, z) => !C.houseAt(x, z) && !(c => c && (c.corner || c.st.cls !== 'pedestrian'))(S.carriage(x, z));
 
@@ -163,7 +115,7 @@ const SITGES_ST_F = {
       const small = k < 1;
       const off = s.form === 'board' ? 0.06 : 0, bx = s.x - nx * off, bz = s.z - nz * off;
       const g0 = C.ground(bx + nx * 0.5, bz + nz * 0.5);
-      const sea = nz < -0.3 && coastD(bx, bz, F.seaR) < F.seaR, town = S.oldTown(bx, bz);
+      const sea = nz < -0.3 && S.coastD(bx, bz, F.seaR) < F.seaR, town = S.oldTown(bx, bz);
       // вдоль стены: полуширина вывески с запасом (набережная — терраса во весь фасад, кадры 02, 04, 07)
       const half = clamp((s.form === 'blade' ? 1.6 : s.w) / 2 + (sea ? F.wide[0] : town ? F.wide[1] : F.wide[2]), F.half[0], F.half[1]);
       // лучи через ≈ 1 м вдоль стены; крайние, упёршиеся сразу (соседний дом выступает, забор), — терраса уже:
@@ -171,7 +123,7 @@ const SITGES_ST_F = {
       const nR = Math.max(3, Math.ceil((2 * half - 0.6) / F.rayStep) + 1), rays = [];
       for (let k = 0; k < nR; k++) {
         const u = -half + 0.3 + (2 * half - 0.6) * k / (nR - 1);
-        rays.push(Object.assign({ u }, probe(bx + ux * u, bz + uz * u, nx, nz, g0)));
+        rays.push(Object.assign({ u }, S.probe(bx + ux * u, bz + uz * u, nx, nz, g0)));
       }
       let a0 = 0, a1 = nR - 1;
       while (a0 < a1 && rays[a0].U < F.rayMin) a0++;

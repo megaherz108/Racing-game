@@ -39,6 +39,14 @@
 //   S.wallFit(x, z, nx, nz, y, { up, down, r, gap }) — высота вещи на стене к улице (точка на стене, нормаль наружу,
 //     желаемая высота y): под плитой балкона (C.balconies), если вещь (от y − down до y + up, вдоль стены r м) её задевает;
 //     null — вывеска (C.signs, кроме стел) той же стены ближе gap м. По умолчанию — кронштейн фонаря A (0,1 / 0,8 / 0,35 / 0,6).
+// Помощники каркаса 7.2 (из группы F; тоже неперечисляемые):
+//   S.probe(x, z, nx, nz, g0, o) — луч от стены по нормали «до чего свободно»: { U, why, ped } — U — последняя свободная
+//     точка, м; why: house (дом), road (проезжая часть, угол; пешеходная улица — не конец, ped = true), fence (забор),
+//     drop (перепад рельефа больше drop от высоты g0 или вода), open (до max); o — { step, max, start, drop, sea }
+//     вместо SITGES_ST.probe.
+//   S.fenceCut(x0, z0, x1, z1) — отрезок пересекает забор (C.fences); S.coastD(x, z, R) — до линии берега (C.coast), ≤ R.
+//   skip в S.hits / S.free — функция получает и сам элемент занятости: skip(who, o) — исключения по месту (кронштейн
+//     высоко на стене, своя дверь); зовётся только для пересекающих.
 // Определяет: SITGES_ST, SITGES_ST_GROUPS, sitgesStGroups, sitgesStHash, sitgesZebras, sitgesPlanStreet.
 // Использует: clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_WALL
 //   (js/maps/sitges/houses.js); SITGES_OLDTOWN (js/maps/sitges/styles.js); SITGES_ST_A (js/maps/sitges/st/lamps.js);
@@ -59,6 +67,9 @@ const SITGES_ST = {
   cross: 1.6,       // переход OSM: полуширина полосы поперёк улицы
   corner: 1.0,      // бордюр скруглённого угла: радиус полосы вдоль него (пандусы, переходы)
   sign: 0.4,        // стела и навес вывески: запас к полуширине
+  // луч от стены S.probe (7.2): шаг, дальше max м — открыто, первая точка в start м; перепад рельефа больше drop м
+  // или земля ниже sea м — конец (drop)
+  probe: { step: 0.25, max: 8, start: 0.3, drop: 0.6, sea: 0.2 },
 };
 // порядок групп в раскладке и постройке (фиксирован; заготовки — js/maps/sitges/st/<группа>.js)
 const SITGES_ST_GROUPS = [SITGES_ST_A, SITGES_ST_B, SITGES_ST_C, SITGES_ST_D, SITGES_ST_E, SITGES_ST_F, SITGES_ST_G];
@@ -245,8 +256,8 @@ function sitgesPlanStreet(C) {
       for (const o of l) {
         if (got.has(o)) continue;
         got.add(o);
-        if (no && no(o.who)) continue;
-        if (segSeg(x, z, x2, z2, o.x, o.z, o.x2, o.z2) < r + o.r) out.push(o);
+        if (segSeg(x, z, x2, z2, o.x, o.z, o.x2, o.z2) >= r + o.r || no && no(o.who, o)) continue;
+        out.push(o);
       }
     });
     return out;
@@ -346,6 +357,62 @@ function sitgesPlanStreet(C) {
     return ok ? y : null;
   };
 
+  /* ---------- заборы, берег, луч от стены (7.2, из группы F) ---------- */
+  // клетки отрезков заборов C.fences и берега C.coast — строятся при первом вызове
+  let fenceC = null, coastC = null;
+  const fenceCells = () => {
+    if (fenceC) return fenceC;
+    fenceC = sitgesCells(16);
+    for (const f of C.fences || []) for (let k = 1; k < f.P.length; k++) {
+      const a = f.P[k - 1], b = f.P[k];
+      fenceC.add(Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1]), [a, b]);
+    }
+    return fenceC;
+  };
+  // отрезки a–b и c–d пересекаются (строго: касание концом не считается)
+  const crosses = (ax, az, bx, bz, cx, cz, dx, dz) => {
+    const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+    const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  };
+  // отрезок (x0, z0)–(x1, z1) пересекает забор
+  const fenceCut = (x0, z0, x1, z1) => {
+    let hit = false;
+    fenceCells().each(Math.min(x0, x1), Math.max(x0, x1), Math.min(z0, z1), Math.max(z0, z1), l => {
+      if (!hit) for (const [a, b] of l) if (crosses(x0, z0, x1, z1, a[0], a[1], b[0], b[1])) { hit = true; break; }
+    });
+    return hit;
+  };
+  // расстояние до линии берега, не больше R
+  const coastD = (x, z, R) => {
+    if (!coastC) {
+      coastC = sitgesCells(64);
+      for (const l of C.coast || []) for (let i = 1; i < l.length; i++) { const a = l[i - 1], b = l[i]; coastC.add(Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1]), [a, b]); }
+    }
+    let d = R;
+    coastC.each(x - R, x + R, z - R, z + R, list => { for (const [a, b] of list) d = Math.min(d, sitgesSeg(x, z, a[0], a[1], b[0], b[1])); });
+    return d;
+  };
+  // луч от стены (x, z) по нормали (nx, nz) с шагом step от start до max м: до чего свободно → { U, why, ped } — U — последняя
+  // свободная точка, why: house (дом), road (проезжая часть, угол), fence (забор), drop (перепад рельефа больше drop
+  // от g0 или земля ниже sea — вода), open (свободно до max); ped — по пути была пешеходная улица (не конец)
+  const probe = (x, z, nx, nz, g0, o = {}) => {
+    const { step, max, start, drop, sea } = Object.assign({}, P.probe, o);
+    let px = x + nx * (start - step), pz = z + nz * (start - step), ped = false;
+    for (let v = start; v <= max; v += step) {
+      const qx = x + nx * v, qz = z + nz * v;
+      const stop = why => ({ U: v - step, why, ped });
+      if (C.houseAt(qx, qz)) return stop('house');
+      const c = C.carriageAt(qx, qz);
+      if (c) { if (c.corner || c.st.cls !== 'pedestrian') return stop('road'); ped = true; }
+      const g = C.ground(qx, qz);
+      if (g < sea || Math.abs(g - g0) > drop) return stop('drop');
+      if (fenceCut(px, pz, qx, qz)) return stop('fence');
+      px = qx; pz = qz;
+    }
+    return { U: max, why: 'open', ped };
+  };
+
   /* ---------- группы A → G ---------- */
   const S = C.street = {
     curbs, corners, fronts, edges, walls, zebras, occ, groups: {}, stats: null,
@@ -354,8 +421,8 @@ function sitgesPlanStreet(C) {
     oldTown: (x, z) => SITGES_OLDTOWN.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r),
     hash: sitgesStHash,
   };
-  // помощники 7.1 — неперечисляемые: отпечаток (__game.fingerprint) пишет и имена функций, C.street не меняется
-  for (const [k, fn] of Object.entries({ axis, project, near, wallFit })) Object.defineProperty(S, k, { value: fn });
+  // помощники 7.1 и 7.2 — неперечисляемые: отпечаток (__game.fingerprint) пишет и имена функций, C.street не меняется
+  for (const [k, fn] of Object.entries({ axis, project, near, wallFit, fenceCut, coastD, probe })) Object.defineProperty(S, k, { value: fn });
   const base = occ.length;
   for (const g of SITGES_ST_GROUPS) S.groups[g.id] = null;
   for (const g of sitgesStGroups()) S.groups[g.id] = g.plan(C, S) || {};
