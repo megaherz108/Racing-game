@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 2571,
-  "world": 2907,
-  "even": 151,
+  "data": 2743,
+  "world": 3434,
+  "even": 136,
   "fresh": true
  },
  "counts": {
@@ -17,7 +17,7 @@
   "houses": 12628,
   "wallPieces": 61478,
   "blind": 14519,
-  "streetWalls": 5552,
+  "streetWalls": 5794,
   "passes": 5,
   "roadTris": 1323152,
   "roadMeshes": 549,
@@ -36,9 +36,9 @@
   "inset": 1027,
   "huts": 221,
   "bldTris": 307583,
-  "balconies": 7253,
+  "balconies": 7736,
   "cornices": 3090,
-  "facTris": 146948
+  "facTris": 154676
  },
  "corners": {
   "stats": {
