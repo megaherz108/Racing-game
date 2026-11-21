@@ -7,6 +7,7 @@
 //   glow — что светится ночью, в своём цвете (готовая emissiveMap: emissive = белый × NIGHT_U), чёрное — не светится;
 //     в половину разрешения map (свечение и так мягкое). Что светится — SITGES_SIGN.cat[…].glow: 'text' — буквы
 //     (типовые, бары, банки, отели), 'all' — весь короб (супермаркеты, заправки), крест аптеки — сам крест.
+//   uv['__solid'] — белая ячейка 16 px (без свечения): металл, ножки, корпуса — цвет из вершин (signs3d.js).
 //   uv: v снизу вверх (flipY, как у всех текстур three.js): v0 — низ ячейки, v1 — верх. Флажок (blade) двусторонний:
 //     обратной стороне брать u наоборот (u1 → u0), иначе надпись зеркальная.
 // Ячейки: высота строки px (64, при нехватке места меньше) у вывесок с aspect ≥ 2, 2 строки — у почти квадратных,
@@ -45,14 +46,17 @@ const SITGES_SIGN = {
   awningVal: 0.42,           // фестон маркизы — нижняя доля высоты ячейки (надпись — на нём), зубцы — прозрачные
   // по виду заведения: font — ключ SITGES_SIGN_FONTS; vars — варианты [фон, текст, обводка?, шрифт?] (выбор по хешу
   // ключа вывески); upper — заглавные; glow — что светится ('text' | 'all'); neon — ореол букв (бары, клубы);
-  // awn — полосы маркизы [полоса 1, полоса 2] (фестон — цвета полосы 1, надпись — цвета полосы 2)
+  // awn — полосы маркизы [полоса 1, полоса 2, надпись?] (фестон — цвета полосы 1, надпись — третий цвет, иначе цвета
+  // полосы 2; одинаковые полосы — однотонный тент)
   cat: {
     restaurant: { font: 'serif', glow: 'text',
       vars: [['#5a1d22', '#f3e6c8'], ['#1f3d2c', '#efe4c6'], ['#22324a', '#f2ead6'], ['#f2ead8', '#7a1f24'], ['#3b2a20', '#e9c98a']],
-      awn: [['#7d1f25', '#f1e9d8'], ['#1e4a34', '#f1e9d8'], ['#203a5c', '#f2ede3'], ['#b5562a', '#f3e9d6'], ['#2c2c2c', '#e9dcc0']] },
+      // по кадрам 6а.4 (набережная, старый город) тенты чаще однотонные светлые: кремовый, белый, жёлтый
+      awn: [['#efe6cf', '#efe6cf', '#6e1c22'], ['#f6f3ea', '#f6f3ea', '#1f3350'], ['#e9c04a', '#e9c04a', '#3a2a18'],
+        ['#efe6cf', '#e2d3b0', '#5a3a20'], ['#7d1f25', '#f1e9d8'], ['#1e4a34', '#f1e9d8'], ['#203a5c', '#f2ede3']] },
     cafe: { font: 'italic', glow: 'text',
       vars: [['#3e2a1e', '#f1e2c4'], ['#efe6d6', '#4a2e1f'], ['#1f4a44', '#f4ead4', null, 'script']],
-      awn: [['#4a2e1f', '#efe3cc'], ['#1f4a44', '#f0e8d6'], ['#8c3b2a', '#f3e6d0']] },
+      awn: [['#efe3cc', '#efe3cc', '#4a2e1f'], ['#1f4a44', '#f0e8d6'], ['#f6f3ea', '#f6f3ea', '#8c3b2a'], ['#4a2e1f', '#efe3cc']] },
     bar: { font: 'round', glow: 'text', neon: true,
       vars: [['#16130f', '#ffb347'], ['#121417', '#ff4f8b', null, 'script'], ['#1b1410', '#f3e2b8', null, 'serif'], ['#101820', '#4fe3ff']],
       awn: [['#1c1c1c', '#e8b04a'], ['#6a1424', '#f0e2c8']] },
@@ -89,7 +93,9 @@ const SITGES_BRANDS = {
   lidl: { bg: '#0050aa', fg: '#e60a14', line: '#fff000', font: 'black', name: 'Lidl' },
   aldi: { bg: '#001e78', fg: '#ffffff', bar: ['#c80000', '#00b4dc'], font: 'black', upper: true, name: 'Aldi' },
   dia: { bg: '#e30613', fg: '#ffffff', font: 'round', name: 'dia' },
-  bonpreu: { bg: '#a62e38', fg: '#ffffff', font: 'black', name: 'bonpreu' },
+  // магазин в Ситжесе — формата «Bonpreu ràpid»: тёмно-зелёный короб, белые буквы, жёлтая полоса (кадр 6а.4; цвета логотипа
+  // сети — #a62e38 с белым, docs/sitges/sign-colors.md)
+  bonpreu: { bg: '#1d4d32', fg: '#ffffff', bar: ['#f2c230'], font: 'black', name: 'bonpreu ràpid' },
   consum: { bg: '#f39400', fg: '#ffffff', font: 'round', name: 'Consum' },
   carrefour: { bg: '#ffffff', fg: '#004e9f', bar: ['#e3000f'], font: 'round' },
   supercor: { bg: '#ffffff', fg: '#ef3340', bar: ['#1d1d1b'], font: 'sans' },
@@ -102,6 +108,10 @@ const SITGES_BRANDS = {
   365: { bg: '#1d1d1b', fg: '#ffffff', font: 'black', name: '365' },
   clarel: { bg: '#ef7950', fg: '#ffffff', font: 'round', name: 'clarel' },
   womensecret: { bg: '#ffffff', fg: '#1a1a1a', font: 'serif', name: 'women\'secret' },
+  // строения (вывески частей h.lm, signs.js — SITGES_SIGNS.lm): не бренды, цвета на глаз по кадрам 6а.4
+  mercat: { bg: '#34383c', fg: '#ffffff', font: 'sans', name: 'mercat sitges' },
+  prado: { bg: '#e2c48c', fg: '#8a3320', font: 'serif', upper: true },
+  terramar: { bg: '#ffffff', fg: '#3b4047', font: 'sans', upper: true },
 };
 
 function sitgesSignAtlas(items) {
@@ -131,6 +141,7 @@ function sitgesSignAtlas(items) {
 
   // размер ячейки по форме и aspect: rows — во сколько строк высотой
   const cellOf = (it, px) => {
+    if (it.form === 'solid') return { w: 16, h: 16 };
     const a = Math.max(0.15, it.aspect || 3), rows = a >= 2 ? 1 : a >= 0.7 ? 2 : 4;
     let h = rows * px, w = Math.round(h * a);
     if (w > W - 2 * PAD) { w = W - 2 * PAD; h = Math.max(8, Math.round(w / a)); }
@@ -150,6 +161,8 @@ function sitgesSignAtlas(items) {
     }
     return { cells, used: y + shelf, px };
   };
+  // белая ячейка (ключ '__solid'): металл и корпуса постройки (signs3d.js) — цвет из вершин, тот же материал
+  items = [...items, { key: '__solid', form: 'solid', aspect: 1 }];
   let P = null;
   for (const sheets of [1, 2]) {
     for (const px of S.px) if ((P = pack(px, sheets * W))) break;
@@ -259,6 +272,7 @@ function sitgesSignAtlas(items) {
     });
   }
 
+  const c1Of = st => st.awn[0];
   // маркиза: полосы сверху, фестон с надписью внизу, зубцы фестона прозрачны
   function awning(x, st, c, g) {
     const { w, h } = c, x0 = c.x, y0 = c.y, vh = Math.round(h * S.awningVal), sh = h - vh;
@@ -280,9 +294,11 @@ function sitgesSignAtlas(items) {
       x.fill();
       x.fillStyle = 'rgba(0,0,0,0.18)'; x.fillRect(x0, y0 + sh, w, Math.max(1, Math.round(vh * 0.06)));
     }
-    const zh = Math.round(vh * 0.2), body = vh - zh, m = body * 0.14;
+    const zh = Math.round(vh * 0.2), body = vh - zh, m = body * 0.14, tc = st.awn[2] || st.awn[1];
+    // ночью фестон слегка светится (подсветка снизу), тёмная надпись на светлом фестоне — тёмная на нём
+    if (g) { x.fillStyle = shade(c1Of(st), -0.6); x.fillRect(x0, y0 + sh, w, body); }
     drawText(x, st.text, st.font, x0 + w * 0.04, y0 + sh + m, w * 0.92, body - 2 * m,
-      g ? (st.glow === 'none' ? '#000' : shade(c2, -0.2)) : c2, { lines: 1 });
+      g ? (lum(tc) < lum(c1Of(st)) ? '#000' : shade(tc, -0.2)) : tc, { lines: 1 });
   }
 
   // аптечный крест: зелёный греческий крест с белой кромкой и решёткой «светодиодов», вокруг прозрачно
@@ -354,7 +370,9 @@ function sitgesSignAtlas(items) {
   }
 
   const draw = (x, c, g) => {
-    const it = c.it, st = styleOf(it);
+    const it = c.it;
+    if (it.form === 'solid') { if (!g) { x.fillStyle = '#ffffff'; x.fillRect(c.x - PAD, c.y - PAD, c.w + 2 * PAD, c.h + 2 * PAD); } return; }
+    const st = styleOf(it);
     c.st = st;
     const f = it.form;
     if (f === 'awning') awning(x, st, c, g);

@@ -9,6 +9,8 @@
 //   на стене вида street центр доски сдвигается на ось с витриной (не на ось двери — как шейдер facade.js).
 //   Типовые — на кусках вида shops без заведения рядом: места через slot м, есть ли вывеска и какая — по хешу места
 //   и району (старый город и набережная — бары, рестораны, кафе; остальное — лавки), без R().
+//   В старом городе доски меньше (town). Части строений h.lm заведений не получают; у строений свои вывески —
+//   SITGES_SIGNS.lm (рынок, Прадо, Террамар — по кадрам 6а.4).
 // C.signs — [{ x, y, z, nx, nz, w, h, form, cat, text, brand, generic, key }] (договор docs/sitges/stage-6a.md):
 //   x, z — середина лица у доски, букв и стелы, у флажка, креста и маркизы — место крепления на стене (лицо
 //   выступает по нормали: флажок и крест — на SITGES_SIGNS.blade.out, маркиза — на awning.d); у навеса — середина
@@ -40,10 +42,14 @@ const SITGES_SIGNS = {
   // доска: высота лица; ширина = text · ch + pad (не уже min, не шире max и куска)
   board: { h: 0.6, ch: 0.34, pad: 0.6, min: 1.4, max: 7.5 },
   wide: { h: 0.9, ch: 0.55, pad: 1.2, min: 3.5, max: 14 },     // супермаркет
+  // старый город (SITGES_OLDTOWN): таблички меньше — по кадрам 6а.4 (Karmela, El Cable, Izarra) там нет широких коробов
+  town: { h: 0.45, ch: 0.27, pad: 0.4, min: 1.0, max: 3.6 },
   awning: { h: 0.32, d: 1.3, min: 2.4, max: 8, drop: 0.55 },   // маркиза: фестон h, вынос d; верх у стены на drop выше фестона
   blade: { w: 0.62, h: 0.62, out: 0.75, tall: [0.42, 1.25] },   // флажок: лицо w × h, середина в out м от стены; клуб — высокий
   cross: { w: 0.75, h: 0.75, out: 0.55 },
-  letters: { ch: 0.62, roof: [0.9, 2.2], eave: 0.7, inset: 0.5, lift: 0.15 }, // отель: высота букв над плоской крышей — от этажности
+  letters: { ch: 0.62, roof: [0.9, 2.2], eave: 0.7, inset: 0.5, lift: 0.15, // отель: высота букв над плоской крышей — от этажности
+    // буквы над входом (низ второго этажа), а не на крыше — по кадрам 6а.4: { название: высота букв }
+    low: { Calipolis: 1.0 } },
   totem: { w: 1.4, h: 3.2, foot: 0.6, back: 2.2, side: 2.5 },  // стела: лицо, низ лица над землёй, от бордюра назад, вбок от доски
   canopy: { w: 14, h: 0.8, y: 5.2 },                            // навес АЗС: кромка w × h, середина на y над землёй
   maxText: 24,       // длиннее — режем по « - », « | », « (»
@@ -61,6 +67,22 @@ const SITGES_SIGNS = {
       ['Bodega', 'shop', 6], ['Ferreteria', 'shop', 5], ['Papereria', 'shop', 5], ['Cafè', 'cafe', 8], ['Restaurant', 'restaurant', 8],
       ['Carnisseria', 'shop', 4], ['Merceria', 'shop', 3], ['Immobiliària', 'shop', 5]],
   },
+  // вывески строений (части h.lm — их своих вывесок раскладка не ставит; кадры 6а.4, docs/sitges/stage-6a.md):
+  //   id — строение SITGES_LM; стена — у частей с этажностью ≥ floors (top — только самые высокие), открытая (перед ней
+  //   нет дома в 2 м), длиной ≥ ширины вывески; лучшая — по направлению dir (нормаль к нему) или к самой широкой улице
+  //   (street); y — середина лица над полом части (top — на столько ниже верха стен), out — от стены до лица; ширина —
+  //   знаков × h × ch. Цвета — SITGES_BRANDS (ключи строений: mercat, prado, terramar).
+  lm: [
+    // рынок: белые буквы на тёмном выносном поясе над стеклянным первым этажом к Artur Carbonell (пояс — base + 4,2…5,0,
+    // лицо в 1,8 м от стены, js/maps/sitges/lm/market.js); Mercadona внутри — снаружи её вывески на кадрах нет
+    { id: 'market', text: 'mercat sitges', brand: 'mercat', cat: 'shop', form: 'letters', dir: [0, -1], floors: 5, y: 4.6, h: 0.5, out: 1.83, ch: 0.55 },
+    // Прадо: надпись на светлой панели над аркой входа (кадр Commons «Façana del Prado Suburense»); посередине стены
+    // у модели балкон — панель на доле at длины стены
+    { id: 'prado', text: 'PRADO SUBURENSE', brand: 'prado', cat: 'shop', form: 'board', street: true, floors: 2, y: 4.0, h: 0.5, out: 0.08, ch: 0.5, at: 0.28 },
+    // Террамар: тёмные буквы на белом парапете верхнего уровня к морю (кадр Street View с набережной; парапет 0,75 м над
+    // верхом стен, вынос пояса 0,25 м — js/maps/sitges/lm/terramar.js); top < 0 — выше верха стен
+    { id: 'terramar', text: 'TERRAMAR', brand: 'terramar', cat: 'hotel', form: 'letters', dir: [0, -1], top: -0.38, h: 0.62, out: 0.3, ch: 0.62 },
+  ],
   // надпись бренда (нет — название OSM)
   brandText: { mercadona: 'Mercadona', caprabo: 'Caprabo', lidl: 'Lidl', aldi: 'ALDI', dia: 'Dia', bonpreu: 'Bonpreu',
     consum: 'Consum', supercor: 'Supercor', caixabank: 'CaixaBank', bbva: 'BBVA', sabadell: 'Sabadell', santander: 'Santander',
@@ -218,7 +240,8 @@ function sitgesPlanSigns(C) {
   // вернёт true, если поставлена, иначе причину: 'tight' (не влезает по высоте или длине) или 'busy' (место занято)
   const placeFront = (p, t, v, form, text, generic, extra) => {
     const big = v.cat === 'supermarket', only = form === 'blade';
-    const B = form === 'awning' ? S.awning : only ? S.blade : big ? S.wide : S.board;
+    const town = !big && oldTown((p.w.ax + p.w.bx) / 2, (p.w.az + p.w.bz) / 2);
+    const B = form === 'awning' ? S.awning : only ? S.blade : big ? S.wide : town ? S.town : S.board;
     const len = Math.min(text.length, S.maxText);
     let w = only ? 0 : form === 'awning' ? clamp(Math.max(len * S.board.ch + 1.2, p.L * 0.5), B.min, B.max) : clamp(len * B.ch + B.pad, B.min, B.max);
     w = Math.min(w, p.L - 2 * S.edge);
@@ -355,8 +378,15 @@ function sitgesPlanSigns(C) {
       if (s > bs) { bs = s; best = p; }
     }
     if (!best) return 'noWall';
-    const p = best, h = p.h, flat = h.roof.kind === 'flat', fl = h.p.floors;
-    const L = S.letters, lh = flat ? clamp(0.45 + 0.17 * fl, L.roof[0], L.roof[1]) : L.eave;
+    const p = best, h = p.h, L = S.letters, low = L.low[text];
+    if (low) {
+      // над входом: по низу второго этажа, перед стеной (первый этаж закрыт изгородью сада)
+      const w = Math.min(text.length * low * L.ch, p.L - 2 * S.edge);
+      push(onWall(p, p.L / 2, 0.1, h.base + F.ground + 0.15 + low / 2, w, low, 'letters', 'hotel', text, v.brand), false);
+      return true;
+    }
+    const flat = h.roof.kind === 'flat', fl = h.p.floors;
+    const lh = flat ? clamp(0.45 + 0.17 * fl, L.roof[0], L.roof[1]) : L.eave;
     const w = Math.min(text.length * lh * L.ch, p.L - 2 * S.edge);
     if (w < 1.5) return 'tight';
     const tc = p.L / 2;
@@ -375,6 +405,28 @@ function sitgesPlanSigns(C) {
     if (!d) return;
     const dd = Math.max(1.5, d - T.back), x = x0 + p.w.nx * dd, z = z0 + p.w.nz * dd;
     push({ x: r2(x), y: r2(ground(x, z) + T.foot + T.h / 2), z: r2(z), nx: r2(p.w.nx), nz: r2(p.w.nz), w: T.w, h: T.h, form: 'totem', cat: 'supermarket', text, brand: v.brand }, false);
+  }
+
+  /* ---------- вывески строений ---------- */
+  st.lm = 0;
+  for (const E of S.lm) {
+    let parts = houses.filter(h => h.lm === E.id && h.p.floors >= (E.floors || 0));
+    if (E.top) { const t = Math.max(...parts.map(h => h.y1)); parts = parts.filter(h => h.y1 > t - 0.5); }
+    const w = E.text.length * E.h * E.ch;
+    let best = null, bs = -Infinity;
+    for (const h of parts) for (const wl of h.walls) {
+      const L = Math.hypot(wl.bx - wl.ax, wl.bz - wl.az), mx = (wl.ax + wl.bx) / 2, mz = (wl.az + wl.bz) / 2;
+      // перед стеной дом — не годится, кроме нижнего уступа того же строения (террасы Террамара)
+      const y = E.top ? h.y1 - E.top : h.base + E.y, f = C.houseAt(mx + wl.nx * 2, mz + wl.nz * 2);
+      if (L < w + 2 * S.edge || (f && !(f.lm === E.id && f.y1 < y - E.h))) continue;
+      let sc = L;
+      if (E.dir) sc += (wl.nx * E.dir[0] + wl.nz * E.dir[1]) * 100;
+      if (E.street) { const c = carriageAt(mx + wl.nx * 6, mz + wl.nz * 6, null, 4); sc += c ? 2 * c.st.v[c.i].hw * 3 : 0; }
+      if (sc > bs) { bs = sc; best = { h, w: wl, L, ux: (wl.bx - wl.ax) / L, uz: (wl.bz - wl.az) / L, used: [], y }; }
+    }
+    if (!best) { st.miss.push(['lm', E.id, E.text]); continue; }
+    push(onWall(best, clamp(best.L * (E.at ?? 0.5), w / 2 + S.edge, best.L - w / 2 - S.edge), E.out, best.y, w, E.h, E.form, E.cat, E.text, E.brand), false);
+    st.lm++;
   }
 
   /* ---------- типовые: куски вида shops без заведения рядом ---------- */

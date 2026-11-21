@@ -8,6 +8,11 @@
 //   цветом формы (SIGN_DBG_COL) и нормаль; у флажка, креста и маркизы — вынос по нормали. Подписи — текст вывесок
 //   (типовые — курсивом); легенда — на картинке.
 // __signInfo() → сводка C.signStats и число уникальных ключей атласа.
+// __signShots(места, { w = 1280, h = 720, dist = 12, side = 0.35, night = false, fov = 55 }) → { png } — кадры 3D (6а.3):
+//   место — текст вывески (первая, у которой text содержит строку; 'Caprabo#2' — вторая такая), номер в C.signs
+//   или [имя, cx, cz, h, tx, tz, ty] — своя камера (на h м над землёй, взгляд на (tx, ty над землёй, tz)). Камера
+//   перед вывеской на dist м, сбоку на side · dist, 1,6 м над землёй; night — ночь (Sky.apply), иначе день. Мир
+//   «Ситжеса» активируется (getWorld / activateWorld), заезд не нужен.
 (() => {
   const SIGN_DBG_COL = { board: '#e00', blade: '#a0f', awning: '#f80', cross: '#0a0', letters: '#00c', totem: '#088', canopy: '#a60' };
 
@@ -90,6 +95,39 @@
       const L2 = [['#59f', 'фасад к улице (жилой)'], ['#fb5', 'фасад с витринами'], ['#c0c', 'заведение OSM (пустое — без вывески)']];
       L2.forEach(([c, t], i) => { const y = 28 + 16 * (keys.length + i); g.fillStyle = c; g.fillRect(8, y, 24, 5); g.fillStyle = '#000'; g.fillText(t, 40, y + 7); });
       png[name] = cv.toDataURL('image/png');
+    }
+    return { png };
+  };
+
+  window.__signShots = async function (list, { w = 1280, h = 720, dist = 12, side = 0.35, night = false, fov = 55 } = {}) {
+    const D = getData('sitges'), Wd = getWorld('sitges'), C = D.C, gr = D.ground;
+    activateWorld('sitges');
+    Sky.apply(Wd, night ? 'night' : 'day');
+    const cam = new THREE.PerspectiveCamera(fov, w / h, 0.3, 3200), png = {};
+    renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+    const shoot = (name, cx, cz, cy, tx, ty, tz) => {
+      cam.position.set(cx, cy, cz); cam.lookAt(tx, ty, tz); cam.updateMatrixWorld();
+      aimSun(tx, ty, tz);
+      if (Wd.cullView) Wd.cullView(cx, cz, 0);
+      renderer.shadowMap.needsUpdate = true; renderer.setScissorTest(false); renderer.setViewport(0, 0, w, h);
+      renderer.render(scene, cam);
+      png[name] = renderer.domElement.toDataURL('image/jpeg', 0.88);
+    };
+    const tag = night ? '-night' : '';
+    for (const it of list) {
+      if (Array.isArray(it)) {
+        const [name, cx, cz, ch = 1.6, tx, tz, ty = 4] = it;
+        shoot(name + tag, cx, cz, gr(cx, cz) + ch, tx, gr(tx, tz) + ty, tz);
+        continue;
+      }
+      let s;
+      if (typeof it === 'number') s = C.signs[it];
+      else { const [t, k = 1] = it.split('#'); s = C.signs.filter(q => q.text.includes(t))[k - 1]; }
+      if (!s) { png['нет-' + it] = ''; continue; }
+      const o = s.form === 'blade' ? SITGES_SIGNS.blade.out : s.form === 'cross' ? SITGES_SIGNS.cross.out : 0;
+      const sx = s.x + s.nx * o, sz = s.z + s.nz * o, rx = s.nz, rz = -s.nx;
+      const cx = s.x + s.nx * dist + rx * dist * side, cz = s.z + s.nz * dist + rz * dist * side;
+      shoot(`${String(it).replace(/[^\p{L}\d]+/gu, '-')}${tag}`, cx, cz, gr(cx, cz) + 1.6, sx, s.y, sz);
     }
     return { png };
   };
