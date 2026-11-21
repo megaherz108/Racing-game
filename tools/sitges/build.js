@@ -338,26 +338,21 @@ if (roofs) for (const r of roofs) {
 // точки OSM (магазины и кафе — витрины; деревья, фонари, переходы, светофоры, ворота — на будущие этапы).
 // Первые 6 видов — по первому совпадению (как до этапа 7: их точки и порядок не меняются); дальше — мелочи улиц
 // этапа 7 (docs/sitges/stage-7.md), каждый вид — своим правилом: точка может попасть и в первые, и в новые виды
-// (переход со «столом» — crossing и table, шлагбаум — gate и lift_gate).
+// (переход со «столом» — crossing и table, шлагбаум — gate и lift_gate). Мусорных контейнеров и урн нет — решение
+// пользователя 2026-11-21 (amenity=recycling, waste_disposal, waste_basket не берём).
 const PT_KINDS = ['shop', 'tree', 'lamp', 'crossing', 'signals', 'gate',
-  'bench', 'recycling', 'waste_disposal', 'waste_basket', 'bollard', 'stop', 'give_way', 'table',
+  'bench', 'bollard', 'stop', 'give_way', 'table',
   'drinking_water', 'water_tap', 'shower', 'fountain', 'motorcycle_parking', 'lift_gate', 'chain'];
 const PT_EXTRA = {
   bench: t => t.amenity === 'bench',
-  recycling: t => t.amenity === 'recycling' && (t.recycling_type || 'container') === 'container',
-  waste_disposal: t => t.amenity === 'waste_disposal', waste_basket: t => t.amenity === 'waste_basket',
   bollard: t => t.barrier === 'bollard', stop: t => t.highway === 'stop', give_way: t => t.highway === 'give_way',
   table: t => t.traffic_calming === 'table', drinking_water: t => t.amenity === 'drinking_water',
   water_tap: t => t.man_made === 'water_tap', shower: t => t.amenity === 'shower', fountain: t => t.amenity === 'fountain',
   motorcycle_parking: t => t.amenity === 'motorcycle_parking', lift_gate: t => t.barrier === 'lift_gate', chain: t => t.barrier === 'chain',
 };
 // значение точки (поток v): stop, give_way — направление движения к знаку, угол atan2(dx, dz) в шагах 3° (0…119),
-// 120 — неизвестно (по direction=forward/backward и порядку точек улицы OSM; без direction — конец улицы: к узлу);
-// recycling — какие контейнеры: биты 1 стекло (зелёный), 2 бумага (синий), 4 пластик и банки (жёлтый),
-// 8 органика (коричневый), 16 прочее (серый), 32 одежда
-const PT_VAL = ['stop', 'give_way', 'recycling'];
-const BINS = [[1, /glass/], [2, /paper|cardboard/], [4, /plastic|cans/], [8, /green_waste|food_waste|organic/], [16, /^recycling:waste$/], [32, /clothes|shoes/]];
-const ptBins = t => BINS.reduce((m, [b, re]) => m | (Object.keys(t).some(k => k.startsWith('recycling:') && t[k] === 'yes' && re.test(k)) ? b : 0), 0);
+// 120 — неизвестно (по direction=forward/backward и порядку точек улицы OSM; без direction — конец улицы: к узлу)
+const PT_VAL = ['stop', 'give_way'];
 // направление к знаку: улица OSM с этой точкой (лучше — не концом), соседняя точка улицы до неё по ходу движения
 const ptWays = new Map();
 {
@@ -397,7 +392,7 @@ if (fs.existsSync(path.join(G.RAW, 'points.json'))) {
     const [x, z] = loc(G.utm(e.lat, e.lon));
     if (!inside(x, z, 20)) continue;
     for (const k of ks) pts.push({ k: PT_KINDS.indexOf(k), x: r1(x), z: r1(z),
-      v: k === 'recycling' ? ptBins(e.tags) : k === 'stop' || k === 'give_way' ? ptDir(e) : null });
+      v: k === 'stop' || k === 'give_way' ? ptDir(e) : null });
   }
 }
 pts.sort((a, b) => a.k - b.k || morton(a.x, a.z) - morton(b.x, b.z));
@@ -622,12 +617,12 @@ if (roofs) write('data-roofs.js', [
 
 write('data-points.js', [
   '// Карта «Ситжес» — ДАННЫЕ: точки OSM — магазины и кафе (витрины), деревья, фонари, переходы, светофоры, ворота;',
-  '//   мелочи улиц этапа 7: скамейки, контейнеры, урны, столбики, STOP и «уступи», лежачие «столы», фонтанчики, краны,',
+  '//   мелочи улиц этапа 7: скамейки, столбики, STOP и «уступи», лежачие «столы», фонтанчики, краны,',
   '//   души, фонтаны, стоянки мотоциклов, шлагбаумы, цепи.',
   `// Источник: OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}).`, LIC_OSM,
   `// SITGES_PTS: kinds — ${J(PT_KINDS)}; m — вид каждой точки (по порядку, сгруппированы по виду); p — точки;`,
   `//   v — значения точек видов vk по порядку (stop, give_way — направление движения к знаку в шагах 3°, 120 — неизвестно;`,
-  `//   recycling — биты контейнеров: 1 стекло, 2 бумага, 4 пластик, 8 органика, 16 прочее, 32 одежда; tools/sitges/build.js).`,
+  `//   tools/sitges/build.js).`,
 ], 'SITGES_PTS', `const SITGES_PTS = {
   kinds: ${J(PT_KINDS)},
   m: '${U.enc(pts.map(p => p.k))}',

@@ -183,8 +183,7 @@ function sitgesPlanBase(C) {
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
   // точки OSM по видам (SITGES_PTS.kinds): { shop: [[x, z], …], tree: …, … }; у видов SITGES_PTS.vk — третье число:
-  // stop, give_way — направление движения к знаку (угол atan2(dx, dz), рад; null — неизвестно), recycling — биты
-  // контейнеров (1 стекло, 2 бумага, 4 пластик, 8 органика, 16 прочее, 32 одежда)
+  // stop, give_way — направление движения к знаку (угол atan2(dx, dz), рад; null — неизвестно)
   const points = {};
   if (typeof SITGES_PTS !== 'undefined') {
     const km = sitgesDec(SITGES_PTS.m), [pp2] = sitgesPts(SITGES_PTS.p, [km.length]);
@@ -195,7 +194,7 @@ function sitgesPlanBase(C) {
       const kind = SITGES_PTS.kinds[k];
       if (!vk.includes(kind)) { points[kind].push(pp2[i]); return; }
       const v = vv[n++];
-      points[kind].push([pp2[i][0], pp2[i][1], kind === 'recycling' ? v : v >= 120 ? null : v * Math.PI / 60]);
+      points[kind].push([pp2[i][0], pp2[i][1], v >= 120 ? null : v * Math.PI / 60]);
     });
   } else points.shop = [];
   // калитки и ворота (data-gates.js, 4а.3): входы кадастра, окна съездов по ортофото, служебные проезды —

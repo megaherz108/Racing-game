@@ -9,6 +9,11 @@
 //     — кадры вывесок (этап 6а.4): цели [{ name, look: [x, z], cam: [x, z], pitch?, fov? }] в координатах игры; с ближайшей
 //     к cam панорамы (до 30 м) взгляд на look → raw/photos/sv/signs/NN-имя.jpg (NN — номер в списке + from) и index.md там же;
 //     есть файл — не качает
+//   node tools/sitges/streetview.js --street A --look -579,-194 --cams "-540,-170;-600,-230" [--name фонарь] [--pitch 8] [--fov 70]
+//   node tools/sitges/streetview.js --street C --targets цели.json
+//     — кадры мелочей улиц (этап 7, группа A…G): с ближайшей к камере панорамы (до 30 м) взгляд на look; цели файлом —
+//     [{ name, look: [x, z], cam: [x, z], pitch?, fov? }] (координаты игры) → raw/photos/street/<группа>/NN-имя.jpg
+//     и index.md там же; есть файл с тем же именем — не качает. Кадр платный: сначала --plan (только metadata)
 // Ключ: переменная окружения GMAPS_KEY или файл tools/sitges/raw/gmaps-key.txt (raw/ в .gitignore). Ключ не
 //   печатается. Запрос «есть ли панорама» (metadata) бесплатный, платный только сам кадр (640 × 640).
 // Пишет tools/sitges/raw/photos/sv/<вид>/NN-улица.jpg и sv/index.md (адрес, год и этажи, координаты игры x z,
@@ -217,6 +222,39 @@ async function landmarkShots() {
   console.log(`Скачано ${got} кадров → ${dir}`);
 }
 
+// кадры мелочей улиц: --street группа (--look x,z --cams "x,z;…" [--name] | --targets файл); --plan — без кадров (см. шапку)
+async function streetShots() {
+  const grp = opt('--street'), dir = path.join(G.RAW, 'photos', 'street', grp), K = key(), rows = [];
+  const list = opt('--targets') ? JSON.parse(fs.readFileSync(opt('--targets'), 'utf8'))
+    : opt('--cams').split(';').map(c => ({ name: opt('--name') || 'kadr', look: opt('--look').split(',').map(Number), cam: c.split(',').map(Number),
+      pitch: opt('--pitch') !== null ? +opt('--pitch') : undefined, fov: opt('--fov') !== null ? +opt('--fov') : undefined }));
+  fs.mkdirSync(dir, { recursive: true });
+  let n = fs.readdirSync(dir).filter(f => /^\d+-.*\.jpg$/.test(f)).length, got = 0;
+  for (const t of list) {
+    const ll = wgs(...G.toUTM(...t.cam)), m = await meta(ll[0], ll[1], 30, K);
+    if (!m) { console.log(`  ${t.name} (${t.cam.join(', ')}): панорамы нет`); continue; }
+    const cam = [m.location.lat, m.location.lng], h = bearing(cam, wgs(...G.toUTM(...t.look))), pitch = t.pitch ?? 8, fov = t.fov ?? 70;
+    const [cx, cz] = G.toLocal(...G.utm(...cam)).map(Math.round);
+    if (PLAN) { console.log(`  ${t.name}: панорама в ${cx}, ${cz} (${m.date || '—'})`); continue; }
+    const base = `-${slug(t.name)}-${Math.round(t.look[0])}_${Math.round(t.look[1])}.jpg`;
+    if (fs.readdirSync(dir).some(f => f.endsWith(base) && /^\d+-/.test(f))) continue;
+    const name = String(++n).padStart(2, '0') + base;
+    if (!(await shot(path.join(dir, name), m.pano_id, h, pitch, fov, K))) { n--; continue; }
+    got++;
+    rows.push(`| ${name} | ${t.name} | камера ${cx}, ${cz} → ${t.look.map(Math.round).join(', ')} | ${m.date || '—'} | [панорама](${link(m.pano_id, h, pitch, fov)}) |`);
+  }
+  const idx = path.join(dir, 'index.md');
+  if (!PLAN && !fs.existsSync(idx)) fs.writeFileSync(idx, `# Мелочи улиц, группа ${grp}: кадры Street View (tools/sitges/streetview.js --street, этап 7)
+
+Образцы для глаз; в данные не переносим.
+
+| файл | что | откуда → куда (игра) | дата | ссылка |
+|---|---|---|---|---|
+`);
+  if (rows.length) fs.appendFileSync(idx, rows.join('\n') + '\n');
+  console.log(PLAN ? `Проверено ${list.length} целей (без кадров)` : `Скачано ${got} кадров → ${dir}`);
+}
+
 // кадры вывесок: --signs файл (см. шапку)
 async function signShots() {
   const list = JSON.parse(fs.readFileSync(opt('--signs'), 'utf8')), dir = path.join(DIR, 'signs'), K = key(), rows = [];
@@ -248,6 +286,7 @@ async function signShots() {
 (async () => {
   if (opt('--lm')) return landmarkShots();
   if (opt('--signs')) return signShots();
+  if (opt('--street')) return streetShots();
   const kinds = KINDS.filter(k => !ONLY || ONLY.includes(k.name));
   for (const k of kinds) { k.list = spread(k.pick(), LIMIT || k.k); }
   console.log(kinds.map(k => `  ${k.name.padEnd(9)} ${String(k.list.length).padStart(3)} из ${k.pick().length} кандидатов — ${k.what}`).join('\n'));
