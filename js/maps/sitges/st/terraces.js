@@ -21,7 +21,7 @@
 //     в stTerrCfg.colors.<вид>; awn — маркиза: вынос от стены, м, и перепад от крепления до верха фестона, м.
 //   build(K, S, L) — постройка (js/maps/sitges/street3d.js): S — помощники постройки (K.st), L — данные из plan.
 // Всё сбиваемое (стулья, столы и зонты лёгкие — улетают; кадки тяжёлые). Случайного нет: S.hash по месту.
-// Определяет: stTerrCfg, SITGES_ST_F, stTerrModels.
+// Определяет: stTerrCfg, SITGES_ST_F, stTerrTents, stTerrModels.
 // Использует: clamp (js/core.js); sitgesCells, sitgesSeg (js/maps/sitges/geom.js); SITGES_SIGNS
 //   (js/maps/sitges/signs.js); frame (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -47,17 +47,25 @@ const stTerrCfg = {
   four: 0.35,            // доля заведений со столиками на четверых
   small: 2,              // малая терраса (пекарня, фастфуд) — не больше столиков
   parasol: { size: 2.5, minT: 1.6 },
-  planter: { side: 0.45, step: 2.6, curb: 0.45, pass: 1.2 },
+  // кадки: по бокам террасы в side м; ряд у бордюра (в curb м от него, шаг step), если проход до террасы ≥ pass; на тротуаре
+  // набережной шире wideU терраса короче на row — под ряд кадок (кадры 02, 04 Ribera)
+  planter: { side: 0.45, step: 2.6, curb: 0.45, pass: 1.2, wideU: 5, row: 0.9 },
+  // тент бара на набережной: доля, ширина, вынос, высота фестона, под доской на under м (без доски — y над землёй), gap — wallFit
+  // minDrop — тент под доской почти плоский (складные локти), перепад не меньше
+  tent: { p: 0.7, w: [2.4, 8], d: 4, h: 0.3, under: 0.12, y: 3.0, gap: 0.3, minDrop: 0.12 },
   board: 0.75,           // доля заведений со штендером
   // маркиза над террасой: вынос (на открытой площади — open, дальше зонты), наклон (перепад / вынос) не круче slope,
   // низ фестона над землёй — low, не ниже clear; до бордюра не ближе curb
   awn: { minT: 1.5, max: 5, open: 3.5, slope: 0.35, minDrop: 0.3, clear: 2.2, low: 2.4, curb: 0.6 },
   seaR: 130,             // набережная: берег ближе стольких метров перед фасадом
+  // ночные огни под маркизой и тентом: ореол на below м ниже изнанки, пятно радиусом pool; шире wide м — два
+  glow: { color: 0xffd29a, size: 1.2, poolColor: 0xffc27a, pool: 2.6, below: 0.15, wide: 5 },
   colors: {
     chair0: [0xa9adb1, 0x2b2b2d, 0xeeeeea, 0x7fbfae, 0x3d6e99, 0xb33a35, 0xd8a640],   // алюминий, чёрный, белый, мята, синий, красный, жёлтый
     chair1: [0xb58b5a, 0x8a6a48, 0xd9c3a0],                                          // плетёные
     table: [0xf1efe8, 0xb9bcbe, 0x6e4b33, 0x2c2c2e],                                 // белый, серый, дерево, чёрный
     parasol: [0xf3f0e6, 0xe9dcc0, 0xf3f0e6, 0x2f5d8a, 0xb5463a],
+    tent: [0xe8dcc0, 0xe2b33c, 0xf2f0ea, 0x2f6b4a, 0x24406b, 0x7a2630, 0xe2b33c],              // кремовый, жёлтый, белый, зелёный, синий, бордовый
   },
 };
 
@@ -66,8 +74,8 @@ const SITGES_ST_F = {
 
   plan(C, S) {
     const F = stTerrCfg, P = F.probe, r2 = v => Math.round(v * 100) / 100;
-    const out = { table: [], chair: [], parasol: [], planter: [], board: [], awn: [],
-      stats: { signs: 0, venues: 0, terraces: 0, bistro: 0, rows: 0, noRoom: 0, noDoor: 0, skipGeneric: 0, skipSmall: 0, awn: 0, awnLow: 0,
+    const out = { table: [], chair: [], parasol: [], planter: [], board: [], awn: [], tent: [],
+      stats: { signs: 0, venues: 0, terraces: 0, bistro: 0, rows: 0, noRoom: 0, noDoor: 0, skipGeneric: 0, skipSmall: 0, awn: 0, awnLow: 0, tentSkip: 0,
         stop: {}, tableBusy: 0 } };
     const st = out.stats;
 
@@ -173,7 +181,7 @@ const SITGES_ST_F = {
       for (let k = a0; k <= a1; k++) { const r = rays[k]; if (r.U < U) { U = r.U; why = r.why; } ped = ped || r.ped; }
       st.stop[why] = (st.stop[why] || 0) + 1;
       let T;
-      if (why === 'road') T = U - F.pass;
+      if (why === 'road') T = U - F.pass - (sea && U >= F.planter.wideU ? F.planter.row : 0);
       else if (why === 'house') T = U < 2.5 ? 0 : Math.min(U / 2 - F.lane, 3);
       else if (why === 'open') T = sea ? F.maxOpen : F.maxT;
       else T = U - 1.0;
@@ -208,6 +216,22 @@ const SITGES_ST_F = {
           out.awn.push([i, r2(d), r2(drop)]); st.awn++; awnD = d;
         } else if (d > Aw.d + 0.2) st.awnLow++;
       }
+      // тент над террасой бара набережной без маркизы (ряд тентов Ribera, кадр 02): под своей доской, место на стене —
+      // S.wallFit (плиты балконов над ним, чужие вывески той же стены); низ фестона не ниже clear
+      if (sea && s.form !== 'awning' && T >= 2 && S.hash(bx, bz, 52) < F.tent.p) {
+        const A = F.tent, w = clamp(hi - lo, A.w[0], A.w[1]), uc = clamp((lo + hi) / 2, lo + w / 2, hi - w / 2);
+        const [wx, wz] = P2(uc, 0), gw = Math.max(g0, C.ground(wx + nx * 0.5, wz + nz * 0.5));
+        const want = Math.min(s.form === 'board' ? s.y - s.h / 2 - A.under : gw + A.y, gw + A.y);
+        const y = S.wallFit(wx, wz, nx, nz, want, { up: 0.05, down: 0.9, r: w / 2 + 0.35, gap: A.gap });
+        let d = Math.min(T + 0.3, A.d, why === 'road' ? U - F.awn.curb : Infinity);
+        const [ox, oz] = P2(uc, d), go = Math.max(C.ground(ox, oz), g0) + 0.15;
+        const dropMax = y === null ? -1 : y - A.h - go - F.awn.clear;
+        if (y !== null && dropMax >= A.minDrop && d >= 2) {
+          const drop = clamp(dropMax + F.awn.clear - F.awn.low, A.minDrop, Math.min(dropMax, d * F.awn.slope));
+          out.tent.push([r2(wx), r2(wz), r2(y), r2(nx), r2(nz), r2(w), r2(d), r2(drop), Math.floor(S.hash(bx, bz, 53) * F.colors.tent.length)]);
+          awnD = d;
+        } else st.tentSkip++;
+      }
 
       const h = S.hash(bx, bz, 42);
       const chairKind = sea ? (h < 0.6 ? 1 : 0) : (town ? (h < 0.15 ? 1 : 0) : (h < 0.3 ? 1 : 0));
@@ -228,7 +252,6 @@ const SITGES_ST_F = {
         return out.sort((a, b) => Math.abs(a - ud) - Math.abs(b - ud) || a - b);
       };
       let nT = 0;
-      const dbg = typeof window !== 'undefined' && window.__terrLog ? [] : null;
       const maxT = small ? F.small : Infinity;
       const tables = [];                                  // [u, v] — для зонтов
       const chair = (x, z, fx, fz) => out.chair.push([r2(x), r2(z), r2(Math.atan2(fx, fz)), chairKind, chairCol]);
@@ -255,10 +278,8 @@ const SITGES_ST_F = {
           for (const u of us) {
             if (nT >= maxT) break;
             const [x, z] = P2(u, v), [xa, za] = P2(u, v - 0.62), [xb, zb] = P2(u, v + 0.62);
-            if (!ok(xa, za) || !ok(xb, zb) || !ok(...P2(u - 0.62, v)) || !ok(...P2(u + 0.62, v))) { st.tableBusy++; dbg && dbg.push(['ok', r2(u), r2(v)]); continue; }
-            if (four ? !freeAt(x, z, 0.9, x, z, bx, bz, nx, nz) : !freeAt(xa, za, 0.3, xb, zb, bx, bz, nx, nz)) {
-              st.tableBusy++; dbg && dbg.push(['busy', r2(u), r2(v), ...S.hits(xa, za, 0.3, null, xb, zb).map(o => o.who)]); continue;
-            }
+            if (!ok(xa, za) || !ok(xb, zb) || !ok(...P2(u - 0.62, v)) || !ok(...P2(u + 0.62, v))) { st.tableBusy++; continue; }
+            if (four ? !freeAt(x, z, 0.9, x, z, bx, bz, nx, nz) : !freeAt(xa, za, 0.3, xb, zb, bx, bz, nx, nz)) { st.tableBusy++; continue; }
             if (four) take(x, z, 0.9); else take(xa, za, 0.3, xb, zb);
             out.table.push([r2(x), r2(z), r2(ry0), tableKind, tableCol]);
             chair(xa, za, nx, nz); chair(xb, zb, -nx, -nz);
@@ -283,7 +304,8 @@ const SITGES_ST_F = {
         }
       }
       if (nT) st.terraces++; else if (T < F.minT) st.noRoom++;
-      if (typeof window !== 'undefined' && window.__terrLog) window.__terrLog.push({ i, text: s.text, form: s.form, x: r2(bx), z: r2(bz), U, why, T: r2(T), lo: r2(lo), hi: r2(hi), ud: r2(ud), nT, awnD: r2(awnD), sea, town, dbg });
+      // отладка: window.__terrLog = [] до раскладки — по заведению: лучи, глубина, границы, дверь, столиков, маркиза
+      if (typeof window !== 'undefined' && window.__terrLog) window.__terrLog.push({ i, text: s.text, form: s.form, x: r2(bx), z: r2(bz), U, why, T: r2(T), lo: r2(lo), hi: r2(hi), ud: r2(ud), nT, awnD: r2(awnD), sea, town });
 
       // кадки: по бокам террасы; на набережной у бордюра ещё ряд (кадры 02, 04 Ribera), если проход остаётся
       if (nT) {
@@ -318,7 +340,7 @@ const SITGES_ST_F = {
       }
     }
     st.table = out.table.length; st.chair = out.chair.length; st.parasol = out.parasol.length;
-    st.planter = out.planter.length; st.board = out.board.length;
+    st.planter = out.planter.length; st.board = out.board.length; st.tent = out.tent.length;
     return out;
   },
 
@@ -339,8 +361,61 @@ const SITGES_ST_F = {
         { brk: { mass: k === 2 ? 40 : 140, anchor: 0.5, minSpeed: 1, cy: 0.3, lie: 1.5, light: k === 2, kind: 'plastic' }, hit: { r: k === 0 ? 0.5 : 0.4, h: 0.6 } });
     }
     S.place(M.board, L.board.map(([x, z, ry]) => ({ x, z, ry })), { brk: light(6, 0.45, 'wood'), hit: { r: 0.25, h: 0.95 } });
+    stTerrTents(K, S, L.tent || []);
+    // ночью под вынесенной маркизой и тентом — тёплый ореол у изнанки и пятно света на террасе (без источников света)
+    const G = F.glow, lights = [], signs = K.D.C.signs;
+    for (const [i, d, drop] of L.awn) {
+      const s = signs[i], yA = s.y + s.h / 2 + SITGES_SIGNS.awning.drop, ux = s.nz, uz = -s.nx, n = s.w > G.wide ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const u = n > 1 ? (k ? 1 : -1) * s.w / 4 : 0, x = s.x + s.nx * d * 0.55 + ux * u, z = s.z + s.nz * d * 0.55 + uz * u;
+        lights.push({ x, y: yA - drop * 0.55 - G.below, z, r: G.pool });
+      }
+    }
+    for (const [x0, z0, y, nx, nz, w, d, drop] of L.tent || []) lights.push({ x: x0 + nx * d * 0.55, y: y - drop * 0.55 - G.below, z: z0 + nz * d * 0.55, r: G.pool });
+    S.lights(lights, { color: G.color, size: G.size, poolColor: G.poolColor });
   },
 };
+
+// Тенты баров набережной (L.tent): своя склеенная геометрия квадратами 160 м (как S.place — скрытие дальше 300 м,
+// K.roadLod), цвет в вершинах; неподвижные, без столкновений (выше 2,2 м), тень — теневыми копиями. В сводку группы
+// (K.stStats.F) — штуки, треугольники, меши.
+function stTerrTents(K, S, list) {
+  if (!list.length) return;
+  const F = stTerrCfg, CH = 160, mat = S.mat(0xffffff, { vertexColors: true, roughness: 0.85 }), st = K.stStats[S.cur], c = new THREE.Color();
+  const chunks = new Map();
+  for (const t of list) { const k = Math.floor(t[0] / CH) * 65536 + Math.floor(t[1] / CH); if (!chunks.has(k)) chunks.set(k, []); chunks.get(k).push(t); }
+  for (const arr of chunks.values()) {
+    const pos = [], nrm = [], col = [];
+    const quad = (p, n, k) => {                     // p — 4 точки по кругу, n — нормаль, k — множитель цвета
+      for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...p[i]); nrm.push(...n); col.push(c.r * k, c.g * k, c.b * k); }
+    };
+    for (const [x, z, y, nx, nz, w, d, drop, ci] of arr) {
+      c.set(F.colors.tent[ci]);
+      const rx = nz, rz = -nx, hw = w / 2, yT = y - drop, h = F.tent.h, L = Math.hypot(d, drop);
+      const W = s => [x + rx * hw * s, y, z + rz * hw * s], O = (s, yy) => [x + nx * d + rx * hw * s, yy, z + nz * d + rz * hw * s];
+      const up = [nx * drop / L, d / L, nz * drop / L];
+      quad([W(-1), W(1), O(1, yT), O(-1, yT)], up, 1);                               // верх
+      quad([W(1), W(-1), O(-1, yT), O(1, yT)], up.map(v => -v), 0.72);                // изнанка
+      quad([O(-1, yT), O(1, yT), O(1, yT - h), O(-1, yT - h)], [nx, 0, nz], 0.9);       // фестон
+      quad([O(1, yT), O(-1, yT), O(-1, yT - h), O(1, yT - h)], [-nx, 0, -nz], 0.7);
+      for (const sg of [-1, 1]) {                                                    // щёки у фестона
+        const a = O(sg, yT), b = O(sg, yT - h), e = [x + nx * (d - 0.6) + rx * hw * sg, yT + drop * 0.6 / d, z + nz * (d - 0.6) + rz * hw * sg];
+        quad([a, e, e, b], [rx * sg, 0, rz * sg], 0.85); quad([e, a, b, b], [-rx * sg, 0, -rz * sg], 0.7);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const m = new THREE.Mesh(g, mat);
+    m.castShadow = true; m.receiveShadow = true;
+    K.group.add(m);
+    g.computeBoundingSphere();
+    K.roadLod.push({ mesh: m, x: g.boundingSphere.center.x, z: g.boundingSphere.center.z, r: g.boundingSphere.radius, far: SITGES_ST3D.far });
+    if (st) { st.meshes++; st.tris += pos.length / 9; }
+  }
+  if (st) st.n += list.length;
+}
 
 // Модели группы (основание в y = 0, «лицо» к +z). Части — { geo, mat, shadow } для S.place; цвет экземпляра
 // умножает все части (тёмные части почти не меняются).
@@ -373,7 +448,7 @@ function stTerrModels(S) {
     { geo: mg([Cy(0.025, 0.025, 2.72, 6, 0, 1.36, 0, true), Cy(0.05, 0.05, 0.12, 6, 0, 2.78, 0), B(0.45, 0.06, 0.45, 0, 0.03, 0)]), mat: S.mat(0xd8d4cc, { roughness: 0.5, metalness: 0.3 }) }];
 
   /* кадки: белый ящик с кустом (Ribera, Mascaron), бетонная чаша (Sant Pau), глиняный горшок (старый город) */
-  const bush = (sx, sy, sz, y) => new THREE.IcosahedronGeometry(1, 0).scale(sx, sy, sz).translate(0, y, 0);
+  const bush = (sx, sy, sz, y) => new THREE.IcosahedronGeometry(1, 1).scale(sx, sy, sz).translate(0, y, 0);
   const green = S.mat(0x4f7a3a, { roughness: 0.9 });
   const planter0 = [{ geo: mg([B(1.0, 0.45, 0.42, 0, 0.225, 0)]), mat: S.mat(0xeeece6, { roughness: 0.8 }) },
     { geo: mg([bush(0.5, 0.32, 0.24, 0.66)]), mat: green }];
