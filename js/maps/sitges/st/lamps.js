@@ -7,8 +7,8 @@
 //   mast — променад (Passeig Marítim, Ribera) и широкие проспекты: светло-серая мачта 9 м, на проспектах одна голова
 //          на кронштейне к дороге, на променаде со стороны моря — две (V), сбиваемая;
 //   post — точки street_lamp OSM (6): чугунный столб ≈ 3,8 м с фонарём наверху (площадь у (−79, 172)), сбиваемый.
-// Раскладка — по оси улиц (C.streets) с шагом по виду и ширине: одна сторона / обе в шахматном порядке; место —
-// у бордюра на полосе тротуара этой улицы (S.onWalk), на стене (S.walls) или у края полотна; свободно — S.free,
+// Раскладка — по оси улиц (C.streets, точка — S.axis) с шагом по виду и ширине: одна сторона / обе в шахматном порядке; место —
+// у бордюра на полосе тротуара этой улицы (S.onWalk), на стене (S.walls, под плитой балкона — S.wallFit) или у края полотна; свободно — S.free,
 // занято — S.reserve(…, 'A') малым кругом (места у бордюра нужны следующим группам). Числа — SITGES_LAMP.
 // Ночь: стекло — S.glow, ореол и пятно света — S.lights (у сбитого гаснут), источников света нет.
 // Договор (docs/sitges/stage-7.md, «Каркас»):
@@ -17,7 +17,6 @@
 //   build(K, S, L) — постройка (js/maps/sitges/street3d.js): S — помощники постройки (K.st), L — данные из plan.
 // Свои глобальные имена — с префиксом stLamp… (после — node tools/deps.js --headers).
 // Определяет: SITGES_LAMP, stLampPlan, stLampGeo, SITGES_ST_A.
-// Использует: clamp (js/core.js); sitgesCells, sitgesSeg (js/maps/sitges/geom.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -53,15 +52,6 @@ function stLampPlan(C, S) {
     out.post.push([r2(x), r2(z)]);
   }
 
-  // точка на оси улицы: s — м от начала → { x, z, tx, tz, hw, sw, deck, vi }
-  const axis = (st, s) => {
-    const v = st.v;
-    let j = 0; while (j < v.length - 2 && v[j + 1].s < s) j++;
-    const a = v[j], b = v[j + 1], t = clamp((s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
-    const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-    return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, tx: (b.x - a.x) / L, tz: (b.z - a.z) / L,
-      hw: a.hw + (b.hw - a.hw) * t, sw: [Math.min(a.sw[0], b.sw[0]), Math.min(a.sw[1], b.sw[1])], deck: a.deck || b.deck };
-  };
   // наружу от оси на сторону side (как края полотна в street.js)
   const sideN = (A, side) => { const sg = side ? -1 : 1; return [-A.tz * sg, A.tx * sg]; };
 
@@ -87,31 +77,6 @@ function stLampPlan(C, S) {
     S.reserve(x, z, P.r.pole, 'A');
     return { x, z, ry: Math.atan2(nx, nz) };
   };
-  // плиты балконов и вывески на стенах (кроме стел) — по клеткам: фонарь не в плите и не в вывеске
-  const onWall = sitgesCells(8);
-  for (const b of C.balconies || []) onWall.add(Math.min(b.ax, b.bx), Math.max(b.ax, b.bx), Math.min(b.az, b.bz), Math.max(b.az, b.bz), { b });
-  for (const g of C.signs || []) if (g.form !== 'totem') onWall.add(g.x - g.w / 2, g.x + g.w / 2, g.z - g.w / 2, g.z + g.w / 2, { g });
-  // высота кронштейна у стены (x, z, нормаль nx, nz): под плитой балкона, если она мешает; null — вывеска рядом
-  const wallFit = (x, z, nx, nz, y) => {
-    let ok = true;
-    for (let pass = 0; pass < 3; pass++) {           // опустились под плиту — проверить плиту ниже
-      let moved = false;
-      onWall.each(x - 1, x + 1, z - 1, z + 1, l => {
-        for (const o of l) {
-          if (o.g) {
-            const g = o.g;
-            if (g.nx * nx + g.nz * nz > 0.7 && Math.hypot(g.x - x, g.z - z) < g.w / 2 + 0.6 && Math.abs(g.y - y + 0.35) < g.h / 2 + 0.6) ok = false;
-            continue;
-          }
-          const b = o.b;
-          if (b.nx * nx + b.nz * nz < 0.7 || sitgesSeg(x, z, b.ax, b.az, b.bx, b.bz) > 0.35) continue;
-          if (y + 0.1 > b.y - b.t - 0.05 && y - 0.8 < b.y + 1.1) { y = b.y - b.t - 0.12; moved = true; }
-        }
-      });
-      if (!moved) break;
-    }
-    return ok ? y : null;
-  };
   // на стене дома к улице у края тротуара (или полотна)
   const atWall = (st, A, side) => {
     const [nx, nz] = sideN(A, side), d = A.hw + A.sw[side] + 0.4;
@@ -122,7 +87,7 @@ function stLampPlan(C, S) {
     const x = w.ax + (w.bx - w.ax) * n.f, z = w.az + (w.bz - w.az) * n.f, g = w.ga + (w.gb - w.ga) * n.f;
     let y = g + P.wallY;
     if (y > w.hi - 0.4) y = w.hi - 0.4;
-    y = wallFit(x, z, w.nx, w.nz, y);
+    y = S.wallFit(x, z, w.nx, w.nz, y);
     if (y === null) return fail('wall-sign');
     if (y - g < P.wallMin) return fail('wall-low');
     if (nearOsm(x, z)) return fail('osm-near');
@@ -157,8 +122,8 @@ function stLampPlan(C, S) {
         const side = side0 < 0 ? (k + si) % 2 : side0;
         let got = null, kk = kind;
         for (let t = 0; t < P.tries && !got; t++) {
-          const A = axis(st, s + t * P.retry);
-          if (A.deck) break;
+          const A = S.axis(st, s + t * P.retry);
+          if (A.deck || st.v[A.i + 1].deck) break;   // отрезок у моста — тоже нет
           if (kind === 'wall') {
             if (S.oldTown(A.x, A.z) || A.sw[side] < P.narrowSw) got = atWall(st, A, side);
             if (!got && A.sw[side] >= 0.9) { got = atCurb(st, si, A, side, 'pole'); kk = 'pole'; }

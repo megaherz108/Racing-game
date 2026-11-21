@@ -17,6 +17,10 @@
 //     list — [{ x, y, z, gx, gz, r, it }] (ореол в x, y, z; пятно в gx, gz радиусом r; it — элемент Breakables: у сбитого
 //     гаснет); o — { color, size, pool, poolColor, far }. Видны вечером и ночью (setNight), квадратами со скрытием.
 //   S.circle(x, z, r, h), S.box(x, z, w, d, rot, h) — неподвижное в сетке столкновений (K.grid).
+//   S.collider(v, i) — «неровность» на полотне и т. п. (7.1): своя сетка столкновений из треугольников (v — x, y, z
+//     подряд, i — индексы) → K.meshColliders (world.meshColliders); пустая не добавляется.
+//   S.walk(pts, ys) — поверхность (7.1): четырёхугольник [[x, z] × 4] с высотой ys (число) или высотами углов [y × 4]
+//     → walkAt (S.y, world.surface, покрытие); рисовать и ставить столкновения — самой группе (S.collider).
 //   S.cur — буква группы, которую строят сейчас: place и lights пишут сводку K.stStats[S.cur] (штук, треугольников,
 //     мешей = вызовов отрисовки, сбиваемых, огней) → world.stats.street (tools/sitges/street-debug.js, __stInfo).
 // В мир: K.stBrks (Breakables → world.breakables), K.stUpdate(dt), K.stReset(), K.stNight(k).
@@ -138,6 +142,13 @@ function sitgesBuildStreet(K) {
     },
     circle: (x, z, r, h = 2) => grid.addCircle(x, z, r, h),
     box: (x, z, w, d, rot = 0, h = 2) => grid.addOBB(x, z, w, d, rot, h),
+    // своя сетка столкновений Rapier: треугольники, v — x, y, z подряд, i — индексы (массивы или типизированные)
+    collider(v, i) {
+      if (i.length) K.meshColliders.push({ v: v instanceof Float32Array ? v : new Float32Array(v), i: i instanceof Uint32Array ? i : new Uint32Array(i) });
+    },
+    // поверхность для walkAt (S.y, world.surface): четырёхугольник pts — [[x, z] × 4], ys — высота на весь кусок или
+    // высоты углов [y × 4] (тогда под точкой — по треугольникам (0, 1, 2) и (0, 2, 3))
+    walk: (pts, ys) => Array.isArray(ys) ? K.rk.addWalk(pts, Math.max(...ys), ys) : K.rk.addWalk(pts, ys),
   };
 
   for (const g of sitgesStGroups()) { S.cur = g.id; g.build(K, S, C.street.groups[g.id]); }
