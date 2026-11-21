@@ -335,8 +335,50 @@ if (roofs) for (const r of roofs) {
   // [тип, угол / 3°, цвет по 5 бит на канал]
   rfStream.push(r.type, Math.round(r.ang / 3) % 120, r.col[0] >> 3, r.col[1] >> 3, r.col[2] >> 3);
 }
-// точки OSM (магазины и кафе — витрины; деревья, фонари, переходы, светофоры, ворота — на будущие этапы)
-const PT_KINDS = ['shop', 'tree', 'lamp', 'crossing', 'signals', 'gate'];
+// точки OSM (магазины и кафе — витрины; деревья, фонари, переходы, светофоры, ворота — на будущие этапы).
+// Первые 6 видов — по первому совпадению (как до этапа 7: их точки и порядок не меняются); дальше — мелочи улиц
+// этапа 7 (docs/sitges/stage-7.md), каждый вид — своим правилом: точка может попасть и в первые, и в новые виды
+// (переход со «столом» — crossing и table, шлагбаум — gate и lift_gate). Мусорных контейнеров и урн нет — решение
+// пользователя 2026-11-21 (amenity=recycling, waste_disposal, waste_basket не берём).
+const PT_KINDS = ['shop', 'tree', 'lamp', 'crossing', 'signals', 'gate',
+  'bench', 'bollard', 'stop', 'give_way', 'table',
+  'drinking_water', 'water_tap', 'shower', 'fountain', 'motorcycle_parking', 'lift_gate', 'chain'];
+const PT_EXTRA = {
+  bench: t => t.amenity === 'bench',
+  bollard: t => t.barrier === 'bollard', stop: t => t.highway === 'stop', give_way: t => t.highway === 'give_way',
+  table: t => t.traffic_calming === 'table', drinking_water: t => t.amenity === 'drinking_water',
+  water_tap: t => t.man_made === 'water_tap', shower: t => t.amenity === 'shower', fountain: t => t.amenity === 'fountain',
+  motorcycle_parking: t => t.amenity === 'motorcycle_parking', lift_gate: t => t.barrier === 'lift_gate', chain: t => t.barrier === 'chain',
+};
+// значение точки (поток v): stop, give_way — направление движения к знаку, угол atan2(dx, dz) в шагах 3° (0…119),
+// 120 — неизвестно (по direction=forward/backward и порядку точек улицы OSM; без direction — конец улицы: к узлу)
+const PT_VAL = ['stop', 'give_way'];
+// направление к знаку: улица OSM с этой точкой (лучше — не концом), соседняя точка улицы до неё по ходу движения
+const ptWays = new Map();
+{
+  const isStop = t => t.highway === 'stop' || t.highway === 'give_way', want = new Set();
+  if (fs.existsSync(path.join(G.RAW, 'points.json'))) for (const e of JSON.parse(fs.readFileSync(path.join(G.RAW, 'points.json'), 'utf8')).elements) if (e.tags && isStop(e.tags)) want.add(e.id);
+  for (const w of JSON.parse(fs.readFileSync(path.join(G.RAW, 'osm.json'), 'utf8')).elements) {
+    if (w.type !== 'way' || !w.nodes || !w.geometry || !w.tags || !w.tags.highway) continue;
+    w.nodes.forEach((n, k) => {
+      if (!want.has(n)) return;
+      const end = k === 0 || k === w.nodes.length - 1, old = ptWays.get(n);
+      if (!old || (old.end && !end)) ptWays.set(n, { w, k, end });
+    });
+  }
+}
+const ptDir = e => {
+  const W = ptWays.get(e.id);
+  if (!W) return 120;
+  const { w, k } = W, n = w.nodes.length, dir = e.tags.direction, ow = w.tags.oneway;
+  // ход по порядку точек улицы (+1) или против (−1)
+  const fwd = dir === 'forward' ? 1 : dir === 'backward' ? -1 : ow === 'yes' ? 1 : ow === '-1' ? -1 : k === n - 1 ? 1 : k === 0 ? -1 : 0;
+  if (!fwd) return 120;
+  const kp = k - fwd;                           // точка улицы перед знаком по ходу движения
+  if (kp < 0 || kp >= n) return 120;
+  const [ax, az] = loc(G.utm(w.geometry[kp].lat, w.geometry[kp].lon)), [bx, bz] = loc(G.utm(w.geometry[k].lat, w.geometry[k].lon));
+  return ((Math.round(Math.atan2(bx - ax, bz - az) / (Math.PI / 60)) % 120) + 120) % 120;
+};
 const FRONT = /^(cafe|restaurant|bar|pub|fast_food|ice_cream|pharmacy|bank|bureau_de_change|post_office|nightclub|clinic|dentist|veterinary)$/;
 const ptKind = t => t.shop || t.office || t.craft || FRONT.test(t.amenity || '') ? 'shop'
   : t.natural === 'tree' ? 'tree' : t.highway === 'street_lamp' ? 'lamp' : t.highway === 'crossing' ? 'crossing'
@@ -345,10 +387,12 @@ const pts = [];
 if (fs.existsSync(path.join(G.RAW, 'points.json'))) {
   for (const e of JSON.parse(fs.readFileSync(path.join(G.RAW, 'points.json'), 'utf8')).elements) {
     if (e.type !== 'node' || !e.tags) continue;
-    const k = ptKind(e.tags);
-    if (!k) continue;
+    const ks = [ptKind(e.tags), ...Object.keys(PT_EXTRA).filter(k => PT_EXTRA[k](e.tags))].filter(Boolean);
+    if (!ks.length) continue;
     const [x, z] = loc(G.utm(e.lat, e.lon));
-    if (inside(x, z, 20)) pts.push({ k: PT_KINDS.indexOf(k), x: r1(x), z: r1(z) });
+    if (!inside(x, z, 20)) continue;
+    for (const k of ks) pts.push({ k: PT_KINDS.indexOf(k), x: r1(x), z: r1(z),
+      v: k === 'stop' || k === 'give_way' ? ptDir(e) : null });
   }
 }
 pts.sort((a, b) => a.k - b.k || morton(a.x, a.z) - morton(b.x, b.z));
@@ -572,13 +616,19 @@ if (roofs) write('data-roofs.js', [
 `);
 
 write('data-points.js', [
-  '// Карта «Ситжес» — ДАННЫЕ: точки OSM — магазины и кафе (витрины), деревья, фонари, переходы, светофоры, ворота.',
+  '// Карта «Ситжес» — ДАННЫЕ: точки OSM — магазины и кафе (витрины), деревья, фонари, переходы, светофоры, ворота;',
+  '//   мелочи улиц этапа 7: скамейки, столбики, STOP и «уступи», лежачие «столы», фонтанчики, краны,',
+  '//   души, фонтаны, стоянки мотоциклов, шлагбаумы, цепи.',
   `// Источник: OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}).`, LIC_OSM,
-  `// SITGES_PTS: kinds — ${J(PT_KINDS)}; m — вид каждой точки (по порядку, сгруппированы по виду); p — точки.`,
+  `// SITGES_PTS: kinds — ${J(PT_KINDS)}; m — вид каждой точки (по порядку, сгруппированы по виду); p — точки;`,
+  `//   v — значения точек видов vk по порядку (stop, give_way — направление движения к знаку в шагах 3°, 120 — неизвестно;`,
+  `//   tools/sitges/build.js).`,
 ], 'SITGES_PTS', `const SITGES_PTS = {
   kinds: ${J(PT_KINDS)},
   m: '${U.enc(pts.map(p => p.k))}',
   p: '${U.encPoints([pts.map(p => [p.x, p.z])])}',
+  vk: ${J(PT_VAL)},
+  v: '${U.enc(pts.filter(p => PT_VAL.includes(PT_KINDS[p.k])).map(p => p.v))}',
 };
 `);
 
