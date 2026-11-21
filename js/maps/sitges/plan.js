@@ -87,6 +87,7 @@ function sitgesData() {
   sitgesPlanFacades(C);
   sitgesPlanSigns(C);
   sitgesPlanDoors(C);
+  sitgesPlanStreet(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)

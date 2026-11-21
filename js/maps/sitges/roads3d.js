@@ -9,9 +9,8 @@
 // от него зависит порядок вершин в мешах (отпечаток мира).
 // Определяет: SITGES_RB, sitgesRoadTextures, SITGES_RB_TILE, sitgesBuildRoads, sitgesBuildMarks,
 //   sitgesBuildRoadMeshes.
-// Использует: clamp (js/core.js); mulberry32 (js/world.js); Weather (js/weather.js); canvasTex
-//   (js/maps/city/textures.js); cobbleTexture (js/maps/city/landmarks.js); sitgesCells (js/maps/sitges/geom.js);
-//   SITGES_R (js/maps/sitges/roads.js).
+// Использует: mulberry32 (js/world.js); Weather (js/weather.js); canvasTex (js/maps/city/textures.js); cobbleTexture
+//   (js/maps/city/landmarks.js); sitgesCells (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -237,39 +236,16 @@ function sitgesBuildMarks(K) {
       }
     }
   }
-  // «зебра»: конец улицы с тротуарами упирается в другую улицу — переход за её тротуаром
-  for (const st of C.streets) {
-    if (!st.drive || st.cls === 'service' || st.len < 30) continue;
-    const v = st.v;
-    for (const end of [0, 1]) {
-      const E = end ? v[v.length - 1] : v[0], q0 = end ? v[v.length - 2] : v[1];
-      if (!(E.sw[0] > 0 && E.sw[1] > 0) || E.deck) continue;
-      const O = C.carriageAt(E.x, E.z, st);
-      if (!O) continue;
-      const ow = O.st.v[O.i], margin = Math.max(ow.sw[0], ow.sw[1]) + 0.5;
-      // идти от конца, пока точка в проезжей части другой улицы или её тротуаре
-      const dir = [(q0.x - E.x), (q0.z - E.z)], dl = Math.hypot(...dir), ux = dir[0] / dl, uz = dir[1] / dl;
-      let s = 0;
-      while (s < 25 && C.carriageAt(E.x + ux * s, E.z + uz * s, st, margin)) s += 0.5;
-      // скруглённые углы у этого конца: переход — сразу за точками касания (между прямыми участками бордюра)
-      const ei = end ? v.length - 1 : 0;
-      for (const c of C.cornersAt(E.x, E.z)) for (const X of [c.a, c.b]) if (X.st === st && X.i === ei) s = Math.max(s, end ? st.len - X.s : X.s);
-      if (s >= 25 || s + 4 > st.len / 2) continue;
-      // переход — поперёк оси улицы в её точке на середине полос (ось у узла изгибается: сдвиг к середине между
-      // границами), ширина — по этой точке
-      const Z = P.zebra, sm = s + 0.6 + Z.len / 2, sa = end ? st.len - sm : sm;
-      let j = 0; while (j < v.length - 2 && v[j + 1].s < sa) j++;
-      const qa = v[j], qb = v[j + 1], tq = clamp((sa - qa.s) / Math.max(1e-6, qb.s - qa.s), 0, 1);
-      const tl = Math.hypot(qb.x - qa.x, qb.z - qa.z) || 1, sgn = end ? -1 : 1;
-      const zx = (qb.x - qa.x) / tl * sgn, zz = (qb.z - qa.z) / tl * sgn;
-      const x0 = qa.x + (qb.x - qa.x) * tq - zx * Z.len / 2, z0 = qa.z + (qb.z - qa.z) * tq - zz * Z.len / 2, hw = qa.hw + (qb.hw - qa.hw) * tq - 0.4;
-      for (let c = -hw + Z.stripe / 2; c <= hw - Z.stripe / 2; c += Z.step) {
-        const cx = x0 - zz * c, cz = z0 + zx * c, w = Z.stripe / 2;
-        const p = (f, o) => { const x = cx + zx * f - zz * o, z = cz + zz * f + zx * o; return [x, g(x, z) + P.lift.drive + 0.012, z]; };
-        quad('white', [p(0, -w), p(Z.len, -w), p(Z.len, w), p(0, w)], UP, 0xeeeae0, [[0, 0], [0, 0], [0, 0], [0, 0]]);
-      }
-      cnt.zebra++;
+  // «зебра»: конец улицы с тротуарами упирается в другую улицу — переход за её тротуаром (места — sitgesZebras(),
+  // js/maps/sitges/street.js: C.street.zebras)
+  const Z = P.zebra;
+  for (const { x0, z0, zx, zz, hw } of C.street.zebras) {
+    for (let c = -hw + Z.stripe / 2; c <= hw - Z.stripe / 2; c += Z.step) {
+      const cx = x0 - zz * c, cz = z0 + zx * c, w = Z.stripe / 2;
+      const p = (f, o) => { const x = cx + zx * f - zz * o, z = cz + zz * f + zx * o; return [x, g(x, z) + P.lift.drive + 0.012, z]; };
+      quad('white', [p(0, -w), p(Z.len, -w), p(Z.len, w), p(0, w)], UP, 0xeeeae0, [[0, 0], [0, 0], [0, 0], [0, 0]]);
     }
+    cnt.zebra++;
   }
 
   /* ---------- мосты и путепроводы улиц: настил, парапеты ---------- */

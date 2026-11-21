@@ -10,6 +10,8 @@
 //   sitgesBuildSigns             вывески заведений по C.signs (js/maps/sitges/signs3d.js) — в ту же копилку K.rk
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
 //   sitgesBuildLandmarks         достопримечательности по C.landmarks (js/maps/sitges/landmarks3d.js, lm/*.js)
+//   sitgesBuildTrees             деревья по C.trees (js/maps/sitges/trees3d.js)
+//   sitgesBuildStreet            мелочи улиц, этап 7: группы A → G по C.street (js/maps/sitges/street3d.js, st/*.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
 // Определяет: SITGES_LANE, SITGES_LOOK, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
@@ -46,6 +48,7 @@ function buildSitges(D) {
   sitgesBuildBuildings(K);
   sitgesBuildLandmarks(K);
   sitgesBuildTrees(K);
+  sitgesBuildStreet(K);
   return sitgesBuildWorld(K);
 }
 
@@ -102,7 +105,7 @@ function sitgesBuildWorld(K) {
     return green[k] ? 'grass' : 'dirt';
   };
   return {
-    id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: K.treeBrk ? [K.treeBrk] : [], ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
+    id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: [K.treeBrk, ...K.stBrks].filter(Boolean), ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
     surface: (x, z, y = Infinity) => { const w = walkAt(x, z); return Math.max(D.ground(x, z), decks.surface(x, z, y), w <= y ? w : -Infinity); },
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
@@ -112,7 +115,7 @@ function sitgesBuildWorld(K) {
     look: { exposure: SITGES_LOOK.exposure, grade: true },
     coinCount: 80, spawns,
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats }, walkAt, roadLod, treeTune: K.treeTune,
+    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats, street: K.stStats }, walkAt, roadLod, treeTune: K.treeTune,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;
@@ -127,8 +130,9 @@ function sitgesBuildWorld(K) {
     // камера не уходит в стены узких улиц (js/match.js)
     occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg, mmMarks: D.mmMarks,
-    reset() { if (K.treeReset) K.treeReset(); },
-    update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
+    reset() { if (K.treeReset) K.treeReset(); K.stReset(); },
+    setNight(k) { K.stNight(k); },                       // огни мелочей улиц (js/maps/sitges/street3d.js)
+    update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); K.stUpdate(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
     cullView(x, z, p) {
       if (K.treeCull) K.treeCull(x, z, p);                 // деревья: ближний набор, дальние квадраты
@@ -138,7 +142,7 @@ function sitgesBuildWorld(K) {
         for (let q = 0; q < L.lods.length; q++) L.lods[q].mesh.visible = q === on;
       }
       for (const R of rockLod) R.mesh.visible = Math.hypot(R.x - x, R.z - z) - R.r < SITGES_G.rockFar;
-      for (const L of roadLod) L.mesh.visible = Math.hypot(L.x - x, L.z - z) - L.r < L.far;   // заборы, балконы
+      for (const L of roadLod) L.mesh.visible = Math.hypot(L.x - x, L.z - z) - L.r < L.far;   // заборы, балконы, мелочи улиц
     },
   };
 }
