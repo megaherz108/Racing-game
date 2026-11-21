@@ -22,7 +22,8 @@
 //   «столов» (постройка); свой — stMarkAtlas() — атлас надписей и лиц знаков (canvas).
 // Свои глобальные имена — с префиксом stMark… (после — node tools/deps.js --headers).
 // Определяет: stMarkCfg, stMarkKind, stMarkAtlas, SITGES_ST_B.
-// Использует: renderer (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_RB (js/maps/sitges/roads3d.js).
+// Использует: renderer (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_RB (js/maps/sitges/roads3d.js);
+//   SITGES_ST3D (js/maps/sitges/street3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -256,10 +257,9 @@ const SITGES_ST_B = {
 
   /* ==== постройка ==== */
   build(K, S, L) {
-    const { D, group, grid, roadLod, rk } = K, g = D.ground, P = stMarkCfg, KD = stMarkKind, RB = SITGES_RB, T = P.table;
+    const { D, rk } = K, g = D.ground, P = stMarkCfg, KD = stMarkKind, RB = SITGES_RB, T = P.table;
     const lift = RB.lift.drive, CH = SITGES_ST3D.chunk;
     const { tex, cell } = stMarkAtlas();
-    const st = () => K.stStats.B || (K.stStats.B = { n: 0, tris: 0, meshes: 0, brk: 0, lights: 0 });
 
     /* ---------- «столы»: высота над полотном ---------- */
     const tabs = L.tables.map(([x, z, zx, zz, hw, len]) => { const l = Math.hypot(zx, zz) || 1; return { x, z, ux: zx / l, uz: zz / l, hw, len, half: len / 2 + T.ramp }; });
@@ -274,14 +274,14 @@ const SITGES_ST_B = {
       return 0;
     };
 
-    /* ---------- копилка плоских мешей по квадратам ---------- */
-    const bins = new Map();
-    const bin = (key, x, z) => {
-      const i = Math.floor(x / CH), j = Math.floor(z / CH), k = key + '|' + i + ',' + j;
-      let b = bins.get(k);
-      if (!b) bins.set(k, b = { key, pos: [], nor: [], uv: [], col: [], x: (i + 0.5) * CH, z: (j + 0.5) * CH });
-      return b;
+    /* ---------- копилки плоских мешей по квадратам (S.mesh): разметка и «столы» ---------- */
+    const markMat = new THREE.MeshStandardMaterial({ map: tex, color: 0xeeeae0, alphaTest: 0.5, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    markMat.userData.shared = true;
+    const Mk = {
+      m: S.mesh('m', markMat, { shadow: false, keep: true, index: false, chunk: CH, far: P.far }),
+      t: S.mesh('t', rk.MAT.asphalt, { shadow: false, keep: true, index: false, color: true, chunk: CH, far: P.farTable }),
     };
+    const bin = (key, x, z) => Mk[key].at(x, z);            // писатель в квадрат точки (x, z)
     // треугольник (вершины [x, y, z], uv [u, v]) лицом вверх (или к n)
     const tri = (b, p, uv, n = null) => {
       const ex = p[1][0] - p[0][0], ey = p[1][1] - p[0][1], ez = p[1][2] - p[0][2], fx = p[2][0] - p[0][0], fy = p[2][1] - p[0][1], fz = p[2][2] - p[0][2];
@@ -290,7 +290,7 @@ const SITGES_ST_B = {
       if (back) { nx = -nx; ny = -ny; nz = -nz; p = [p[0], p[2], p[1]]; uv = [uv[0], uv[2], uv[1]]; }
       if (n) [nx, ny, nz] = n;
       else { const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; }
-      for (let k = 0; k < 3; k++) { b.pos.push(...p[k]); b.nor.push(nx, ny, nz); b.uv.push(...uv[k]); b.col.push(1, 1, 1); }
+      b.face(p, [nx, ny, nz], uv);
     };
     const quad4 = (b, p, uv, n) => { tri(b, [p[0], p[1], p[2]], [uv[0], uv[1], uv[2]], n); tri(b, [p[0], p[2], p[3]], [uv[0], uv[2], uv[3]], n); };
 
@@ -375,22 +375,7 @@ const SITGES_ST_B = {
     }
     S.collider(cv, ci);
 
-    /* ---------- меши копилки ---------- */
-    const markMat = new THREE.MeshStandardMaterial({ map: tex, color: 0xeeeae0, alphaTest: 0.5, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-    markMat.userData.shared = true;
-    for (const b of bins.values()) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
-      if (b.key === 't') geo.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
-      geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, b.key === 't' ? rk.MAT.asphalt : markMat);
-      mesh.receiveShadow = true; mesh.castShadow = false; mesh.userData.keep = true;
-      group.add(mesh);
-      roadLod.push({ mesh, x: geo.boundingSphere.center.x, z: geo.boundingSphere.center.z, r: geo.boundingSphere.radius, far: b.key === 't' ? P.farTable : P.far });
-      const s = st(); s.tris += b.pos.length / 9; s.meshes++;
-    }
+    S.flush();                                               // меши копилок — до знаков (порядок в группе прежний)
 
     /* ---------- знаки ---------- */
     const signMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.2 });
@@ -450,6 +435,6 @@ const SITGES_ST_B = {
       for (const m of out.meshes) m.onBeforeRender = tick;
       tick();
     }
-    st().n += nMarks + tabs.length;
+    S.count(nMarks + tabs.length);
   },
 };

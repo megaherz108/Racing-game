@@ -13,16 +13,18 @@
 // пандус вдоль стены (уклон 1 : 8), не влез — лестница.
 // Договор (docs/sitges/stage-7.md, «Каркас»):
 //   stPromTerrain(C) — раскладка стены и правка рельефа → C.prom = { walls: [{ pts: [[x, z, nx, nz, низ, верх]] }] }
-//     (n — нормаль от пляжа к суше); вызывается из sitgesPlanTerrain после рельефа.
+//     (n — нормаль от пляжа к суше); вызывается из sitgesPlanTerrain после рельефа. Стена — общий вид каркаса 7.2
+//     (точка на длине — sitgesStWallAt, рельеф у стены — sitgesStWallNear / sitgesStWallGround, js/maps/sitges/street.js).
 //   plan(C, S) → C.street.groups.D: { walls: [{ zone: [вид точки], pts, inE: [мощение до, м от стены], lawn: [газон до] }],
 //     desc: [{ kind: 'stairs' | 'ramp', w: стена, a: длина вдоль стены, dir, x, z, nx, nz, low, top, len }],
 //     gaps: [[стена, a0, a1, на линии ограды]], bench: [[x, z, ry, плитка]], shower: [[x, z, y]], stats }.
 //   build(K, S, L) — меши (склейка по квадратам stPromCfg.chunk), экземпляры S.place, столкновения S.collider, S.walk.
 // Стены, лестницы, пандусы, ограда и каменные скамьи — неподвижные; души — сбиваемые.
-// Определяет: stPromCfg, stPromTerrain, stPromAt, SITGES_ST_D, stPromTexCache, stPromTex.
+// Определяет: stPromCfg, stPromTerrain, SITGES_ST_D, stPromTexCache, stPromTex.
 // Использует: clamp (js/core.js); smooth01, stdMat, mulberry32 (js/world.js); canvasTex (js/maps/city/textures.js);
 //   sitgesBBox, sitgesInPoly, sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); stFurnCfg
-//   (js/maps/sitges/st/furniture.js); $ (js/ui.js).
+//   (js/maps/sitges/st/furniture.js); sitgesStWallNear, sitgesStWallGround, sitgesStWallLen, sitgesStWallAt
+//   (js/maps/sitges/street.js); $ (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -58,7 +60,7 @@ const stPromCfg = {
 
 /* ==================== раскладка: стена и рельеф (из sitgesPlanTerrain) ==================== */
 function stPromTerrain(C) {
-  const T = C.terra, P = stPromCfg, W = P.wall, Bp = P.beach, { H, sea, thin, dSea, beach, NX, NZ, S: GS, X0, Z0 } = T;
+  const T = C.terra, P = stPromCfg, W = P.wall, Bp = P.beach, { H, dSea, beach } = T;
   const prof = d => Math.min(Bp.max, Bp.b0 + Bp.k * d);
   const beaches = C.areas.filter(a => a.kind === 'beach' || a.kind === 'sand'), boxes = beaches.map(a => sitgesBBox(a.ring));
   const inBeach = (x, z) => beaches.some((a, i) => { const b = boxes[i]; return x >= b[0] && x <= b[1] && z >= b[2] && z <= b[3] && sitgesInPoly(x, z, a.ring); });
@@ -128,54 +130,20 @@ function stPromTerrain(C) {
     walls.push({ pts });
   }
 
-  /* ---------- рельеф у стены: ближайший отрезок стены у каждого узла ---------- */
-  const near = new Map();
-  for (const w of walls) {
-    const p = w.pts, n = p.length;
-    for (let i = 0; i + 1 < n; i++) {
-      const [ax, az, anx, anz, af, at] = p[i], [bx, bz, bnx, bnz, bf, bt] = p[i + 1];
-      const L = Math.hypot(bx - ax, bz - az) || 1e-6, R = Bp.fade;
-      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - X0) / GS)), i1 = Math.min(NX - 1, Math.ceil((Math.max(ax, bx) + R - X0) / GS));
-      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - Z0) / GS)), j1 = Math.min(NZ - 1, Math.ceil((Math.max(az, bz) + R - Z0) / GS));
-      for (let j = j0; j <= j1; j++) for (let ii = i0; ii <= i1; ii++) {
-        const k = j * NX + ii, x = X0 + ii * GS, z = Z0 + j * GS;
-        const tr = ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (L * L), t = clamp(tr, 0, 1);
-        const cx = ax + (bx - ax) * t, cz = az + (bz - az) * t, d = Math.hypot(x - cx, z - cz);
-        const o = near.get(k);
-        if (o && o.d <= d) continue;
-        const nx = anx + (bnx - anx) * t, nz = anz + (bnz - anz) * t;
-        // за концом цепочки — не дальше ext м (там ещё стена и настил)
-        const over = tr < 0 && i === 0 ? -tr * L : tr > 1 && i + 2 === n ? (tr - 1) * L : 0;
-        near.set(k, { d, s: (x - cx) * nx + (z - cz) * nz, foot: af + (bf - af) * t, top: at + (bt - at) * t, inside: over <= W.ext && (t > 0 && t < 1 || over > 0 || d < 0.5 * GS) });
-      }
-    }
-  }
-  let low = 0, band = 0, up = 0;
-  for (const [k, o] of near) {
-    if (sea[k] || thin[k]) continue;
-    const h = H[k];
-    if (o.inside && Math.abs(o.s) <= W.band) { H[k] = o.s <= 0 ? Math.min(h, o.foot, prof(dSea[k])) : o.foot; band++; }
-    else if (o.inside && o.s > 0 && o.s <= W.raise) { const v = Math.max(h, o.top + (h - o.top) * smooth01((o.s - W.flat) / (W.raise - W.flat))); if (v > h) up++; H[k] = v; }
-    else if (o.s < 0 && (beach[k] || o.inside)) {
+  /* ---------- рельеф у стены (каркас: sitgesStWallNear, sitgesStWallGround) ---------- */
+  // в полосе band — низ (у пляжа не выше профиля), за стеной — подъём; пляж перед стеной — опущен по профилю
+  let low = 0;
+  const near = sitgesStWallNear(T, walls, Bp.fade, W.ext);
+  const { band, up } = sitgesStWallGround(T, near, { band: W.band, flat: W.flat, raise: W.raise,
+    lowFoot: (k, h, o) => Math.min(h, o.foot, prof(dSea[k])),
+    rest: (k, h, o) => {
+      if (!(o.s < 0 && (beach[k] || o.inside))) return;
       const p = prof(dSea[k]), w = 1 - smooth01((o.d - Bp.near) / (Bp.fade - Bp.near));
       if (h > p && w > 0) { H[k] = h - (h - p) * w; low++; }
-    }
-  }
+    } });
   let len = 0;
   for (const w of walls) for (let i = 1; i < w.pts.length; i++) len += Math.hypot(w.pts[i][0] - w.pts[i - 1][0], w.pts[i][1] - w.pts[i - 1][1]);
   C.prom = { walls, stats: { walls: walls.length, len: Math.round(len), low, band, up } };
-}
-
-// точка стены на длине a (м вдоль): { x, z, nx, nz, foot, top, i, t } — по точкам w.pts и длинам w.a (за концами — продолжение)
-function stPromAt(w, a) {
-  const p = w.pts, A = w.a, n = p.length;
-  let i = 0;
-  if (a >= A[n - 1]) i = n - 2;
-  else if (a > 0) { let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= a) lo = m; else hi = m; } i = lo; }
-  const q = p[i], r = p[i + 1], L = A[i + 1] - A[i] || 1e-6, t = (a - A[i]) / L, u = clamp(t, 0, 1);
-  let nx = q[2] + (r[2] - q[2]) * u, nz = q[3] + (r[3] - q[3]) * u;
-  const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
-  return { x: q[0] + (r[0] - q[0]) * t, z: q[1] + (r[1] - q[1]) * t, nx, nz, foot: q[4] + (r[4] - q[4]) * u, top: q[5] + (r[5] - q[5]) * u, i, t: u };
 }
 
 /* ==================== группа D ==================== */
@@ -191,8 +159,7 @@ const SITGES_ST_D = {
 
     /* ---------- стены: вид по точкам, газон, мощение ---------- */
     walls.forEach(w0 => {
-      const p = w0.pts, a = [0];
-      for (let i = 1; i < p.length; i++) a.push(a[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
+      const p = w0.pts, a = sitgesStWallLen(p);
       const zone = p.map(q => P.zone(q[0]));
       // газон Marítim: настил, дальше — пока зелень OSM (не дальше 20 м); ограда — на его краю
       const lawn = p.map((q, i) => {
@@ -286,7 +253,7 @@ const SITGES_ST_D = {
     const tanAt = (w, i) => { const j = Math.min(i, w.pts.length - 2), q = w.pts[j], r = w.pts[j + 1], l = Math.hypot(r[0] - q[0], r[1] - q[1]) || 1; return [(r[0] - q[0]) / l, (r[1] - q[1]) / l]; };
     const SP = P.stairs, RP = P.ramp, stat = { stairs: 0, ramps: 0, skip: 0 };
     for (const c of used) {
-      const w = LW[c.wi], A = w.a[w.a.length - 1], at = stPromAt(w, c.a), drop = at.top - at.foot;
+      const w = LW[c.wi], A = w.a[w.a.length - 1], at = sitgesStWallAt(w, c.a), drop = at.top - at.foot;
       const others = out.desc.filter(d => d.w === c.wi);
       let kind = c.steps || c.st.surf !== 'concrete' ? 'stairs' : 'ramp', dir = 0, len = 0;
       if (kind === 'ramp') {
@@ -295,7 +262,7 @@ const SITGES_ST_D = {
         for (const d of [pref, -pref]) {
           const a1 = c.a + d * len, lo = Math.min(c.a, a1) - RP.near, hi = Math.max(c.a, a1) + RP.near;
           if (a1 < 1 || a1 > A - 1 || others.some(o => o.a1 > lo && o.a0 < hi)) continue;
-          const e = stPromAt(w, a1);
+          const e = sitgesStWallAt(w, a1);
           if (C.waterAt(e.x - e.nx * (RP.w + 0.6), e.z - e.nz * (RP.w + 0.6)) === 0) continue;
           dir = d; break;
         }
@@ -314,7 +281,7 @@ const SITGES_ST_D = {
       // занято: лестница — поперёк стены на пляж, пандус — вдоль стены
       if (kind === 'stairs') S.reserve(at.x - at.nx * len / 2, at.z - at.nz * len / 2, SP.w / 2 + 0.3, 'D', at.x - at.nx * len, at.z - at.nz * len);
       else for (let s = a0; s < a1; s += 4) {
-        const e = stPromAt(w, s), f = stPromAt(w, Math.min(a1, s + 4)), o = RP.w / 2 + 0.25;
+        const e = sitgesStWallAt(w, s), f = sitgesStWallAt(w, Math.min(a1, s + 4)), o = RP.w / 2 + 0.25;
         S.reserve(e.x - e.nx * o, e.z - e.nz * o, RP.w / 2 + 0.3, 'D', f.x - f.nx * o, f.z - f.nz * o);
       }
     }
@@ -347,7 +314,7 @@ const SITGES_ST_D = {
       let x = x0, z = z0;
       const b = nearWall(x, z, 10);
       if (b && b.s < 0) {                                  // у стены — вплотную к ней
-        const w = LW[b.wi], [tx, tz] = tanAt(w, b.i), e = stPromAt(w, w.a[b.i] + (x - b.q[0]) * tx + (z - b.q[1]) * tz);
+        const w = LW[b.wi], [tx, tz] = tanAt(w, b.i), e = sitgesStWallAt(w, w.a[b.i] + (x - b.q[0]) * tx + (z - b.q[1]) * tz);
         x = e.x - e.nx * 1.0; z = e.z - e.nz * 1.0;
       }
       const sp = S.near(x, z, 1, 0, 0.7, 0, 0.6, 4) || [x, z];
@@ -363,8 +330,7 @@ const SITGES_ST_D = {
   build(K, S, L) {
     if (!L || !L.walls.length) return;
     const P = stPromCfg, W = P.wall, CO = P.colors, lift = P.lift, D = K.D, g = (x, z) => D.ground(x, z), T = stPromTex();
-    const st = K.stStats.D || (K.stStats.D = { n: 0, tris: 0, meshes: 0, brk: 0, lights: 0 });
-    const mat = (hex, map, o = {}) => { const m = stdMat(hex, Object.assign({ map, roughness: 0.92 }, o)); m.userData.shared = true; return m; };
+    const mat =(hex, map, o = {}) => { const m = stdMat(hex, Object.assign({ map, roughness: 0.92 }, o)); m.userData.shared = true; return m; };
     const M = {
       wall_rib: mat('#ffffff', T.ashlar), wall_mar: mat('#ffffff', T.plaster), wall_seb: mat('#ffffff', T.rubble),
       pave_rib: mat('#ffffff', T.squares), pave_seb: mat('#ffffff', T.bricks), tile: mat('#ffffff', T.hydraulic), conc: mat('#ffffff', T.concrete),
@@ -374,37 +340,15 @@ const SITGES_ST_D = {
     };
     const shadow = new Set(['wall_rib', 'wall_mar', 'wall_seb', 'white', 'roll', 'steel', 'step', 'ramp']);
 
-    /* ---------- копилка мешей по квадратам и материалам ---------- */
-    const bufs = new Map();
-    const poly = (mk, vs, uv, hint) => {                // вершины [x, y, z] по кругу, uv [[u, v]], hint — куда нормаль
-      const [a, b, c] = vs;
-      let nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]), nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-      const l = Math.hypot(nx, ny, nz);
-      if (l < 1e-9) return;
-      nx /= l; ny /= l; nz /= l;
-      if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { vs = vs.slice().reverse(); uv = uv.slice().reverse(); nx = -nx; ny = -ny; nz = -nz; }
-      const cx = vs.reduce((s, v) => s + v[0], 0) / vs.length, cz = vs.reduce((s, v) => s + v[2], 0) / vs.length;
-      const key = mk + '|' + Math.floor(cx / P.chunk) + ',' + Math.floor(cz / P.chunk);
-      let B = bufs.get(key);
-      if (!B) bufs.set(key, B = { mk, p: [], n: [], u: [], i: [] });
-      const o = B.p.length / 3;
-      vs.forEach((v, k) => { B.p.push(v[0], v[1], v[2]); B.n.push(nx, ny, nz); B.u.push(uv[k][0], uv[k][1]); });
-      for (let k = 1; k + 1 < vs.length; k++) B.i.push(o, o + k, o + k + 1);
-    };
+    /* ---------- копилки мешей по квадратам и материалам (S.mesh) ---------- */
+    const Mk = {};
+    for (const k of Object.keys(M)) Mk[k] = S.mesh(k, M[k], { shadow: shadow.has(k), chunk: P.chunk, far: P.far });
+    const poly = (mk, vs, uv, hint) => Mk[mk].poly(vs, uv, hint);              // вершины [x, y, z] по кругу, uv [[u, v]], hint — куда нормаль
+    const beam = (mk, a, b, h, hw) => Mk[mk].beam(a, b, h, hw);                // брус: a, b — [x, z, низ], h — высота, hw — полутолщина
     const UP = [0, 1, 0];
     // своя сетка столкновений и поверхности
     const cv = [], ci = [];
     const cquad = (a, b, c, d) => { const o = cv.length / 3; cv.push(...a, ...b, ...c, ...d); ci.push(o, o + 1, o + 2, o, o + 2, o + 3); };
-    // брус вдоль ломаной: a, b — [x, z, низ], нормаль (nx, nz) к суше, h — высота, hw — полутолщина; верх и две грани
-    const beam = (mk, a, b, h, hw, uA = 0, uB = 1) => {
-      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (L < 0.02) return;
-      const px = -(b[1] - a[1]) / L * hw, pz = (b[0] - a[0]) / L * hw;
-      const A0 = [a[0] + px, a[1] + pz], A1 = [a[0] - px, a[1] - pz], B0 = [b[0] + px, b[1] + pz], B1 = [b[0] - px, b[1] - pz];
-      poly(mk, [[A0[0], a[2] + h, A0[1]], [B0[0], b[2] + h, B0[1]], [B1[0], b[2] + h, B1[1]], [A1[0], a[2] + h, A1[1]]], [[uA, 0], [uB, 0], [uB, 1], [uA, 1]], UP);
-      for (const [E, F, sg] of [[A0, B0, 1], [A1, B1, -1]])
-        poly(mk, [[E[0], a[2], E[1]], [F[0], b[2], F[1]], [F[0], b[2] + h, F[1]], [E[0], a[2] + h, E[1]]], [[uA, 0], [uB, 0], [uB, h], [uA, h]], [px * sg, 0, pz * sg]);
-    };
     const gapAt = (wi, a, line) => L.gaps.some(G => G[0] === wi && G[3] === line && a > G[1] && a < G[2]);
     const posts = { bal: [], balu: [], roll: [], ball: [], tube: [] };
 
@@ -481,7 +425,7 @@ const SITGES_ST_D = {
       }
       // тумбы и мелочь ограды — по длине стены с шагом, не в проёмах
       const L0 = -W.ext, L1 = A[n - 1] + W.ext;
-      const along = (step, line, fn) => { for (let s = L0 + step / 2; s < L1; s += step) if (!gapAt(wi, s, line)) fn(stPromAt(w, s), s); };
+      const along = (step, line, fn) => { for (let s = L0 + step / 2; s < L1; s += step) if (!gapAt(wi, s, line)) fn(sitgesStWallAt(w, s), s); };
       along(P.balus.post, 0, (e, s) => {
         const zi = P.zone(e.x);
         if (zi === 'rib') {
@@ -490,7 +434,7 @@ const SITGES_ST_D = {
           for (let j = 1; j <= P.balus.n; j++) {
             const s2 = s + P.balus.post * j / (P.balus.n + 1);
             if (s2 > L1 || gapAt(wi, s2, 0)) continue;
-            const f = stPromAt(w, s2);
+            const f = sitgesStWallAt(w, s2);
             posts.balu.push({ x: f.x + f.nx * o, z: f.z + f.nz * o, y: f.top + lift + 0.16, ry });
           }
         }
@@ -508,7 +452,7 @@ const SITGES_ST_D = {
 
     /* ---------- дорожки по газону к спускам (Marítim) ---------- */
     for (const [wi, ag, ad] of L.paths) {
-      const w = L.walls[wi], e = stPromAt(w, ag), f = stPromAt(w, ad), k = clamp(e.i + (e.t > 0.5 ? 1 : 0), 0, w.lawn.length - 1);
+      const w = L.walls[wi], e = sitgesStWallAt(w, ag), f = sitgesStWallAt(w, ad), k = clamp(e.i + (e.t > 0.5 ? 1 : 0), 0, w.lawn.length - 1);
       const ax = e.x + e.nx * w.lawn[k], az = e.z + e.nz * w.lawn[k], bx = f.x + f.nx * 0.3, bz = f.z + f.nz * 0.3;
       const Ld = Math.hypot(bx - ax, bz - az) || 1, px = -(bz - az) / Ld, pz = (bx - ax) / Ld, hw = 1.0;
       const ya = Math.max(e.top, g(ax, az)) + lift + 0.006, yb = f.top + lift + 0.006;
@@ -547,10 +491,10 @@ const SITGES_ST_D = {
         nStairs++;
       } else {
         // пандус вдоль стены: верх у дорожки (d.a), вниз на d.len м; плита, наружная стенка с парапетом
-        const RP = P.ramp, aEnd = d.a + d.dir * d.len, m = Math.max(2, Math.ceil(d.len / 2)), yEnd = stPromAt(w, aEnd).foot;
+        const RP = P.ramp, aEnd = d.a + d.dir * d.len, m = Math.max(2, Math.ceil(d.len / 2)), yEnd = sitgesStWallAt(w, aEnd).foot;
         const rows = [];
         for (let j = 0; j <= m; j++) {
-          const s = d.a + (aEnd - d.a) * j / m, e = stPromAt(w, s), y = d.top + (yEnd - d.top) * j / m + lift;
+          const s = d.a + (aEnd - d.a) * j / m, e = sitgesStWallAt(w, s), y = d.top + (yEnd - d.top) * j / m + lift;
           rows.push({ s, y, i: [e.x - e.nx * 0.02, e.z - e.nz * 0.02], o: [e.x - e.nx * RP.w, e.z - e.nz * RP.w], o2: [e.x - e.nx * (RP.w + 0.3), e.z - e.nz * (RP.w + 0.3)], foot: e.foot, nx: e.nx, nz: e.nz });
         }
         for (let j = 0; j < m; j++) {
@@ -571,21 +515,7 @@ const SITGES_ST_D = {
       }
     }
 
-    /* ---------- меши из копилки ---------- */
-    for (const B of bufs.values()) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(B.p, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(B.n, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(B.u, 2));
-      geo.setIndex(B.i);
-      geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, M[B.mk]);
-      mesh.castShadow = shadow.has(B.mk); mesh.receiveShadow = true;
-      K.group.add(mesh);
-      const s = geo.boundingSphere;
-      K.roadLod.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, far: P.far });
-      st.meshes++; st.tris += B.i.length / 3;
-    }
+    S.flush();                                           // меши копилок — до экземпляров (порядок в группе прежний)
     S.collider(cv, ci);
 
     /* ---------- тумбы, балясины, шары, стойки (экземпляры) ---------- */
@@ -627,7 +557,7 @@ const SITGES_ST_D = {
       ], L.shower.map(([x, z]) => ({ x, z, ry: ((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1) * Math.PI * 2 })),
       { brk: { mass: 70, anchor: 1, minSpeed: 2, cy: 1.1, lie: 1.4, kind: 'metal' }, hit: { r: 0.12, h: 2.3 } });
     }
-    st.n += L.walls.length + nStairs + nRamps;
+    S.count(L.walls.length + nStairs + nRamps);
   },
 };
 

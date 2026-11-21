@@ -8,7 +8,7 @@
 //   (плита slab + парапет parapet, наружу на out), пол террасы; у первого этажа — цоколь plinth; на крыше — надстройка.
 //   Столкновения — по контурам частей кадастра.
 // Определяет: SITGES_LM_TERRAMAR.
-// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); lmMat, lmInset, lmCollide
+// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmMat, lmInset, lmCollide
 //   (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
