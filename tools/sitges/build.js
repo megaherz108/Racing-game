@@ -14,8 +14,9 @@
 //   5в. крыши частей по плиткам ICGC (тип — лидар, цвет — ортофото; tools/sitges/read-roofs.js), точки OSM;
 //   5г. калитки и ворота: входы кадастра, окна съездов по ортофото, служебные проезды (tools/sitges/read-gates.js);
 //   5д. деревья: кроны из лидара ICGC — место, высота, радиус, признаки формы (tools/sitges/read-trees.js);
+//   5е. заведения OSM (этап 6а): точки и середины контуров — вид, название, бренд, терраса, кухня;
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
-//      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js.
+//      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js, data-venues.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
@@ -369,6 +370,72 @@ const trees = treesAll ? treesAll.trees.filter(t => inside(t.x, t.z, 20)).map(t 
 const trStream = trees.flatMap(t => [Math.round(t.h * 10), Math.round(t.r * 10), Math.min(99, Math.round(t.el * 10)), Math.round(t.fl * 100), Math.round(t.gp * 100), t.src]);
 
 /* =====================================================================
+   5е. ЗАВЕДЕНИЯ (этап 6а.0): точки OSM (узлы raw/points.json и raw/osm.json) и контуры отелей, супермаркетов,
+   ресторанов и заправок из raw/osm.json (середина контура) — вид, название, бренд, терраса, кухня
+   ===================================================================== */
+const VENUE_CATS = ['restaurant', 'cafe', 'bar', 'club', 'fastfood', 'icecream', 'bakery', 'supermarket', 'convenience',
+  'pharmacy', 'bank', 'fuel', 'hotel', 'shop'];
+const AMENITY_CAT = { restaurant: 'restaurant', cafe: 'cafe', bar: 'bar', pub: 'bar', nightclub: 'club', fast_food: 'fastfood',
+  ice_cream: 'icecream', pharmacy: 'pharmacy', bank: 'bank', fuel: 'fuel' };
+const venueCat = t => AMENITY_CAT[t.amenity] || (/^(hotel|hostel|guest_house|motel)$/.test(t.tourism || '') ? 'hotel'
+  : !t.shop || /^(vacant|yes|no)$/.test(t.shop) ? null : t.shop === 'supermarket' ? 'supermarket' : t.shop === 'convenience' ? 'convenience'
+  : /^(bakery|pastry|confectionery)$/.test(t.shop) ? 'bakery' : t.shop === 'ice_cream' ? 'icecream' : 'shop');
+// ключи брендов (договор docs/sitges/stage-6a.md): [ключ, образец по brand и name, виды, где образец по name верен]
+const VENUE_BRANDS = [
+  ['mercadona', /mercadona/i, /supermarket|convenience/], ['caprabo', /caprabo/i, /supermarket|convenience/],
+  ['lidl', /^lidl\b/i, /supermarket/], ['aldi', /^aldi\b/i, /supermarket/], ['dia', /^(dia|%dia)(\s|$)/i, /supermarket|convenience/],
+  ['bonpreu', /bon ?preu/i, /supermarket|convenience/], ['consum', /^consum\b/i, /supermarket|convenience/],
+  ['carrefour', /carrefour/i, /supermarket|convenience/], ['supercor', /supercor/i, /supermarket|convenience/],
+  ['caixabank', /caixa ?bank|la caixa/i, /bank/], ['bbva', /bbva/i, /bank/], ['sabadell', /sabadell/i, /bank/],
+  ['santander', /santander/i, /bank/], ['repsol', /repsol/i, /fuel/], ['q8', /^q8\b/i, /fuel/], ['365', /^365\b/i, /cafe|bakery|fastfood/],
+  ['clarel', /clarel/i, /shop/], ['womensecret', /women.?secret/i, /shop/],
+];
+const venueBrand = (t, cat) => {
+  const b = t.brand && VENUE_BRANDS.find(([, re]) => re.test(t.brand));
+  if (b) return b[0];
+  const nm = t.name || t['name:ca'] || '', n = nm && VENUE_BRANDS.find(([, re, cats]) => cats.test(cat) && re.test(nm));
+  return n ? n[0] : null;
+};
+const venues = [], vStat = { noName: 0, outside: 0, dupContour: 0, contours: 0, dup: 0 };
+{
+  const seenId = new Set(), add = (e, x, z, contour) => {
+    const t = e.tags, cat = venueCat(t);
+    if (!cat) return;
+    if (!inside(x, z, 20)) { vStat.outside++; return; }
+    const brand = venueBrand(t, cat), name = (t.name || t['name:ca'] || '').trim();
+    if (!name && !brand) { vStat.noName++; return; }
+    // то же заведение дважды (вид и название или бренд) ближе 60 м — одно (у контура — 80 м, см. ниже)
+    if (venues.some(v => v.cat === cat && Math.hypot(v.x - x, v.z - z) < 60 && (brand ? v.brand === brand : v.name === name))) { vStat.dup++; return; }
+    venues.push({ cat, name, brand, x: r1(x), z: r1(z), terrace: t.outdoor_seating === 'yes', contour,
+      cuisine: (t.cuisine || '').split(';')[0].trim().toLowerCase() });
+  };
+  const rawPts = fs.existsSync(path.join(G.RAW, 'points.json')) ? JSON.parse(fs.readFileSync(path.join(G.RAW, 'points.json'), 'utf8')).elements : [];
+  const rawOsm = JSON.parse(fs.readFileSync(path.join(G.RAW, 'osm.json'), 'utf8')).elements;
+  for (const e of [...rawPts, ...rawOsm]) {
+    if (e.type !== 'node' || !e.tags || seenId.has(e.id)) continue;
+    seenId.add(e.id);
+    const [x, z] = loc(G.utm(e.lat, e.lon));
+    add(e, x, z, false);
+  }
+  // контуры: отели, супермаркеты, рестораны, заправки — середина контура; рядом с тем же заведением точкой — пропуск
+  const nodes = venues.length;
+  for (const e of rawOsm) {
+    if (e.type !== 'way' || !e.tags || !e.geometry || e.geometry.length < 3) continue;
+    const t = e.tags;
+    if (!(t.tourism === 'hotel' || t.shop === 'supermarket' || t.amenity === 'restaurant' || t.amenity === 'fuel')) continue;
+    const ring = e.geometry.map(q => loc(G.utm(q.lat, q.lon))), [x, z] = U.centroid(ring.slice(0, -1));
+    const cat = venueCat(t), brand = venueBrand(t, cat), name = (t.name || t['name:ca'] || '').trim();
+    if (venues.slice(0, nodes).some(v => v.cat === cat && Math.hypot(v.x - x, v.z - z) < 80 && (brand ? v.brand === brand : v.name === name))) { vStat.dupContour++; continue; }
+    vStat.contours++;
+    add(e, x, z, true);
+  }
+}
+venues.sort((a, b) => VENUE_CATS.indexOf(a.cat) - VENUE_CATS.indexOf(b.cat) || morton(a.x, a.z) - morton(b.x, b.z));
+const vNames = strTable(), vCuis = strTable();
+const vStream = venues.flatMap(v => [VENUE_CATS.indexOf(v.cat), vNames.id(v.name), v.brand ? VENUE_BRANDS.findIndex(b => b[0] === v.brand) + 1 : 0,
+  (v.terrace ? 1 : 0) | (v.contour ? 2 : 0), vCuis.id(v.cuisine)]);
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
@@ -544,6 +611,25 @@ if (treesAll) write('data-trees.js', [
 };
 `);
 
+write('data-venues.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: заведения (этап 6а.0) — рестораны, кафе, бары, магазины, аптеки, банки, заправки, отели.',
+  `// Источник: OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}; контуры — ${dOSM}).`, LIC_OSM,
+  '// Узлы — точкой; контуры отелей, супермаркетов, ресторанов и заправок — серединой (если рядом нет того же точкой).',
+  '// Без названия (name, иначе name:ca) — пропуск, кроме заведений сети (надпись — по бренду, js/maps/sitges/signs.js).',
+  '// SITGES_VENUES: cats — виды; brands — ключи брендов (договор docs/sitges/stage-6a.md); names, cuisines — таблицы',
+  '//   (индекс + 1, 0 — нет); m — на каждое заведение по порядку [вид, название, бренд, флаги (1 — терраса outdoor_seating,',
+  '//   2 — с контура), кухня (первая из cuisine)]; p — точки (поток); отсортированы по виду, внутри — по положению.',
+], 'SITGES_VENUES', `const SITGES_VENUES = {
+  n: ${venues.length},
+  cats: ${J(VENUE_CATS)},
+  brands: ${J(VENUE_BRANDS.map(b => b[0]))},
+  names: ${J(vNames.list)},
+  cuisines: ${J(vCuis.list)},
+  m: '${U.enc(vStream)}',
+  p: '${U.encPoints([venues.map(v => [v.x, v.z])])}',
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -567,6 +653,13 @@ if (roofs) {
 else console.log('Крыши: нет плиток orto/ и dsm/ — запусти download.js (data-roofs.js не записан)');
 console.log(`Точки OSM: ${PT_KINDS.map((k, i) => k + ' ' + pts.filter(p => p.k === i).length).join(', ')}`);
 console.log(`Калитки и ворота: входов Entrance ${gates.stat.ent} (без участка на карте ${gates.stat.entNoParcel}); окон съездов ${gates.stat.win} у ${gates.stat.winLots} участков${gates.stat.noTiles ? ' (НЕТ ПЛИТОК orto/)' : ''}; служебных проездов через границу ${gates.stat.svc}`);
+{
+  const by = {}, bb = {};
+  for (const v of venues) { by[v.cat] = (by[v.cat] || 0) + 1; if (v.brand) bb[v.brand] = (bb[v.brand] || 0) + 1; }
+  console.log(`Заведения: ${venues.length} (с контура ${vStat.contours}, контур рядом с той же точкой ${vStat.dupContour}, дублей точкой ${vStat.dup}; без названия и бренда ${vStat.noName}, вне области ${vStat.outside}); с брендом ${venues.filter(v => v.brand).length}, с террасой ${venues.filter(v => v.terrace).length}, с кухней ${venues.filter(v => v.cuisine).length}`);
+  console.log('  по видам:', VENUE_CATS.map(k => k + ' ' + (by[k] || 0)).join(', '));
+  console.log('  бренды:', Object.entries(bb).map(([k, n]) => k + ' ' + n).join(', '));
+}
 if (treesAll) {
   const st = treesAll.stat, q = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
   const hs = trees.map(t => t.h).sort((a, b) => a - b), rs = trees.map(t => t.r).sort((a, b) => a - b);

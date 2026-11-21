@@ -25,7 +25,7 @@
 //   (js/maps/sitges/houses.js); sitgesPlanLandmarks (js/maps/sitges/landmarks.js); sitgesPlanFences
 //   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
 //   (js/maps/sitges/fencestyle.js); sitgesPlanGates (js/maps/sitges/gates.js); sitgesPlanTrees
-//   (js/maps/sitges/trees.js).
+//   (js/maps/sitges/trees.js); sitgesPlanSigns (js/maps/sitges/signs.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -84,6 +84,7 @@ function sitgesData() {
   sitgesPlanGates(C);
   sitgesPlanTrees(C);
   sitgesPlanFacades(C);
+  sitgesPlanSigns(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)
