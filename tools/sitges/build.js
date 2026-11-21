@@ -14,7 +14,8 @@
 //   5в. крыши частей по плиткам ICGC (тип — лидар, цвет — ортофото; tools/sitges/read-roofs.js), точки OSM;
 //   5г. калитки и ворота: входы кадастра, окна съездов по ортофото, служебные проезды (tools/sitges/read-gates.js);
 //   5д. деревья: кроны из лидара ICGC — место, высота, радиус, признаки формы (tools/sitges/read-trees.js);
-//   5е. заведения OSM (этап 6а): точки и середины контуров — вид, название, бренд, терраса, кухня;
+//   5е. заведения OSM (этап 6а): точки и середины контуров — вид, название, бренд, терраса, кухня; сверх OSM —
+//       Overture Maps, реестр туризма Каталонии и свой список venues-extra.json (tools/sitges/read-venues.js, 6а.7);
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
 //      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js, data-venues.js.
 const fs = require('fs');
@@ -27,6 +28,7 @@ const { readDTM } = require('./read-dtm');
 const { readRoofs, ROOF_TYPES, ROOF } = require('./read-roofs');
 const { readGates, GATE } = require('./read-gates');
 const { readTrees, TREE } = require('./read-trees');
+const { mergeVenues, VENUE_SRC } = require('./read-venues');
 
 const CFG = {
   north: 400,        // граница на севере: ж/д + 400 м…
@@ -430,10 +432,14 @@ const venues = [], vStat = { noName: 0, outside: 0, dupContour: 0, contours: 0, 
     add(e, x, z, true);
   }
 }
+// сверх OSM: свой список, реестр туризма, Overture (tools/sitges/read-venues.js) — дубли с OSM отсекаются там
+const coastD = (x, z) => { let d = Infinity; for (const l of coast) for (let i = 1; i < l.length; i++) d = Math.min(d, segD(x, z, l[i - 1], l[i])); return d; };
+function segD(x, z, a, b) { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t); }
+const vMerge = mergeVenues({ venues, loc, utm: G.utm, inside, ad, venueBrand, coastD });
 venues.sort((a, b) => VENUE_CATS.indexOf(a.cat) - VENUE_CATS.indexOf(b.cat) || morton(a.x, a.z) - morton(b.x, b.z));
 const vNames = strTable(), vCuis = strTable();
 const vStream = venues.flatMap(v => [VENUE_CATS.indexOf(v.cat), vNames.id(v.name), v.brand ? VENUE_BRANDS.findIndex(b => b[0] === v.brand) + 1 : 0,
-  (v.terrace ? 1 : 0) | (v.contour ? 2 : 0), vCuis.id(v.cuisine)]);
+  (v.terrace ? 1 : 0) | (v.contour ? 2 : 0), vCuis.id(v.cuisine), VENUE_SRC.indexOf(v.src)]);
 
 /* =====================================================================
    6. ЗАПИСЬ
@@ -612,16 +618,23 @@ if (treesAll) write('data-trees.js', [
 `);
 
 write('data-venues.js', [
-  '// Карта «Ситжес» — ДАННЫЕ: заведения (этап 6а.0) — рестораны, кафе, бары, магазины, аптеки, банки, заправки, отели.',
-  `// Источник: OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}; контуры — ${dOSM}).`, LIC_OSM,
-  '// Узлы — точкой; контуры отелей, супермаркетов, ресторанов и заправок — серединой (если рядом нет того же точкой).',
+  '// Карта «Ситжес» — ДАННЫЕ: заведения (этапы 6а.0, 6а.7) — рестораны, кафе, бары, магазины, аптеки, банки, заправки, отели.',
+  `// Источники (поле «источник»): 0 — OpenStreetMap (Overpass, скачано ${fs.existsSync(path.join(G.RAW, 'points.json')) ? date('points.json') : '—'}; контуры — ${dOSM}).`, LIC_OSM,
+  `// 1 — Overture Maps Foundation, overturemaps.org, тема places, выпуск ${vMerge.stat.release || '—'}: записи под CDLA Permissive 2.0`,
+  '//   (cdla.dev/permissive-2-0) и CC0 1.0 (AllThePlaces); записи Foursquare (Apache 2.0) не берём.',
+  `// 2 — Generalitat de Catalunya. Departament d'Empresa i Treball: Registre de Turisme de Catalunya (набор t2h3-cgys,`,
+  `//   analisi.transparenciacatalunya.cat; скачано ${fs.existsSync(path.join(G.RAW, 'turisme.json')) ? date('turisme.json') : '—'}), Llicència oberta d'ús d'informació – Catalunya;`,
+  '//   точка — вход по адресу кадастра (улица и номер). 3 — свой список tools/sitges/venues-extra.json.',
+  '// OSM — точкой (контуры отелей, супермаркетов, ресторанов и заправок — серединой); из других источников —',
+  '//   только то, чего нет в OSM (похожее название ближе 60 м, у отелей — 120 м; tools/sitges/read-venues.js).',
   '// Без названия (name, иначе name:ca) — пропуск, кроме заведений сети (надпись — по бренду, js/maps/sitges/signs.js).',
   '// SITGES_VENUES: cats — виды; brands — ключи брендов (договор docs/sitges/stage-6a.md); names, cuisines — таблицы',
   '//   (индекс + 1, 0 — нет); m — на каждое заведение по порядку [вид, название, бренд, флаги (1 — терраса outdoor_seating,',
-  '//   2 — с контура), кухня (первая из cuisine)]; p — точки (поток); отсортированы по виду, внутри — по положению.',
+  '//   2 — с контура), кухня (первая из cuisine), источник]; p — точки (поток); отсортированы по виду, внутри — по положению.',
 ], 'SITGES_VENUES', `const SITGES_VENUES = {
   n: ${venues.length},
   cats: ${J(VENUE_CATS)},
+  sources: ${J(VENUE_SRC)},
   brands: ${J(VENUE_BRANDS.map(b => b[0]))},
   names: ${J(vNames.list)},
   cuisines: ${J(vCuis.list)},
@@ -659,6 +672,10 @@ console.log(`Калитки и ворота: входов Entrance ${gates.stat.
   console.log(`Заведения: ${venues.length} (с контура ${vStat.contours}, контур рядом с той же точкой ${vStat.dupContour}, дублей точкой ${vStat.dup}; без названия и бренда ${vStat.noName}, вне области ${vStat.outside}); с брендом ${venues.filter(v => v.brand).length}, с террасой ${venues.filter(v => v.terrace).length}, с кухней ${venues.filter(v => v.cuisine).length}`);
   console.log('  по видам:', VENUE_CATS.map(k => k + ' ' + (by[k] || 0)).join(', '));
   console.log('  бренды:', Object.entries(bb).map(([k, n]) => k + ' ' + n).join(', '));
+  const M = vMerge.stat, kv = o => Object.entries(o).map(([k, n]) => k + ' ' + n).join(', ') || '—';
+  console.log(`  по источникам: ${kv(M.src)}; дубли с уже взятыми: ${kv(M.dup)}; Overture — выпуск ${M.release || 'нет файла'}`);
+  for (const k of ['overture', 'turisme', 'extra']) if (Object.keys(M.skip[k]).length) console.log(`  пропуск ${k}: ${kv(M.skip[k])}`);
+  for (const k of ['ribera', 'maritim']) console.log(`  набережная ${k === 'ribera' ? 'Ribera' : 'Marítim'}: ${kv(M.front[k] || {})}`);
 }
 if (treesAll) {
   const st = treesAll.stat, q = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];

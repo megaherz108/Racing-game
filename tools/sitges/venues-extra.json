@@ -1,0 +1,8 @@
+{
+  "о файле": "Свои заведения сверх OSM, Overture и реестра туризма (этап 6а.7). Читает tools/sitges/build.js (read-venues.js). Каждое — name, cat (restaurant, cafe, bar, club, fastfood, icecream, bakery, supermarket, convenience, pharmacy, bank, fuel, hotel, shop) и место: addr — «улица номер» по кадастру (например «Passeig Marítim 21») или x, z — координаты игры (__sitgesFind, __signMap). brand — по желанию (ключи — docs/sitges/stage-6a.md). Есть похожее название ближе 60 м в OSM — пропуск. Пример — в «пример», в игру не идёт; свои — в venues.",
+  "пример": [
+    { "name": "Casa Vilella", "cat": "hotel", "addr": "Passeig Marítim 21" },
+    { "name": "Chiringuito", "cat": "bar", "x": -250, "z": -92 }
+  ],
+  "venues": []
+}

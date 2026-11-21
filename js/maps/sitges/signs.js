@@ -51,6 +51,7 @@ const SITGES_SIGNS = {
     // буквы над входом (низ второго этажа), а не на крыше — по кадрам 6а.4: { название: высота букв }
     low: { Calipolis: 1.0 } },
   totem: { w: 1.4, h: 3.2, foot: 0.6, back: 2.2, side: 2.5 },  // стела: лицо, низ лица над землёй, от бордюра назад, вбок от доски
+  beachR: 50, beachBack: 2.5, // пляжный клуб без здания: тротуар или мостовая ближе beachR — стела в beachBack м от них
   canopy: { w: 14, h: 0.8, y: 5.2 },                            // навес АЗС: кромка w × h, середина на y над землёй
   maxText: 24,       // длиннее — режем по « - », « | », « (»
   seaR: 130,         // набережная: берег ближе стольких метров перед фасадом
@@ -89,13 +90,14 @@ const SITGES_SIGNS = {
     repsol: 'Repsol', q8: 'Q8', 365: '365', clarel: 'Clarel', womensecret: "women'secret" },
 };
 
-// заведения из SITGES_VENUES: [{ cat, name, brand, terrace, contour, cuisine, x, z }]
+// заведения из SITGES_VENUES: [{ cat, name, brand, terrace, contour, cuisine, src, x, z }] (src — источник: osm,
+// overture, turisme, extra — этап 6а.7; по 6 чисел на заведение, у старых данных без sources — по 5)
 function sitgesVenues() {
   if (typeof SITGES_VENUES === 'undefined') return [];
-  const V = SITGES_VENUES, m = sitgesDec(V.m), [P] = sitgesPts(V.p, [V.n]), out = [];
-  for (let i = 0, k = 0; i < m.length; i += 5, k++) out.push({ cat: V.cats[m[i]], name: m[i + 1] ? V.names[m[i + 1] - 1] : '',
+  const V = SITGES_VENUES, m = sitgesDec(V.m), [P] = sitgesPts(V.p, [V.n]), out = [], N = V.sources ? 6 : 5;
+  for (let i = 0, k = 0; i < m.length; i += N, k++) out.push({ cat: V.cats[m[i]], name: m[i + 1] ? V.names[m[i + 1] - 1] : '',
     brand: m[i + 2] ? V.brands[m[i + 2] - 1] : null, terrace: !!(m[i + 3] & 1), contour: !!(m[i + 3] & 2),
-    cuisine: m[i + 4] ? V.cuisines[m[i + 4] - 1] : '', x: P[k][0], z: P[k][1] });
+    cuisine: m[i + 4] ? V.cuisines[m[i + 4] - 1] : '', src: V.sources ? V.sources[m[i + 5]] : 'osm', x: P[k][0], z: P[k][1] });
   return out;
 }
 
@@ -104,8 +106,10 @@ function sitgesPlanSigns(C) {
   const venues = sitgesVenues(), signs = [];
   // маркиза (на набережной и в старом городе) и флажок — у каких видов
   const AWN = new Set(['restaurant', 'cafe', 'icecream']), BLADE = new Set(['bar', 'club', 'bank']);
-  const st = { venues: venues.length, placed: 0, generic: 0, byForm: {}, byCat: {}, skip: { far: 0, tight: 0, busy: 0, lm: 0, noWall: 0 }, miss: [] };
-  const miss = (v, why) => { st.skip[why]++; st.miss.push([why, v.cat, v.name || v.brand, Math.round(v.x), Math.round(v.z)]); };
+  // без здания рядом (пляжный клуб, чирингито) — стела у променада
+  const BEACH = new Set(['restaurant', 'cafe', 'bar', 'club', 'fastfood', 'icecream']);
+  const st = { venues: venues.length, placed: 0, generic: 0, beach: 0, bySrc: {}, byForm: {}, byCat: {}, skip: { far: 0, tight: 0, busy: 0, lm: 0, noWall: 0 }, miss: [] };
+  const miss = (v, why) => { st.skip[why]++; st.miss.push([why, v.cat, v.name || v.brand, Math.round(v.x), Math.round(v.z), v.src]); };
   const f32 = Math.fround;
   // хеш как в шейдере фасада (fHash, js/maps/sitges/facade.js) — в float32
   const fHash = n => { n = f32(n * f32(0.1031)); n = f32(n - Math.floor(n)); n = f32(n * f32(n + f32(33.33))); n = f32(n * f32(n + n)); return n - Math.floor(n); };
@@ -287,9 +291,21 @@ function sitgesPlanSigns(C) {
 
   /* ---------- своё здание без фасада к улице: открытые стены во двор-площадь ---------- */
   // здание заведения: под точкой или в паре шагов от неё
+  // (точка у края дома или в шаге от него — ближайший контур не дальше bldR)
   const bldOf = (x, z) => {
     let h = C.houseAt(x, z);
-    for (let r = 3; !h && r <= S.bldR; r += 3) for (let k = 0; k < 8 && !h; k++) h = C.houseAt(x + r * Math.cos(k * Math.PI / 4), z + r * Math.sin(k * Math.PI / 4));
+    if (!h) {
+      let bd = S.bldR;
+      for (const o of houses) {
+        const b = o.box;
+        if (x < b[0] - bd || x > b[1] + bd || z < b[2] - bd || z > b[3] + bd) continue;
+        const r = o.rings[0];
+        for (let i = 0; i < r.length; i++) {
+          const a = r[i], c = r[(i + 1) % r.length], d = sitgesSeg(x, z, a[0], a[1], c[0], c[1]);
+          if (d < bd) { bd = d; h = o; }
+        }
+      }
+    }
     return h && !h.lm ? h : null;
   };
   // стены здания bi до земли, перед которыми ни одного дома ближе open м: куски (как pieces, свои used), по зданию
@@ -338,7 +354,11 @@ function sitgesPlanSigns(C) {
     // нет фасада к улице рядом — открытые стены своего здания (магазин во дворе-площади, на парковке)
     const bh = cand.length ? null : bldOf(v.x, v.z);
     if (bh) cand = byDist(ownOpen(bh.bi), v.x, v.z).slice(0, S.tries);
-    if (!cand.length) { miss(v, 'far'); continue; }
+    if (!cand.length) {
+      // пляжный клуб, чирингито без здания — стела у края тротуара или мостовой ближе beachR, лицом к ним
+      if (!bh && BEACH.has(v.cat) && placeBeach(v, text)) { placed.push(v); st.placed++; st.beach++; continue; }
+      miss(v, 'far'); continue;
+    }
     let ok = 'far', q = null;
     for (q of cand) {
       const p = q.p, mx = (p.w.ax + p.w.bx) / 2, mz = (p.w.az + p.w.bz) / 2;
@@ -374,7 +394,8 @@ function sitgesPlanSigns(C) {
       if (p.h.bi !== bi || p.h.lm || p.L < 4 || Math.abs(p.w.hi - p.h.y1) > 0.6) continue;
       const mx = (p.w.ax + p.w.bx) / 2, mz = (p.w.az + p.w.bz) / 2;
       const c = carriageAt(mx + p.w.nx * 6, mz + p.w.nz * 6, null, 4), wide = c ? 2 * c.st.v[c.i].hw : 0;
-      const s = (seaFront(p) ? 100 : 0) + wide * 3 + Math.min(p.L, 30) + p.h.y1 * 0.2;
+      // корпуса одного кадастрового здания бывают порознь — ближний к точке лучше
+      const s = (seaFront(p) ? 100 : 0) + wide * 3 + Math.min(p.L, 30) + p.h.y1 * 0.2 - 1.5 * sitgesSeg(v.x, v.z, p.w.ax, p.w.az, p.w.bx, p.w.bz);
       if (s > bs) { bs = s; best = p; }
     }
     if (!best) return 'noWall';
@@ -397,6 +418,23 @@ function sitgesPlanSigns(C) {
   }
 
   /* ---------- стела супермаркета у улицы ---------- */
+  function placeBeach(v, text) {
+    // ближайшая по 16 направлениям точка тротуара или мостовой; стела — на beachBack м не доходя, на земле без дома
+    let best = null;
+    for (let k = 0; k < 16; k++) {
+      const ux = Math.cos(k * Math.PI / 8), uz = Math.sin(k * Math.PI / 8);
+      for (let d = 0; d <= S.beachR && (!best || d < best.d); d += 1) {
+        const x = v.x + ux * d, z = v.z + uz * d;
+        if (carriageAt(x, z) || onWalk(x, z)) { best = { d, ux, uz }; break; }
+      }
+    }
+    if (!best) return false;
+    const dd = Math.max(0, best.d - S.beachBack), x = v.x + best.ux * dd, z = v.z + best.uz * dd, T = S.totem;
+    if (C.houseAt(x, z) || carriageAt(x, z)) return false;
+    push({ x: r2(x), y: r2(ground(x, z) + T.foot + T.h / 2), z: r2(z), nx: r2(best.ux), nz: r2(best.uz), w: T.w, h: T.h, form: 'totem', cat: v.cat, text, brand: v.brand }, false);
+    return true;
+  }
+
   function placeTotem(p, t, v, text) {
     // от стены по нормали до проезжей части; стела — back м до бордюра, сбоку от доски
     const T = S.totem, tc = clamp(t + T.side * (t < p.L / 2 ? -1 : 1), 0, p.L), [x0, z0] = at(p, tc);
@@ -456,6 +494,7 @@ function sitgesPlanSigns(C) {
       }
     }
   }
+  for (const v of placed) st.bySrc[v.src] = (st.bySrc[v.src] || 0) + 1;
   st.signs = signs.length;
   Object.assign(C, { signs, signStats: st });
 }
