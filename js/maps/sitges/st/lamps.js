@@ -17,7 +17,7 @@
 //   build(K, S, L) — постройка (js/maps/sitges/street3d.js): S — помощники постройки (K.st), L — данные из plan.
 // Свои глобальные имена — с префиксом stLamp… (после — node tools/deps.js --headers).
 // Определяет: SITGES_LAMP, stLampPlan, stLampGeo, SITGES_ST_A.
-// Использует: clamp (js/core.js).
+// Использует: clamp (js/core.js); sitgesCells, sitgesSeg (js/maps/sitges/geom.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -87,6 +87,31 @@ function stLampPlan(C, S) {
     S.reserve(x, z, P.r.pole, 'A');
     return { x, z, ry: Math.atan2(nx, nz) };
   };
+  // плиты балконов и вывески на стенах (кроме стел) — по клеткам: фонарь не в плите и не в вывеске
+  const onWall = sitgesCells(8);
+  for (const b of C.balconies || []) onWall.add(Math.min(b.ax, b.bx), Math.max(b.ax, b.bx), Math.min(b.az, b.bz), Math.max(b.az, b.bz), { b });
+  for (const g of C.signs || []) if (g.form !== 'totem') onWall.add(g.x - g.w / 2, g.x + g.w / 2, g.z - g.w / 2, g.z + g.w / 2, { g });
+  // высота кронштейна у стены (x, z, нормаль nx, nz): под плитой балкона, если она мешает; null — вывеска рядом
+  const wallFit = (x, z, nx, nz, y) => {
+    let ok = true;
+    for (let pass = 0; pass < 3; pass++) {           // опустились под плиту — проверить плиту ниже
+      let moved = false;
+      onWall.each(x - 1, x + 1, z - 1, z + 1, l => {
+        for (const o of l) {
+          if (o.g) {
+            const g = o.g;
+            if (g.nx * nx + g.nz * nz > 0.7 && Math.hypot(g.x - x, g.z - z) < g.w / 2 + 0.6 && Math.abs(g.y - y + 0.35) < g.h / 2 + 0.6) ok = false;
+            continue;
+          }
+          const b = o.b;
+          if (b.nx * nx + b.nz * nz < 0.7 || sitgesSeg(x, z, b.ax, b.az, b.bx, b.bz) > 0.35) continue;
+          if (y + 0.1 > b.y - b.t - 0.05 && y - 0.8 < b.y + 1.1) { y = b.y - b.t - 0.12; moved = true; }
+        }
+      });
+      if (!moved) break;
+    }
+    return ok ? y : null;
+  };
   // на стене дома к улице у края тротуара (или полотна)
   const atWall = (st, A, side) => {
     const [nx, nz] = sideN(A, side), d = A.hw + A.sw[side] + 0.4;
@@ -97,6 +122,8 @@ function stLampPlan(C, S) {
     const x = w.ax + (w.bx - w.ax) * n.f, z = w.az + (w.bz - w.az) * n.f, g = w.ga + (w.gb - w.ga) * n.f;
     let y = g + P.wallY;
     if (y > w.hi - 0.4) y = w.hi - 0.4;
+    y = wallFit(x, z, w.nx, w.nz, y);
+    if (y === null) return fail('wall-sign');
     if (y - g < P.wallMin) return fail('wall-low');
     if (nearOsm(x, z)) return fail('osm-near');
     if (!S.free(x + w.nx * 0.5, z + w.nz * 0.5, P.r.wall, ['door', 'gate'])) return fail('wall-busy');
@@ -211,7 +238,7 @@ const SITGES_ST_A = {
     // цвета — по фото: кованое железо чёрное, столбы кварталов серые, мачты светло-серые, чугун тёмный
     const iron = S.mat(0x1c1c1c, { roughness: 0.6, metalness: 0.4 }), grey = S.mat(0x7a7e84, { roughness: 0.55, metalness: 0.5 });
     const light = S.mat(0x9fa3a8, { roughness: 0.5, metalness: 0.55 }), cast = S.mat(0x2c312f, { roughness: 0.6, metalness: 0.4 });
-    const warm = S.glow(0x8e8c82, 0xffe2a8), white = S.glow(0xc8ccd0, 0xfff4e0);
+    const warm = S.glow(0xb8b6ac, 0xffe2a8), white = S.glow(0xc8ccd0, 0xfff4e0);
     const BRK = { anchor: 2, minSpeed: 2.5, lie: 1.5, kind: 'metal', snd: 'glass' };
     const all = [];                                // огни всех видов — одним вызовом (2 меша на квадрат)
     const lights = (items, head, r) => {           // ореол у стекла, пятно света радиусом r — вниз и к дороге
@@ -227,18 +254,18 @@ const SITGES_ST_A = {
 
     const wall = L.wall.map(([x, z, ry, y]) => ({ x, z, ry, y }));
     S.place([{ geo: G.wall.iron, mat: iron }, { geo: G.wall.glass, mat: warm, shadow: false }], wall, { far: 260, chunk: CH });
-    lights(wall, G.wall.head, 4.2);
+    lights(wall, G.wall.head, 3.8);
 
     const pole = L.pole.map(([x, z, ry]) => ({ x, z, ry }));
     S.place([{ geo: G.pole.body, mat: grey }, { geo: G.pole.glass, mat: white, shadow: false }], pole,
       { brk: Object.assign({ mass: 110, cy: 2.5, dmg: 0.3 }, BRK), hit: { r: 0.12, h: 5 }, far: 320, chunk: CH });
-    lights(pole, G.pole.head, 5.5);
+    lights(pole, G.pole.head, 5);
 
     for (const heads of [1, 2]) {
       const mast = L.mast.filter(m => m[3] === heads).map(([x, z, ry]) => ({ x, z, ry, heads }));
       S.place([{ geo: heads === 2 ? G.mast.body2 : G.mast.body, mat: light }, { geo: heads === 2 ? G.mast.glass2 : G.mast.glass, mat: white, shadow: false }], mast,
         { brk: Object.assign({ mass: 220, cy: 4, dmg: 0.4 }, BRK), hit: { r: 0.18, h: 9 }, far: 420, chunk: CH });
-      lights(mast, G.mast.head, 7.5);
+      lights(mast, G.mast.head, 6);
     }
 
     const post = L.post.map(([x, z]) => ({ x, z, ry: 0 }));
