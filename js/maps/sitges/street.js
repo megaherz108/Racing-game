@@ -47,13 +47,22 @@
 //   S.fenceCut(x0, z0, x1, z1) — отрезок пересекает забор (C.fences); S.coastD(x, z, R) — до линии берега (C.coast), ≤ R.
 //   skip в S.hits / S.free — функция получает и сам элемент занятости: skip(who, o) — исключения по месту (кронштейн
 //     высоко на стене, своя дверь); зовётся только для пересекающих.
-// Определяет: SITGES_ST, SITGES_ST_GROUPS, sitgesStGroups, sitgesStHash, sitgesZebras, sitgesPlanStreet.
-// Использует: clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_WALL
-//   (js/maps/sitges/houses.js); SITGES_OLDTOWN (js/maps/sitges/styles.js); SITGES_ST_A (js/maps/sitges/st/lamps.js);
-//   SITGES_ST_B (js/maps/sitges/st/marks.js); SITGES_ST_C (js/maps/sitges/st/furniture.js); SITGES_ST_D
-//   (js/maps/sitges/st/promenade.js); SITGES_ST_E (js/maps/sitges/st/beach.js); SITGES_ST_F
-//   (js/maps/sitges/st/terraces.js); SITGES_ST_G (js/maps/sitges/st/slopes.js); SITGES_RB
-//   (js/maps/sitges/roads3d.js).
+// Стена (7.2, из группы D; глобальные функции — рельеф у стены правится до улиц, из sitgesPlanTerrain):
+//   вид — { pts: [[x, z, nx, nz, низ, верх]], a: [длина до точки] }, нормаль — к верхней стороне.
+//   sitgesStWallLen(pts) → a; sitgesStWallAt(w, a) — точка на длине a: { x, z, nx, nz, foot, top, i, t }.
+//   sitgesStWallNear(T, walls, R, ext) — ближайший отрезок стены у узлов сетки рельефа (C.terra) ближе R м: Map узел →
+//     { d, s (со знаком по нормали), foot, top, inside (напротив стены или за концом не дальше ext) }.
+//   sitgesStWallGround(T, near, { band, flat, raise, lowFoot, rest }) — ложбина у стены (узлы ближе band — на низ; её
+//     накрывает настил группы) и подъём за стеной (до flat — не ниже верха, до raise — плавно); lowFoot, rest — правила
+//     нижней стороны (у D — профиль пляжа). → { band, up }.
+// Определяет: SITGES_ST, SITGES_ST_GROUPS, sitgesStGroups, sitgesStHash, sitgesStWallLen, sitgesStWallAt,
+//   sitgesStWallNear, sitgesStWallGround, sitgesZebras, sitgesPlanStreet.
+// Использует: clamp (js/core.js); smooth01 (js/world.js); sitgesCells, sitgesSeg, SITGES_SEG
+//   (js/maps/sitges/geom.js); SITGES_WALL (js/maps/sitges/houses.js); SITGES_OLDTOWN (js/maps/sitges/styles.js);
+//   SITGES_ST_A (js/maps/sitges/st/lamps.js); SITGES_ST_B (js/maps/sitges/st/marks.js); SITGES_ST_C
+//   (js/maps/sitges/st/furniture.js); SITGES_ST_D (js/maps/sitges/st/promenade.js); SITGES_ST_E
+//   (js/maps/sitges/st/beach.js); SITGES_ST_F (js/maps/sitges/st/terraces.js); SITGES_ST_G
+//   (js/maps/sitges/st/slopes.js); SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -85,6 +94,71 @@ function sitgesStHash(x, z, k = 0) {
   let h = Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663) ^ Math.imul(k + 1, 83492791);
   h = Math.imul(h ^ (h >>> 13), 0x5bd1e995); h ^= h >>> 15;
   return (h >>> 0) / 4294967296;
+}
+
+/* ---------- стена: ломаная + низ / верх + нормаль (7.2, из группы D) ---------- */
+// Стена — { pts: [[x, z, nx, nz, низ, верх]], a: [длина от начала до точки] }; нормаль — к верхней стороне (суша
+// у набережной). Рельеф у стены — до улиц (из sitgesPlanTerrain), поэтому помощники — глобальные функции, не S.
+// длины вдоль ломаной pts → a
+function sitgesStWallLen(pts) {
+  const a = [0];
+  for (let i = 1; i < pts.length; i++) a.push(a[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return a;
+}
+// точка стены на длине a (м вдоль): { x, z, nx, nz, foot, top, i, t } — по точкам w.pts и длинам w.a (за концами — продолжение)
+function sitgesStWallAt(w, a) {
+  const p = w.pts, A = w.a, n = p.length;
+  let i = 0;
+  if (a >= A[n - 1]) i = n - 2;
+  else if (a > 0) { let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= a) lo = m; else hi = m; } i = lo; }
+  const q = p[i], r = p[i + 1], L = A[i + 1] - A[i] || 1e-6, t = (a - A[i]) / L, u = clamp(t, 0, 1);
+  let nx = q[2] + (r[2] - q[2]) * u, nz = q[3] + (r[3] - q[3]) * u;
+  const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+  return { x: q[0] + (r[0] - q[0]) * t, z: q[1] + (r[1] - q[1]) * t, nx, nz, foot: q[4] + (r[4] - q[4]) * u, top: q[5] + (r[5] - q[5]) * u, i, t: u };
+}
+// ближайший отрезок стены у каждого узла сетки рельефа T (C.terra) ближе R м к стенам walls (нужны только pts):
+// Map индекс узла → { d — до стены, s — со знаком по нормали (> 0 — верхняя сторона), foot, top — низ и верх стены
+// напротив, inside — напротив стены или за её концом не дальше ext м }
+function sitgesStWallNear(T, walls, R, ext) {
+  const { NX, NZ, S: GS, X0, Z0 } = T, near = new Map();
+  for (const w of walls) {
+    const p = w.pts, n = p.length;
+    for (let i = 0; i + 1 < n; i++) {
+      const [ax, az, anx, anz, af, at] = p[i], [bx, bz, bnx, bnz, bf, bt] = p[i + 1];
+      const L = Math.hypot(bx - ax, bz - az) || 1e-6;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - X0) / GS)), i1 = Math.min(NX - 1, Math.ceil((Math.max(ax, bx) + R - X0) / GS));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - Z0) / GS)), j1 = Math.min(NZ - 1, Math.ceil((Math.max(az, bz) + R - Z0) / GS));
+      for (let j = j0; j <= j1; j++) for (let ii = i0; ii <= i1; ii++) {
+        const k = j * NX + ii, x = X0 + ii * GS, z = Z0 + j * GS;
+        const tr = ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (L * L), t = clamp(tr, 0, 1);
+        const cx = ax + (bx - ax) * t, cz = az + (bz - az) * t, d = Math.hypot(x - cx, z - cz);
+        const o = near.get(k);
+        if (o && o.d <= d) continue;
+        const nx = anx + (bnx - anx) * t, nz = anz + (bnz - anz) * t;
+        // за концом цепочки — не дальше ext м (там ещё стена и настил)
+        const over = tr < 0 && i === 0 ? -tr * L : tr > 1 && i + 2 === n ? (tr - 1) * L : 0;
+        near.set(k, { d, s: (x - cx) * nx + (z - cz) * nz, foot: af + (bf - af) * t, top: at + (bt - at) * t, inside: over <= ext && (t > 0 && t < 1 || over > 0 || d < 0.5 * GS) });
+      }
+    }
+  }
+  return near;
+}
+// рельеф у стены по near (sitgesStWallNear): сетка 2,5 м не держит отвесную ступень, поэтому узлы ближе band м к стене
+// с обеих сторон — на уровне низа (ложбину за стеной накрывает настил группы на верху стены, со своими столкновениями
+// и S.walk), за стеной до flat м — не ниже верха, дальше до raise м — плавно к прежнему. lowFoot(k, h, n) — высота
+// узла нижней стороны в полосе band (по умолчанию min(h, низ)); rest(k, h, n) — остальные узлы near (своё правило
+// нижней стороны). Море и мелководье (T.sea, T.thin) не трогаются. → { band, up } — узлов в полосе и поднятых
+function sitgesStWallGround(T, near, { band, flat, raise, lowFoot = (k, h, n) => Math.min(h, n.foot), rest = null }) {
+  const { H, sea, thin } = T;
+  let nb = 0, up = 0;
+  for (const [k, n] of near) {
+    if (sea[k] || thin[k]) continue;
+    const h = H[k];
+    if (n.inside && Math.abs(n.s) <= band) { H[k] = n.s <= 0 ? lowFoot(k, h, n) : n.foot; nb++; }
+    else if (n.inside && n.s > 0 && n.s <= raise) { const v = Math.max(h, n.top + (h - n.top) * smooth01((n.s - flat) / (raise - flat))); if (v > h) up++; H[k] = v; }
+    else if (rest) rest(k, h, n);
+  }
+  return { band: nb, up };
 }
 
 // «Зебры»: конец улицы с тротуарами упирается в другую улицу — переход за её тротуаром (поперёк оси улицы в её точке
