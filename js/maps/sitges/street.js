@@ -30,6 +30,15 @@
 //     maxD: { seg, d, f } или null; S.onWalk(x, z) — точка на полосе тротуара: { seg, f, d (от бордюра), w } или null.
 //   S.carriage(x, z) — проезжая часть под точкой (C.carriageAt); S.oldTown(x, z) — в кругах старого города;
 //   S.hash(x, z, k) — число 0…1 по месту (без R(): раскладка остального города не меняется).
+// Помощники каркаса 7.1 (перенесены из групп A, B, C; неперечисляемые — отпечаток C.street тот же):
+//   S.axis(st, s) — точка оси улицы st (C.streets) на длине s м: { x, z, tx, tz, hw, sw, i, t, deck } — касательная,
+//     полуширина полотна, sw — меньшая из ширин тротуаров концов отрезка [левый, правый], отрезок оси i и доля t на нём,
+//     deck — отрезок на мосту (v[i].deck). S.project(st, x, z) — длина s ближайшей к точке точки оси.
+//   S.near(x, z, ax, az, r, half = 0, d = 0.6, n = 3) — ближайшее свободное место: сдвиги вдоль (ax, az) на 0, ±d …
+//     ±n·d, капсула ±half вдоль оси радиусом r (S.free) → [x, z] или null.
+//   S.wallFit(x, z, nx, nz, y, { up, down, r, gap }) — высота вещи на стене к улице (точка на стене, нормаль наружу,
+//     желаемая высота y): под плитой балкона (C.balconies), если вещь (от y − down до y + up, вдоль стены r м) её задевает;
+//     null — вывеска (C.signs, кроме стел) той же стены ближе gap м. По умолчанию — кронштейн фонаря A (0,1 / 0,8 / 0,35 / 0,6).
 // Использует: clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_OLDTOWN
 //   (js/maps/sitges/styles.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
@@ -257,6 +266,74 @@ function sitgesPlanStreet(C) {
   for (const s of C.signs || []) if (s.form === 'totem' || s.form === 'canopy') reserve(s.x, s.z, s.w / 2 + P.sign, 'sign');
   for (const s of corners) reserve(s.ax, s.az, P.corner, 'corner', s.bx, s.bz);
 
+  /* ---------- ось улицы (7.1) ---------- */
+  // точка оси улицы st на длине s (м от начала; вне 0…st.len — у конца): поиск отрезка делением пополам
+  const axis = (st, s) => {
+    const v = st.v;
+    s = clamp(s, 0, st.len);
+    let lo = 0, hi = v.length - 2;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (v[m].s <= s) lo = m; else hi = m - 1; }
+    const a = v[lo], b = v[lo + 1], t = clamp((s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1), dl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, tx: (b.x - a.x) / dl, tz: (b.z - a.z) / dl, hw: a.hw + (b.hw - a.hw) * t,
+      sw: [Math.min(a.sw[0], b.sw[0]), Math.min(a.sw[1], b.sw[1])], i: lo, t, deck: !!a.deck };
+  };
+  // длина s ближайшей к (x, z) точки оси улицы st
+  const project = (st, x, z) => {
+    const v = st.v;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i + 1 < v.length; i++) {
+      const a = v[i], b = v[i + 1], dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1e-9;
+      const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / L2, 0, 1), px = a.x + dx * t - x, pz = a.z + dz * t - z, d = px * px + pz * pz;
+      if (d < bd) { bd = d; best = a.s + (b.s - a.s) * t; }
+    }
+    return best;
+  };
+
+  /* ---------- свободное место рядом (7.1) ---------- */
+  // сдвиги вдоль (ax, az) на 0, −d, +d, −2d, +2d … до ±n·d; капсула ±half вдоль оси радиусом r → [x, z] или null
+  const near = (x, z, ax, az, r, half = 0, d = 0.6, n = 3) => {
+    for (let k = 0; k <= n * 2; k++) {
+      const u = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * d, px = x + ax * u, pz = z + az * u;
+      if (free(px - ax * half, pz - az * half, r, null, px + ax * half, pz + az * half)) return [px, pz];
+    }
+    return null;
+  };
+
+  /* ---------- плиты балконов и вывески на стенах (7.1) ---------- */
+  // клетки: плиты C.balconies и вывески C.signs (кроме стел) — строятся при первом вызове wallFit
+  let onWall = null;
+  const wallCells = () => {
+    if (onWall) return onWall;
+    onWall = sitgesCells(8);
+    for (const b of C.balconies || []) onWall.add(Math.min(b.ax, b.bx), Math.max(b.ax, b.bx), Math.min(b.az, b.bz), Math.max(b.az, b.bz), { b });
+    for (const g of C.signs || []) if (g.form !== 'totem') onWall.add(g.x - g.w / 2, g.x + g.w / 2, g.z - g.w / 2, g.z + g.w / 2, { g });
+    return onWall;
+  };
+  // высота вещи на стене в точке (x, z) с нормалью (nx, nz), желаемая — y: вещь по высоте от y − down до y + up, вдоль
+  // стены — r м до плиты; плита балкона мешает — опустить под неё (до трёх плит подряд); вывеска той же стены ближе
+  // gap м (вдоль от края, по высоте от середины вещи) — null
+  const wallFit = (x, z, nx, nz, y, { up = 0.1, down = 0.8, r = 0.35, gap = 0.6 } = {}) => {
+    const W = wallCells(), mid = (down - up) / 2;
+    let ok = true;
+    for (let pass = 0; pass < 3; pass++) {           // опустились под плиту — проверить плиту ниже
+      let moved = false;
+      W.each(x - 1, x + 1, z - 1, z + 1, l => {
+        for (const o of l) {
+          if (o.g) {
+            const g = o.g;
+            if (g.nx * nx + g.nz * nz > 0.7 && Math.hypot(g.x - x, g.z - z) < g.w / 2 + gap && Math.abs(g.y - y + mid) < g.h / 2 + gap) ok = false;
+            continue;
+          }
+          const b = o.b;
+          if (b.nx * nx + b.nz * nz < 0.7 || sitgesSeg(x, z, b.ax, b.az, b.bx, b.bz) > r) continue;
+          if (y + up > b.y - b.t - 0.05 && y - down < b.y + 1.1) { y = b.y - b.t - up - 0.02; moved = true; }
+        }
+      });
+      if (!moved) break;
+    }
+    return ok ? y : null;
+  };
+
   /* ---------- группы A → G ---------- */
   const S = C.street = {
     curbs, corners, fronts, edges, walls, zebras, occ, groups: {}, stats: null,
@@ -269,6 +346,8 @@ function sitgesPlanStreet(C) {
       return (h >>> 0) / 4294967296;
     },
   };
+  // помощники 7.1 — неперечисляемые: отпечаток (__game.fingerprint) пишет и имена функций, C.street не меняется
+  for (const [k, fn] of Object.entries({ axis, project, near, wallFit })) Object.defineProperty(S, k, { value: fn });
   const base = occ.length;
   for (const g of SITGES_ST_GROUPS) S.groups[g.id] = null;
   for (const g of sitgesStGroups()) S.groups[g.id] = g.plan(C, S) || {};

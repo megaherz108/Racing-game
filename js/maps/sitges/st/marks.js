@@ -6,7 +6,7 @@
 //     в полосе, знак-треугольник на столбе справа;
 //   лежачие «столы» (в OSM города — приподнятые «зебры»): часть «зебр» двусторонних жилых улиц вне старого города —
 //     площадка 10 см под «зеброй» с пологими скатами и «зубами» на скатах; геометрия, сетка столкновений
-//     (world.meshColliders) и высота поверхности (walkAt); «30» в овале на асфальте — перед «столом» и у части «зебр»;
+//     (S.collider) и высота поверхности (S.walk); «30» в овале на асфальте — перед «столом» и у части «зебр»;
 //   «въезд запрещён» — на выезде каждой односторонки на проезжую улицу, лицом к въезжающим, справа от них;
 //   светофоры — только 2 точки OSM signals: столб справа у стоп-линии, «зебра» (если её нет), лампы переключаются.
 //   Разметка — плоские меши квадратами 160 м (подъём и polygonOffset как у «зебр» roads3d.js), без столкновений;
@@ -18,12 +18,11 @@
 // Данные группы L: marks — [[вид, x, z, ux, uz, a, b]] (u — по ходу, a — поперёк, b — вдоль, м; виды stMarkKind),
 //   tables — [[x, z, ux, uz, hw, len]] (центр, u — от перекрёстка в улицу, полуширина полотна, длина площадки),
 //   signs — [[вид, x, z, ry]] (0 STOP, 1 «уступи», 2 «въезд запрещён»), signals — [[x, z, ry]], n — сводка.
-// Помощники (свои; кандидаты в каркас): stMarkAt(st, s) — точка оси улицы на длине s; stMarkProject(st, x, z) —
-//   длина s ближайшей точки оси; stMarkAtlas() — атлас надписей и лиц знаков (canvas).
+// Помощники каркаса: S.axis / S.project — ось улицы (раскладка), S.walk / S.collider — поверхность и столкновения
+//   «столов» (постройка); свой — stMarkAtlas() — атлас надписей и лиц знаков (canvas).
 // Свои глобальные имена — с префиксом stMark… (после — node tools/deps.js --headers).
-// Определяет: stMarkCfg, stMarkKind, stMarkAt, stMarkProject, stMarkAtlas, SITGES_ST_B.
-// Использует: clamp, renderer (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_RB
-//   (js/maps/sitges/roads3d.js).
+// Определяет: stMarkCfg, stMarkKind, stMarkAtlas, SITGES_ST_B.
+// Использует: renderer (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -43,28 +42,6 @@ const stMarkCfg = {
   cycle: [17, 3, 20],               // светофор: зелёный, жёлтый, красный, с
 };
 const stMarkKind = { line: 0, stop: 2, gw: 3, n30: 4, zebra: 5 };
-
-// точка оси улицы на длине s: { x, z, tx, tz, hw, i, deck }
-function stMarkAt(st, s) {
-  const v = st.v;
-  s = clamp(s, 0, st.len);
-  let lo = 0, hi = v.length - 2;
-  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (v[m].s <= s) lo = m; else hi = m - 1; }
-  const a = v[lo], b = v[lo + 1], L = Math.max(1e-6, b.s - a.s), t = clamp((s - a.s) / L, 0, 1);
-  const dl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, tx: (b.x - a.x) / dl, tz: (b.z - a.z) / dl, hw: a.hw + (b.hw - a.hw) * t, i: lo, deck: !!a.deck };
-}
-// длина s ближайшей к (x, z) точки оси улицы
-function stMarkProject(st, x, z) {
-  const v = st.v;
-  let best = 0, bd = Infinity;
-  for (let i = 0; i + 1 < v.length; i++) {
-    const a = v[i], b = v[i + 1], dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1e-9;
-    const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / L2, 0, 1), px = a.x + dx * t - x, pz = a.z + dz * t - z, d = px * px + pz * pz;
-    if (d < bd) { bd = d; best = a.s + (b.s - a.s) * t; }
-  }
-  return best;
-}
 
 // атлас 1024 × 512: верхний ряд — надписи на асфальте (STOP, «30» в овале, белое), нижний — лица знаков (STOP,
 // «уступи», «въезд запрещён»), серый (столб, оборот), тёмный (светофор). → { tex, cell: { имя: { u0, u1, v0, v1 } } }
@@ -127,7 +104,7 @@ const SITGES_ST_B = {
       for (const side of st.oneway ? [side0, -side0] : [side0]) for (let d = 0; d <= P.sign.back; d += 1) {
         const ss = s - sgn * d;
         if (ss < 0 || ss > st.len) break;
-        const p = stMarkAt(st, ss), ux = p.tx * sgn, uz = p.tz * sgn, rx = -uz * side, rz = ux * side;
+        const p = S.axis(st, ss), ux = p.tx * sgn, uz = p.tz * sgn, rx = -uz * side, rz = ux * side;
         const ex = p.x + rx * p.hw, ez = p.z + rz * p.hw;
         const cb = S.nearest('curbs', ex, ez, 1.5) || S.nearest('corners', ex, ez, 1.5);
         let x, z;
@@ -139,13 +116,13 @@ const SITGES_ST_B = {
         out.push(type === null ? [r2(x), r2(z), r2(ry)] : [type, r2(x), r2(z), r2(ry)]);
         return true;
       }
-      const p = stMarkAt(st, s);
+      const p = S.axis(st, s);
       miss.push([type === null ? 3 : type, r2(p.x), r2(p.z)]);
       return false;
     };
     // перекрёсток по ходу sgn от s: начало чужой проезжей части на оси (если s уже в ней — назад до её края)
     const junction = (st, s0, sgn) => {
-      const hit = s => { const p = stMarkAt(st, s); return C.carriageAt(p.x, p.z, st); };
+      const hit = s => { const p = S.axis(st, s); return C.carriageAt(p.x, p.z, st); };
       if (hit(s0)) {
         let s = s0;
         for (let k = 0; k < 60 && hit(s); k++) s -= sgn * 0.5;
@@ -160,7 +137,7 @@ const SITGES_ST_B = {
     };
     // точки касания дуг скруглённых углов на подходе к перекрёстку sJ: самая дальняя от него, м
     const tangent = (st, sJ, sgn) => {
-      const p = stMarkAt(st, sJ), seen = new Set();
+      const p = S.axis(st, sJ), seen = new Set();
       let best = 0;
       for (const [dx, dz] of [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12]]) for (const c of C.cornersAt(p.x + dx, p.z + dz)) {
         if (seen.has(c) || Math.hypot(c.K[0] - p.x, c.K[1] - p.z) > 25) continue;
@@ -174,7 +151,7 @@ const SITGES_ST_B = {
       const si = sIdx.get(st);
       for (const Zb of S.zebras) {
         if (Zb.si !== si) continue;
-        const zs = stMarkProject(st, Zb.x0 + Zb.zx * Zb.len / 2, Zb.z0 + Zb.zz * Zb.len / 2), dd = sgn * (zs - s);
+        const zs = S.project(st, Zb.x0 + Zb.zx * Zb.len / 2, Zb.z0 + Zb.zz * Zb.len / 2), dd = sgn * (zs - s);
         if (dd > -back && dd < fwd) return zs - sgn * Zb.len / 2;
       }
       return null;
@@ -183,14 +160,14 @@ const SITGES_ST_B = {
     // надпись или линия в полосе: длина s центра, сдвиг вбок от середины полосы
     const glyph = (k, st, s, sgn, a, b, dc = 0) => {
       if (s < 0 || s > st.len) return false;
-      const p = stMarkAt(st, s);
+      const p = S.axis(st, s);
       if (p.deck) return false;
       const ux = p.tx * sgn, uz = p.tz * sgn, L = lane(p, st), lat = L.c + dc;
       marks.push([k, r2(p.x - uz * lat), r2(p.z + ux * lat), r2(ux), r2(uz), r2(a), r2(b)]);
       return true;
     };
     const lineAt = (st, s, sgn, dashed) => {
-      const p = stMarkAt(st, s), W = lane(p, st).w - P.edge * (st.oneway ? 2 : 1);
+      const p = S.axis(st, s), W = lane(p, st).w - P.edge * (st.oneway ? 2 : 1);
       if (!dashed) return glyph(KD.line, st, s, sgn, W, P.line, st.oneway ? 0 : -P.edge / 2 + 0.1);
       const [dl, gl] = P.dash, k = Math.max(1, Math.floor((W + gl) / (dl + gl))), w0 = k * dl + (k - 1) * gl;
       for (let i = 0; i < k; i++) glyph(KD.line, st, s, sgn, dl, P.line, -w0 / 2 + dl / 2 + i * (dl + gl) + (st.oneway ? 0 : -P.edge / 2 + 0.1));
@@ -201,7 +178,7 @@ const SITGES_ST_B = {
     for (const kind of ['stop', 'give_way']) for (const [x, z, d] of (C.points && C.points[kind]) || []) {
       const c = C.carriageAt(x, z);
       if (!c || c.corner || !c.st.drive) { n.skip++; continue; }
-      const st = c.st, s0 = stMarkProject(st, x, z), p0 = stMarkAt(st, s0);
+      const st = c.st, s0 = S.project(st, x, z), p0 = S.axis(st, s0);
       if (p0.deck) { n.skip++; continue; }
       const sgn = d == null ? (st.oneway < 0 ? -1 : 1) : (Math.sin(d) * p0.tx + Math.cos(d) * p0.tz >= 0 ? 1 : -1);
       const sJ = junction(st, s0, sgn);
@@ -220,7 +197,7 @@ const SITGES_ST_B = {
     /* ---------- «въезд запрещён» на выезде односторонок ---------- */
     for (const st of C.streets) {
       if (!st.drive || !st.oneway || st.cls === 'service' || st.len < 20) continue;
-      const sgn = st.oneway > 0 ? 1 : -1, sEnd = sgn > 0 ? st.len : 0, pE = stMarkAt(st, sEnd);
+      const sgn = st.oneway > 0 ? 1 : -1, sEnd = sgn > 0 ? st.len : 0, pE = S.axis(st, sEnd);
       if (pE.deck) continue;
       const o = C.carriageAt(pE.x, pE.z, st);
       if (!o || o.corner || !o.st.drive) continue;
@@ -236,15 +213,15 @@ const SITGES_ST_B = {
       const c = C.carriageAt(x, z);
       if (!c || c.corner) { n.skip++; continue; }
       const st = c.st, sgn = st.oneway < 0 ? -1 : 1;
-      let sc = stMarkProject(st, x, z), bd = 12;
+      let sc = S.project(st, x, z), bd = 12;
       for (const [cx, cz] of C.points.crossing || []) {          // переход OSM рядом на этой же улице
         const dd = Math.hypot(cx - x, cz - z), c2 = dd < bd && C.carriageAt(cx, cz);
-        if (c2 && c2.st === st) { bd = dd; sc = stMarkProject(st, cx, cz); }
+        if (c2 && c2.st === st) { bd = dd; sc = S.project(st, cx, cz); }
       }
       const Z = SITGES_RB.zebra;
       let edge = zebraAt(st, sc, sgn, 4, 4);
       if (edge === null) {                                       // «зебры» нет — рисуем
-        const p = stMarkAt(st, sc);
+        const p = S.axis(st, sc);
         marks.push([KD.zebra, r2(p.x), r2(p.z), r2(p.tx * sgn), r2(p.tz * sgn), r2(p.hw - 0.4), Z.len]);
         edge = sc - sgn * Z.len / 2;
       }
@@ -260,7 +237,7 @@ const SITGES_ST_B = {
       if (st.cls !== 'residential' || st.oneway || st.len < T.minLen) continue;
       const cx = Zb.x0 + Zb.zx * Zb.len / 2, cz = Zb.z0 + Zb.zz * Zb.len / 2;
       if (S.oldTown(cx, cz)) continue;
-      const s = stMarkProject(st, cx, cz), p = stMarkAt(st, s);
+      const s = S.project(st, cx, cz), p = S.axis(st, s);
       if (p.deck) continue;
       const sIn = Zb.zx * p.tx + Zb.zz * p.tz >= 0 ? 1 : -1;     // от перекрёстка в улицу
       // ровно ли под «столом»: уклон вдоль не круче maxSlope, излом (отклонение от прямой) не больше 8 см
@@ -387,7 +364,7 @@ const SITGES_ST_B = {
         quad4(B, q, q.map(p => AU(p[0], p[2])));
         const c = [phy(a0, b0), phy(a1, b0), phy(a1, b1), phy(a0, b1)];
         ctri(c[0], c[1], c[2]); ctri(c[0], c[2], c[3]);
-        rk.addWalk(c.map(p => [p[0], p[2]]), Math.max(...c.map(p => p[1])), c.map(p => p[1]));
+        S.walk(c.map(p => [p[0], p[2]]), c.map(p => p[1]));
       }
       for (const sb of [-1, 1]) for (let j = 0; j < 3; j++) {   // бока у бордюров
         const a0 = st4[j], a1 = st4[j + 1], p0 = vis(a0, sb * t.hw), p1 = vis(a1, sb * t.hw);
@@ -396,7 +373,7 @@ const SITGES_ST_B = {
         quad4(B, q, uv, [rx * sb, 0, rz * sb]);
       }
     }
-    if (ci.length) K.meshColliders.push({ v: new Float32Array(cv), i: new Uint32Array(ci) });
+    S.collider(cv, ci);
 
     /* ---------- меши копилки ---------- */
     const markMat = new THREE.MeshStandardMaterial({ map: tex, color: 0xeeeae0, alphaTest: 0.5, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });

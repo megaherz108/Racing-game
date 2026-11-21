@@ -1,7 +1,7 @@
 // Ситжес — этап 7, группа C: уличная мебель (план — docs/sitges/stage-7.md, архив группы — docs/sitges/st-c.md).
 // Что входит: скамейки, столбики, фонтанчики, фонтан, стоянки мотороллеров (с мотороллерами), шлагбаумы и цепи (цепей
 // в карте нет). Мусорок нет — решение пользователя. Каменные скамьи с плиткой на Passeig Marítim — группа D.
-// Места — точки OSM (C.points) и одно правило: ряды столбиков на въездах в пешеходные улицы старого города и центра
+// Места — точки OSM (C.points; свободное рядом — S.near) и одно правило: ряды столбиков на въездах в пешеходные улицы старого города и центра
 // с проезжих улиц. Вид — по кадрам Street View (raw/photos/street/C, st-c.md): скамья — деревянные рейки на серой
 // стальной раме; столбик на пешеходной улице — серый цилиндр с кольцом (Parellades), на тротуаре — тонкий чёрный;
 // фонтанчик — зелёный столбик; мотороллеры — рядом под углом к бордюру на проезжей части.
@@ -42,14 +42,6 @@ const SITGES_ST_C = {
     const out = { bench: [], bollard: [], water: [], fountain: [], moto: [], gate: [],
       stats: { benchSkip: 0, benchD: 0, bollardSkip: 0, entries: 0, entrySkip: 0, motoBays: 0, waterSkip: 0, gateSkip: 0 } };
     const st = out.stats, sName = si => (si !== undefined && C.streets[si] && C.streets[si].name) || '';
-    // свободное место рядом: сдвиги вдоль (ax, az) на 0, ±d, ±2d…; капсула ±half вдоль оси → [x, z] или null
-    const near = (x, z, ax, az, r, half = 0, d = 0.6, n = 3) => {
-      for (let k = 0; k <= n * 2; k++) {
-        const u = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * d, px = x + ax * u, pz = z + az * u;
-        if (S.free(px - ax * half, pz - az * half, r, null, px + ax * half, pz + az * half)) return [px, pz];
-      }
-      return null;
-    };
     const take = (x, z, r, ax = 0, az = 0, half = 0) => S.reserve(x - ax * half, z - az * half, r, 'C', x + ax * half, z + az * half);
     const onWalkSpot = (x, z) => {           // точка на тротуаре или у бордюра со стороны дороги → { seg, f, d, w }
       const w = S.onWalk(x, z);
@@ -89,7 +81,7 @@ const SITGES_ST_C = {
         }
       }
       const ax = Math.cos(ry), az = -Math.sin(ry), H = F.bench.half;
-      const p = near(x, z, ax, az, F.bench.r, H, 0.8, 2);
+      const p = S.near(x, z, ax, az, F.bench.r, H, 0.8, 2);
       if (!p) { st.benchSkip++; return; }
       take(p[0], p[1], F.bench.r, ax, az, H);
       const stone = F.stone.some(([cx, cz, r]) => Math.hypot(x0 - cx, z0 - cz) < r) ? 1 : 0;
@@ -129,10 +121,7 @@ const SITGES_ST_C = {
         s += 0.6;
         if (s >= 20 || s + 3 > sT.len) { st.entrySkip++; continue; }
         const sa = end ? sT.len - s : s;
-        let j = 0; while (j < v.length - 2 && v[j + 1].s < sa) j++;
-        const a = v[j], b = v[j + 1], t = clamp((sa - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
-        const L = Math.hypot(b.x - a.x, b.z - a.z) || 1, tx = (b.x - a.x) / L, tz = (b.z - a.z) / L;
-        const cx = a.x + (b.x - a.x) * t, cz = a.z + (b.z - a.z) * t, hw = a.hw + (b.hw - a.hw) * t;
+        const { x: cx, z: cz, tx, tz, hw } = S.axis(sT, sa);
         const W = 2 * hw - 0.6;
         if (W > F.bollard.maxW || W < 1.5) { st.entrySkip++; continue; }   // площадь или щель
         const n = Math.max(2, Math.round(W / F.bollard.step) + 1);
@@ -160,7 +149,7 @@ const SITGES_ST_C = {
         const wl = S.nearest('walls', x0, z0, 6) || S.nearest('fronts', x0, z0, 6);
         ry = wl ? Math.atan2(wl.seg.nx, wl.seg.nz) : S.hash(x0, z0, 12) * Math.PI * 2;
       }
-      const p = near(x, z, ax, az, F.water.r, 0, 0.7, 2);
+      const p = S.near(x, z, ax, az, F.water.r, 0, 0.7, 2);
       if (!p) { st.waterSkip++; continue; }
       take(p[0], p[1], F.water.r);
       out.water.push([r2(p[0]), r2(p[1]), r2(ry)]);
