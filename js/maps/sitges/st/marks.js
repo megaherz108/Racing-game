@@ -37,7 +37,8 @@ const stMarkCfg = {
   n30: [1.6, 2.6], n30Gap: 4,       // «30» в овале: поперёк × вдоль, от «стола» / «зебры»
   n30Share: 0.3, n30MinLen: 80,     // «30» у «зебр» без «стола»: доля и длина улицы не меньше
   table: { h: 0.10, ramp: 1.5, pad: 0.5, share: 0.25, minLen: 60, maxSlope: 0.08, tooth: 0.5, toothStep: 1.0 },
-  sign: { off: 0.5, r: 0.3, back: 6, h: 2.3 },   // от бордюра, занятость, сдвиг назад до, центр таблички
+  sign: { off: 0.5, r: 0.3, back: 6, h: 2.3, skip: ['cross', 'zebra'] },   // от бордюра, занятость, сдвиг назад до, центр
+  //   таблички; столб у края перехода не мешает (на фото знаки стоят прямо у «зебр»)
   far: 300, farTable: 500,          // разметка и «столы» видны не дальше, м
   cycle: [17, 3, 20],               // светофор: зелёный, жёлтый, красный, с
 };
@@ -121,8 +122,9 @@ const SITGES_ST_B = {
     const n = { stop: 0, give_way: 0, noEntry: 0, tables: 0, n30: 0, signals: 0, signs: 0, skip: 0, noSign: 0 };
     const r2 = v => Math.round(v * 100) / 100;
     // знак (столб) у края полотна: side +1 — справа по ходу sgn, −1 — слева; лицо — по ходу (face = +1) или навстречу
-    const signAt = (out, type, st, s, sgn, side, face) => {
-      for (let d = 0; d <= P.sign.back; d += 1) {
+    // на односторонке, если справа места нет, — слева (на фото так и бывает: 07 «уступи» слева)
+    const signAt = (out, type, st, s, sgn, side0, face) => {
+      for (const side of st.oneway ? [side0, -side0] : [side0]) for (let d = 0; d <= P.sign.back; d += 1) {
         const ss = s - sgn * d;
         if (ss < 0 || ss > st.len) break;
         const p = stMarkAt(st, ss), ux = p.tx * sgn, uz = p.tz * sgn, rx = -uz * side, rz = ux * side;
@@ -131,7 +133,7 @@ const SITGES_ST_B = {
         let x, z;
         if (cb && cb.seg.nx * rx + cb.seg.nz * rz > 0.3) { const q = S.at(cb.seg, cb.f, Math.min(P.sign.off, cb.seg.w0 * 0.6)); x = q.x; z = q.z; }
         else { x = ex + rx * 0.35; z = ez + rz * 0.35; }
-        if (C.carriageAt(x, z) || C.houseAt(x, z) || !S.free(x, z, P.sign.r)) continue;
+        if (C.carriageAt(x, z) || C.houseAt(x, z) || !S.free(x, z, P.sign.r, P.sign.skip)) continue;
         S.reserve(x, z, P.sign.r, 'B');
         const ry = Math.atan2(face * ux, face * uz);
         out.push(type === null ? [r2(x), r2(z), r2(ry)] : [type, r2(x), r2(z), r2(ry)]);
