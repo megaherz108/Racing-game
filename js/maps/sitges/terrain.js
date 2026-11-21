@@ -10,7 +10,8 @@
 // За сеткой — фон outer(x, z): рельеф ICGC на 10 м (море — по «нет данных» и полигону sea, дно — по расстоянию от
 // берега), за краем рельефа — продолжение края с подъёмом в холмы.
 // Определяет: SITGES_T, sitgesDepth, sitgesRaster, sitgesChamfer, sitgesPlanTerrain.
-// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js).
+// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js); stPromTerrain
+//   (js/maps/sitges/st/promenade.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -235,4 +236,6 @@ function sitgesPlanTerrain(C) {
     terra: { X0, X1, Z0, Z1, NX, NZ, S, gx, gz, H, sea, beach, thin, dSea, dLand, groyneCells, inGrid, cell, TO, TX0, TZ0, TXM, TZM, TNX, TNZ, TS },
     ground, outer, waterAt,
   });
+  // набережная (этап 7, группа D): подпорная стена — пляж у неё ниже, променад за ней ровный (js/maps/sitges/st/promenade.js)
+  stPromTerrain(C);
 }
