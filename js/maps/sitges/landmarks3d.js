@@ -1,5 +1,5 @@
 // Ситжес — ПОСТРОЙКА: достопримечательности (этапы 5–6, docs/sitges/stage-5.md) и общий набор помощников для их
-// моделей (js/maps/sitges/lm/*.js). Раскладка — C.landmarks (js/maps/sitges/landmarks.js).
+// моделей (js/maps/sitges/lm/<id>.js). Раскладка — C.landmarks (js/maps/sitges/landmarks.js).
 //   sitgesBuildLandmarks(K): у каждого готового строения (L.ready) — своя группа, def.build(K, L, group); меши
 //   из помощников ниже — обычные (optimizeStatic() склеит их по материалу и квадрату, тень — теневые копии);
 //   анимированное помечать userData.dynamic. Столкновения — lmCollide / lmCollideBox (призмы в сетке K.grid).
@@ -18,8 +18,8 @@
 //   lmRoof(parent, mat, F, y, { kind: 'gable' | 'hip' | 'pyramid' | 'flat', pitch, over }) — крыша над рамкой F.
 //   lmInset(ring, d) — контур, сдвинутый внутрь на d (d < 0 — наружу); lmAlong(a, b, n, fn) — n точек на отрезке.
 //   lmCollide(K, ring, y0, y1), lmCollideBox(K, x, z, w, d, rot, y0, y1) — столкновения.
-// Определяет: lmTex, lmMat, lmBox, lmPrism, lmCyl, lmArch, lmExtrude, lmFrame, lmRoof, lmInset, lmAlong, lmCollide,
-//   lmCollideBox, sitgesBuildLandmarks.
+// Определяет: LMK, lmTex, lmMat, lmBox, lmPrism, lmCyl, lmArch, lmExtrude, lmFrame, lmRoof, lmInset, lmAlong,
+//   lmCollide, lmCollideBox, sitgesBuildLandmarks.
 // Использует: canvasTex (js/maps/city/textures.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.

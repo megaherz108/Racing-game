@@ -15,8 +15,8 @@
 //   lmBPart(K, g, h, o) — часть кадастра целиком: стены (с бутовым низом под первым этажом), окна по этажам на открытых
 //     стенах, свес / карниз, верх (parapet, bal, merlon, roof), крыша, столкновение.
 // Определяет: lmBEdges, lmBOpen, lmBSolid, lmBExt, lmBWin, lmBBal, lmBMerlons, lmBPart, SITGES_LM_MARICEL.
-// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); lmBox, lmArch, lmInset, lmFrame, lmRoof, lmCollide,
-//   lmMat, lmCyl (js/maps/sitges/landmarks3d.js).
+// Использует: sitgesBBox, sitgesInPoly (js/maps/sitges/geom.js); LMK, lmBox, lmArch, lmInset, lmFrame, lmRoof,
+//   lmCollide, lmMat, lmCyl (js/maps/sitges/landmarks3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

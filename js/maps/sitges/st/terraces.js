@@ -376,45 +376,31 @@ const SITGES_ST_F = {
   },
 };
 
-// Тенты баров набережной (L.tent): своя склеенная геометрия квадратами 160 м (как S.place — скрытие дальше 300 м,
-// K.roadLod), цвет в вершинах; неподвижные, без столкновений (выше 2,2 м), тень — теневыми копиями. В сводку группы
-// (K.stStats.F) — штуки, треугольники, меши.
+// Тенты баров набережной (L.tent): своя геометрия копилкой S.mesh (квадраты 160 м по месту тента, скрытие дальше
+// 300 м), цвет в вершинах; неподвижные, без столкновений (выше 2,2 м), тень — теневыми копиями.
 function stTerrTents(K, S, list) {
   if (!list.length) return;
-  const F = stTerrCfg, CH = 160, mat = S.mat(0xffffff, { vertexColors: true, roughness: 0.85 }), st = K.stStats[S.cur], c = new THREE.Color();
-  const chunks = new Map();
-  for (const t of list) { const k = Math.floor(t[0] / CH) * 65536 + Math.floor(t[1] / CH); if (!chunks.has(k)) chunks.set(k, []); chunks.get(k).push(t); }
-  for (const arr of chunks.values()) {
-    const pos = [], nrm = [], col = [];
-    const quad = (p, n, k) => {                     // p — 4 точки по кругу, n — нормаль, k — множитель цвета
-      for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...p[i]); nrm.push(...n); col.push(c.r * k, c.g * k, c.b * k); }
-    };
-    for (const [x, z, y, nx, nz, w, d, drop, ci] of arr) {
-      c.set(F.colors.tent[ci]);
-      const rx = nz, rz = -nx, hw = w / 2, yT = y - drop, h = F.tent.h, L = Math.hypot(d, drop);
-      const W = s => [x + rx * hw * s, y, z + rz * hw * s], O = (s, yy) => [x + nx * d + rx * hw * s, yy, z + nz * d + rz * hw * s];
-      const up = [nx * drop / L, d / L, nz * drop / L];
-      quad([W(-1), W(1), O(1, yT), O(-1, yT)], up, 1);                               // верх
-      quad([W(1), W(-1), O(-1, yT), O(1, yT)], up.map(v => -v), 0.72);                // изнанка
-      quad([O(-1, yT), O(1, yT), O(1, yT - h), O(-1, yT - h)], [nx, 0, nz], 0.9);       // фестон
-      quad([O(1, yT), O(-1, yT), O(-1, yT - h), O(1, yT - h)], [-nx, 0, -nz], 0.7);
-      for (const sg of [-1, 1]) {                                                    // щёки у фестона
-        const a = O(sg, yT), b = O(sg, yT - h), e = [x + nx * (d - 0.6) + rx * hw * sg, yT + drop * 0.6 / d, z + nz * (d - 0.6) + rz * hw * sg];
-        quad([a, e, e, b], [rx * sg, 0, rz * sg], 0.85); quad([e, a, b, b], [-rx * sg, 0, -rz * sg], 0.7);
-      }
+  const F = stTerrCfg, c = new THREE.Color();
+  const tents = S.mesh('tent', S.mat(0xffffff, { vertexColors: true, roughness: 0.85 }), { index: false, uv: false, color: true });
+  let T = null;                                    // писатель в квадрат текущего тента
+  const quad = (p, n, k) => T.face(p, n, null, [c.r * k, c.g * k, c.b * k]);   // p — 4 точки по кругу, n — нормаль, k — множитель цвета
+  for (const [x, z, y, nx, nz, w, d, drop, ci] of list) {
+    T = tents.at(x, z);
+    c.set(F.colors.tent[ci]);
+    const rx = nz, rz = -nx, hw = w / 2, yT = y - drop, h = F.tent.h, L = Math.hypot(d, drop);
+    const W = s => [x + rx * hw * s, y, z + rz * hw * s], O = (s, yy) => [x + nx * d + rx * hw * s, yy, z + nz * d + rz * hw * s];
+    const up = [nx * drop / L, d / L, nz * drop / L];
+    quad([W(-1), W(1), O(1, yT), O(-1, yT)], up, 1);                               // верх
+    quad([W(1), W(-1), O(-1, yT), O(1, yT)], up.map(v => -v), 0.72);                // изнанка
+    quad([O(-1, yT), O(1, yT), O(1, yT - h), O(-1, yT - h)], [nx, 0, nz], 0.9);       // фестон
+    quad([O(1, yT), O(-1, yT), O(-1, yT - h), O(1, yT - h)], [-nx, 0, -nz], 0.7);
+    for (const sg of [-1, 1]) {                                                    // щёки у фестона
+      const a = O(sg, yT), b = O(sg, yT - h), e = [x + nx * (d - 0.6) + rx * hw * sg, yT + drop * 0.6 / d, z + nz * (d - 0.6) + rz * hw * sg];
+      quad([a, e, e, b], [rx * sg, 0, rz * sg], 0.85); quad([e, a, b, b], [-rx * sg, 0, -rz * sg], 0.7);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    const m = new THREE.Mesh(g, mat);
-    m.castShadow = true; m.receiveShadow = true;
-    K.group.add(m);
-    g.computeBoundingSphere();
-    K.roadLod.push({ mesh: m, x: g.boundingSphere.center.x, z: g.boundingSphere.center.z, r: g.boundingSphere.radius, far: SITGES_ST3D.far });
-    if (st) { st.meshes++; st.tris += pos.length / 9; }
   }
-  if (st) st.n += list.length;
+  S.flush();                                       // меши — до ночных огней (порядок в группе прежний)
+  S.count(list.length);
 }
 
 // Модели группы (основание в y = 0, «лицо» к +z). Части — { geo, mat, shadow } для S.place; цвет экземпляра

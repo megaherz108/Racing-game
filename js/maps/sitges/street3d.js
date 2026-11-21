@@ -1,6 +1,6 @@
 // Ситжес — ПОСТРОЙКА: мелочи улиц, этап 7 (план — docs/sitges/stage-7.md, «Каркас»). После деревьев — последний этап
 // перед склейкой статики (buildSitges, js/maps/sitges/build.js). Раскладка — C.street (js/maps/sitges/street.js);
-// группы A → G (js/maps/sitges/st/*.js) строят себя через помощники S = K.st; не готовые группы не вызываются —
+// группы A → G (js/maps/sitges/st/<группа>.js) строят себя через помощники S = K.st; не готовые группы не вызываются —
 // без готовых групп этот этап ничего не добавляет в мир (отпечаток мира тот же).
 // Помощники (координаты игры; модель — в своих координатах: основание в y = 0, «лицо» к +z):
 //   S.y(x, z, yMax) — высота поверхности под точкой: рельеф, верх тротуара (walkAt), настил моста не выше yMax.
@@ -21,10 +21,22 @@
 //     подряд, i — индексы) → K.meshColliders (world.meshColliders); пустая не добавляется.
 //   S.walk(pts, ys) — поверхность (7.1): четырёхугольник [[x, z] × 4] с высотой ys (число) или высотами углов [y × 4]
 //     → walkAt (S.y, world.surface, покрытие); рисовать и ставить столкновения — самой группе (S.collider).
+//   S.hash(x, z, k) — число 0…1 по месту (7.2; то же, что S.hash раскладки — sitgesStHash, js/maps/sitges/street.js).
+//   S.mesh(key, mat, o) — своя геометрия, склеенная по квадратам (7.2; стены, настилы, разметка, тенты): копилка на ключ
+//     (тот же key в той же группе — та же копилка); o — { shadow = true, chunk = 160, far = 300, index = true, uv = true,
+//     color = false, keep = false (true — не склеивать с чужими в optimizeStatic) }. Писатель W (сама копилка — квадрат
+//     по середине каждой грани; W.at(x, z) — всё в квадрат точки): W.face(vs, n, uv, col) — веер вершин [x, y, z] с нормалью
+//     n, uv [[u, v]], цвет [r, g, b]; W.poly(vs, uv, hint, col) — нормаль по первым трём вершинам, обход лицом к hint,
+//     вырожденная — пропуск; W.beam(a, b, h, hw, uA, uB, col) — брус вдоль отрезка a–b ([x, z, низ]): верх и две грани.
+//   S.flush() — копилки → меши (по порядку появления квадратов; K.roadLod, сводка группы); вызывается и сам после build
+//     группы — явно, чтобы меши встали в группе раньше экземпляров (порядок влияет на склейку статики).
+//   S.count(n) — штук в сводку группы (то, что строится не через place).
 //   S.cur — буква группы, которую строят сейчас: place и lights пишут сводку K.stStats[S.cur] (штук, треугольников,
 //     мешей = вызовов отрисовки, сбиваемых, огней) → world.stats.street (tools/sitges/street-debug.js, __stInfo).
 // В мир: K.stBrks (Breakables → world.breakables), K.stUpdate(dt), K.stReset(), K.stNight(k).
-// Использует: setInst (js/world.js).
+// Определяет: SITGES_ST3D, sitgesBuildStreet.
+// Использует: stdMat, geoTris, Breakables, FLAT_QUAD, setInst (js/world.js); Sky (js/sky.js); sitgesStHash,
+//   sitgesStGroups (js/maps/sitges/street.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -54,7 +66,7 @@ function sitgesBuildStreet(K) {
     roadLod.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, far });
   };
   const _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
-  const matCache = new Map();
+  const matCache = new Map(), bufs = new Map(), builders = new Map();     // копилки S.mesh (до S.flush)
 
   const S = K.st = {
     cur: null,
@@ -149,9 +161,91 @@ function sitgesBuildStreet(K) {
     // поверхность для walkAt (S.y, world.surface): четырёхугольник pts — [[x, z] × 4], ys — высота на весь кусок или
     // высоты углов [y × 4] (тогда под точкой — по треугольникам (0, 1, 2) и (0, 2, 3))
     walk: (pts, ys) => Array.isArray(ys) ? K.rk.addWalk(pts, Math.max(...ys), ys) : K.rk.addWalk(pts, ys),
+    // 7.2: число 0…1 по месту — то же, что S.hash раскладки (sitgesStHash)
+    hash: sitgesStHash,
+    // 7.2: штук в сводку группы (то, что строится не через place — стены, лестницы, тенты)
+    count: n => { stat().n += n; },
+    // 7.2: своя геометрия, склеенная по квадратам (см. шапку): копилка на ключ key с материалом mat
+    mesh(key, mat, o = {}) {
+      let M = builders.get(key);
+      if (M) return M;
+      const cfg = { mat, shadow: o.shadow !== false, chunk: o.chunk || P.chunk, far: o.far || P.far, index: o.index !== false,
+        uv: o.uv !== false, color: !!o.color, keep: !!o.keep };
+      const buf = (cx, cz) => {
+        const k = key + '|' + Math.floor(cx / cfg.chunk) + ',' + Math.floor(cz / cfg.chunk);
+        let B = bufs.get(k);
+        if (!B) bufs.set(k, B = { cfg, p: [], n: [], u: [], c: [], i: [] });
+        return B;
+      };
+      // писатель в квадрат точки (ax, az) или, без неё, в квадрат середины каждой грани
+      const make = (ax, az) => {
+        const W = {
+          // грань: вершины [x, y, z] по кругу (веер), нормаль n, uv [[u, v]] (если у копилки uv), цвет [r, g, b] на все вершины
+          face(vs, n, uv, col) {
+            const B = ax === undefined ? buf(vs.reduce((s, v) => s + v[0], 0) / vs.length, vs.reduce((s, v) => s + v[2], 0) / vs.length) : buf(ax, az);
+            const put = k => {
+              const v = vs[k];
+              B.p.push(v[0], v[1], v[2]); B.n.push(n[0], n[1], n[2]);
+              if (cfg.uv) B.u.push(uv[k][0], uv[k][1]);
+              if (cfg.color) { if (col) B.c.push(col[0], col[1], col[2]); else B.c.push(1, 1, 1); }
+            };
+            if (cfg.index) {
+              const o0 = B.p.length / 3;
+              for (let k = 0; k < vs.length; k++) put(k);
+              for (let k = 1; k + 1 < vs.length; k++) B.i.push(o0, o0 + k, o0 + k + 1);
+            } else for (let k = 1; k + 1 < vs.length; k++) { put(0); put(k); put(k + 1); }
+          },
+          // грань с нормалью по первым трём вершинам, обход — лицом к hint ([x, y, z]); вырожденная — пропуск
+          poly(vs, uv, hint, col) {
+            const [a, b, c] = vs;
+            let nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]), nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            const l = Math.hypot(nx, ny, nz);
+            if (l < 1e-9) return;
+            nx /= l; ny /= l; nz /= l;
+            if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { vs = vs.slice().reverse(); if (uv) uv = uv.slice().reverse(); nx = -nx; ny = -ny; nz = -nz; }
+            W.face(vs, [nx, ny, nz], uv, col);
+          },
+          // брус вдоль отрезка: a, b — [x, z, низ], h — высота, hw — полутолщина; верх и две боковые грани (u — uA…uB вдоль)
+          beam: (a, b, h, hw, uA = 0, uB = 1, col) => {
+            const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+            if (L < 0.02) return;
+            const px = -(b[1] - a[1]) / L * hw, pz = (b[0] - a[0]) / L * hw;
+            const A0 = [a[0] + px, a[1] + pz], A1 = [a[0] - px, a[1] - pz], B0 = [b[0] + px, b[1] + pz], B1 = [b[0] - px, b[1] - pz];
+            W.poly([[A0[0], a[2] + h, A0[1]], [B0[0], b[2] + h, B0[1]], [B1[0], b[2] + h, B1[1]], [A1[0], a[2] + h, A1[1]]], [[uA, 0], [uB, 0], [uB, 1], [uA, 1]], [0, 1, 0], col);
+            for (const [E, F, sg] of [[A0, B0, 1], [A1, B1, -1]])
+              W.poly([[E[0], a[2], E[1]], [F[0], b[2], F[1]], [F[0], b[2] + h, F[1]], [E[0], a[2] + h, E[1]]], [[uA, 0], [uB, 0], [uB, h], [uA, h]], [px * sg, 0, pz * sg], col);
+          },
+        };
+        return W;
+      };
+      M = make();
+      M.at = (x, z) => make(x, z);
+      builders.set(key, M);
+      return M;
+    },
+    // 7.2: копилки S.mesh → меши (по порядку появления квадратов), сводка группы; после build группы — само
+    flush() {
+      for (const B of bufs.values()) {
+        if (!B.p.length) continue;
+        const c = B.cfg, geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(B.p, 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(B.n, 3));
+        if (c.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(B.u, 2));
+        if (c.color) geo.setAttribute('color', new THREE.Float32BufferAttribute(B.c, 3));
+        if (c.index) geo.setIndex(B.i);
+        geo.computeBoundingSphere();
+        const mesh = new THREE.Mesh(geo, c.mat), s = geo.boundingSphere, st = stat();
+        mesh.castShadow = c.shadow; mesh.receiveShadow = true;
+        if (c.keep) mesh.userData.keep = true;
+        group.add(mesh);
+        roadLod.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, far: c.far });
+        st.meshes++; st.tris += (c.index ? B.i.length : B.p.length / 3) / 3;
+      }
+      bufs.clear(); builders.clear();
+    },
   };
 
-  for (const g of sitgesStGroups()) { S.cur = g.id; g.build(K, S, C.street.groups[g.id]); }
+  for (const g of sitgesStGroups()) { S.cur = g.id; g.build(K, S, C.street.groups[g.id]); S.flush(); }
   S.cur = null;
 
   /* ---------- каждый кадр, сброс, ночь ---------- */

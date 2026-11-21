@@ -9,9 +9,9 @@
 //   sitgesBuildFacades           балконы и карнизы (js/maps/sitges/facades3d.js) — в ту же копилку K.rk
 //   sitgesBuildSigns             вывески заведений по C.signs (js/maps/sitges/signs3d.js) — в ту же копилку K.rk
 //   sitgesBuildBuildings         здания (js/maps/sitges/buildings.js)
-//   sitgesBuildLandmarks         достопримечательности по C.landmarks (js/maps/sitges/landmarks3d.js, lm/*.js)
+//   sitgesBuildLandmarks         достопримечательности по C.landmarks (js/maps/sitges/landmarks3d.js, lm/<id>.js)
 //   sitgesBuildTrees             деревья по C.trees (js/maps/sitges/trees3d.js)
-//   sitgesBuildStreet            мелочи улиц, этап 7: группы A → G по C.street (js/maps/sitges/street3d.js, st/*.js)
+//   sitgesBuildStreet            мелочи улиц, этап 7: группы A → G по C.street (js/maps/sitges/street3d.js, st/<группа>.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
 // Определяет: SITGES_LANE, SITGES_LOOK, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
@@ -20,9 +20,9 @@
 //   sitgesBuildMarks, sitgesBuildRoadMeshes (js/maps/sitges/roads3d.js); sitgesBuildWalks
 //   (js/maps/sitges/walks3d.js); sitgesBuildFences (js/maps/sitges/fences3d.js); sitgesBuildFacades
 //   (js/maps/sitges/facades3d.js); sitgesBuildSigns (js/maps/sitges/signs3d.js); sitgesBuildRail
-//   (js/maps/sitges/rail3d.js); sitgesBuildTrees (js/maps/sitges/trees3d.js); sitgesBuildBuildings
-//   (js/maps/sitges/buildings.js); sitgesBuildLandmarks (js/maps/sitges/landmarks3d.js); sitgesLabels
-//   (js/maps/sitges/labels.js).
+//   (js/maps/sitges/rail3d.js); sitgesBuildTrees (js/maps/sitges/trees3d.js); sitgesBuildStreet
+//   (js/maps/sitges/street3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesBuildLandmarks
+//   (js/maps/sitges/landmarks3d.js); sitgesLabels (js/maps/sitges/labels.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 

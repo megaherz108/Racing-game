@@ -363,8 +363,7 @@ const SITGES_ST_D = {
   build(K, S, L) {
     if (!L || !L.walls.length) return;
     const P = stPromCfg, W = P.wall, CO = P.colors, lift = P.lift, D = K.D, g = (x, z) => D.ground(x, z), T = stPromTex();
-    const st = K.stStats.D || (K.stStats.D = { n: 0, tris: 0, meshes: 0, brk: 0, lights: 0 });
-    const mat = (hex, map, o = {}) => { const m = stdMat(hex, Object.assign({ map, roughness: 0.92 }, o)); m.userData.shared = true; return m; };
+    const mat =(hex, map, o = {}) => { const m = stdMat(hex, Object.assign({ map, roughness: 0.92 }, o)); m.userData.shared = true; return m; };
     const M = {
       wall_rib: mat('#ffffff', T.ashlar), wall_mar: mat('#ffffff', T.plaster), wall_seb: mat('#ffffff', T.rubble),
       pave_rib: mat('#ffffff', T.squares), pave_seb: mat('#ffffff', T.bricks), tile: mat('#ffffff', T.hydraulic), conc: mat('#ffffff', T.concrete),
@@ -374,37 +373,15 @@ const SITGES_ST_D = {
     };
     const shadow = new Set(['wall_rib', 'wall_mar', 'wall_seb', 'white', 'roll', 'steel', 'step', 'ramp']);
 
-    /* ---------- копилка мешей по квадратам и материалам ---------- */
-    const bufs = new Map();
-    const poly = (mk, vs, uv, hint) => {                // вершины [x, y, z] по кругу, uv [[u, v]], hint — куда нормаль
-      const [a, b, c] = vs;
-      let nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]), nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-      const l = Math.hypot(nx, ny, nz);
-      if (l < 1e-9) return;
-      nx /= l; ny /= l; nz /= l;
-      if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { vs = vs.slice().reverse(); uv = uv.slice().reverse(); nx = -nx; ny = -ny; nz = -nz; }
-      const cx = vs.reduce((s, v) => s + v[0], 0) / vs.length, cz = vs.reduce((s, v) => s + v[2], 0) / vs.length;
-      const key = mk + '|' + Math.floor(cx / P.chunk) + ',' + Math.floor(cz / P.chunk);
-      let B = bufs.get(key);
-      if (!B) bufs.set(key, B = { mk, p: [], n: [], u: [], i: [] });
-      const o = B.p.length / 3;
-      vs.forEach((v, k) => { B.p.push(v[0], v[1], v[2]); B.n.push(nx, ny, nz); B.u.push(uv[k][0], uv[k][1]); });
-      for (let k = 1; k + 1 < vs.length; k++) B.i.push(o, o + k, o + k + 1);
-    };
+    /* ---------- копилки мешей по квадратам и материалам (S.mesh) ---------- */
+    const Mk = {};
+    for (const k of Object.keys(M)) Mk[k] = S.mesh(k, M[k], { shadow: shadow.has(k), chunk: P.chunk, far: P.far });
+    const poly = (mk, vs, uv, hint) => Mk[mk].poly(vs, uv, hint);              // вершины [x, y, z] по кругу, uv [[u, v]], hint — куда нормаль
+    const beam = (mk, a, b, h, hw) => Mk[mk].beam(a, b, h, hw);                // брус: a, b — [x, z, низ], h — высота, hw — полутолщина
     const UP = [0, 1, 0];
     // своя сетка столкновений и поверхности
     const cv = [], ci = [];
     const cquad = (a, b, c, d) => { const o = cv.length / 3; cv.push(...a, ...b, ...c, ...d); ci.push(o, o + 1, o + 2, o, o + 2, o + 3); };
-    // брус вдоль ломаной: a, b — [x, z, низ], нормаль (nx, nz) к суше, h — высота, hw — полутолщина; верх и две грани
-    const beam = (mk, a, b, h, hw, uA = 0, uB = 1) => {
-      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (L < 0.02) return;
-      const px = -(b[1] - a[1]) / L * hw, pz = (b[0] - a[0]) / L * hw;
-      const A0 = [a[0] + px, a[1] + pz], A1 = [a[0] - px, a[1] - pz], B0 = [b[0] + px, b[1] + pz], B1 = [b[0] - px, b[1] - pz];
-      poly(mk, [[A0[0], a[2] + h, A0[1]], [B0[0], b[2] + h, B0[1]], [B1[0], b[2] + h, B1[1]], [A1[0], a[2] + h, A1[1]]], [[uA, 0], [uB, 0], [uB, 1], [uA, 1]], UP);
-      for (const [E, F, sg] of [[A0, B0, 1], [A1, B1, -1]])
-        poly(mk, [[E[0], a[2], E[1]], [F[0], b[2], F[1]], [F[0], b[2] + h, F[1]], [E[0], a[2] + h, E[1]]], [[uA, 0], [uB, 0], [uB, h], [uA, h]], [px * sg, 0, pz * sg]);
-    };
     const gapAt = (wi, a, line) => L.gaps.some(G => G[0] === wi && G[3] === line && a > G[1] && a < G[2]);
     const posts = { bal: [], balu: [], roll: [], ball: [], tube: [] };
 
@@ -571,21 +548,7 @@ const SITGES_ST_D = {
       }
     }
 
-    /* ---------- меши из копилки ---------- */
-    for (const B of bufs.values()) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(B.p, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(B.n, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(B.u, 2));
-      geo.setIndex(B.i);
-      geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, M[B.mk]);
-      mesh.castShadow = shadow.has(B.mk); mesh.receiveShadow = true;
-      K.group.add(mesh);
-      const s = geo.boundingSphere;
-      K.roadLod.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, far: P.far });
-      st.meshes++; st.tris += B.i.length / 3;
-    }
+    S.flush();                                           // меши копилок — до экземпляров (порядок в группе прежний)
     S.collider(cv, ci);
 
     /* ---------- тумбы, балясины, шары, стойки (экземпляры) ---------- */
@@ -627,7 +590,7 @@ const SITGES_ST_D = {
       ], L.shower.map(([x, z]) => ({ x, z, ry: ((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1) * Math.PI * 2 })),
       { brk: { mass: 70, anchor: 1, minSpeed: 2, cy: 1.1, lie: 1.4, kind: 'metal' }, hit: { r: 0.12, h: 2.3 } });
     }
-    st.n += L.walls.length + nStairs + nRamps;
+    S.count(L.walls.length + nStairs + nRamps);
   },
 };
 

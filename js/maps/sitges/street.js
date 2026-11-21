@@ -1,5 +1,5 @@
 // Ситжес — РАСКЛАДКА: мелочи улиц, этап 7 (план — docs/sitges/stage-7.md, «Каркас»). После дверей (doors.js) — последний
-// этап раскладки перед мини-картой. Каркас 7.0: линии мест, карта занятости, вызов групп A → G (js/maps/sitges/st/*.js,
+// этап раскладки перед мини-картой. Каркас 7.0: линии мест, карта занятости, вызов групп A → G (js/maps/sitges/st/<группа>.js,
 // объекты SITGES_ST_A … SITGES_ST_G; у не готовой группы — ready: false — plan не вызывается, карта та же).
 // Сначала занято то, что уже стоит: калитки и ворота со съездом (C.gates), двери (C.doors), стволы (C.trees), «зебры»
 // и переходы OSM, стелы и навесы вывесок (C.signs), бордюр скруглённых углов. Группы занимают своё по порядку.
@@ -39,8 +39,13 @@
 //   S.wallFit(x, z, nx, nz, y, { up, down, r, gap }) — высота вещи на стене к улице (точка на стене, нормаль наружу,
 //     желаемая высота y): под плитой балкона (C.balconies), если вещь (от y − down до y + up, вдоль стены r м) её задевает;
 //     null — вывеска (C.signs, кроме стел) той же стены ближе gap м. По умолчанию — кронштейн фонаря A (0,1 / 0,8 / 0,35 / 0,6).
-// Использует: clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_OLDTOWN
-//   (js/maps/sitges/styles.js).
+// Определяет: SITGES_ST, SITGES_ST_GROUPS, sitgesStGroups, sitgesStHash, sitgesZebras, sitgesPlanStreet.
+// Использует: clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_WALL
+//   (js/maps/sitges/houses.js); SITGES_OLDTOWN (js/maps/sitges/styles.js); SITGES_ST_A (js/maps/sitges/st/lamps.js);
+//   SITGES_ST_B (js/maps/sitges/st/marks.js); SITGES_ST_C (js/maps/sitges/st/furniture.js); SITGES_ST_D
+//   (js/maps/sitges/st/promenade.js); SITGES_ST_E (js/maps/sitges/st/beach.js); SITGES_ST_F
+//   (js/maps/sitges/st/terraces.js); SITGES_ST_G (js/maps/sitges/st/slopes.js); SITGES_RB
+//   (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -55,13 +60,20 @@ const SITGES_ST = {
   corner: 1.0,      // бордюр скруглённого угла: радиус полосы вдоль него (пандусы, переходы)
   sign: 0.4,        // стела и навес вывески: запас к полуширине
 };
-// порядок групп в раскладке и постройке (фиксирован; заготовки — js/maps/sitges/st/*.js)
+// порядок групп в раскладке и постройке (фиксирован; заготовки — js/maps/sitges/st/<группа>.js)
 const SITGES_ST_GROUPS = [SITGES_ST_A, SITGES_ST_B, SITGES_ST_C, SITGES_ST_D, SITGES_ST_E, SITGES_ST_F, SITGES_ST_G];
 // группы, которые вызываются: готовые по порядку и отладочная window.SITGES_ST_DEMO (tools/sitges/street-debug.js)
 function sitgesStGroups() {
   const out = SITGES_ST_GROUPS.filter(g => g.ready);
   if (typeof window !== 'undefined' && window.SITGES_ST_DEMO && window.SITGES_ST_DEMO.ready) out.push(window.SITGES_ST_DEMO);
   return out;
+}
+
+// число 0…1 по месту (x, z с точностью 0,1 м) и ключу k — вместо R() в раскладке и постройке мелочей (S.hash, K.st.hash)
+function sitgesStHash(x, z, k = 0) {
+  let h = Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663) ^ Math.imul(k + 1, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
 }
 
 // «Зебры»: конец улицы с тротуарами упирается в другую улицу — переход за её тротуаром (поперёк оси улицы в её точке
@@ -340,11 +352,7 @@ function sitgesPlanStreet(C) {
     at, along, reserve, hits, free, onWalk, nearest,
     carriage: (x, z) => C.carriageAt(x, z),
     oldTown: (x, z) => SITGES_OLDTOWN.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r),
-    hash: (x, z, k = 0) => {
-      let h = Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663) ^ Math.imul(k + 1, 83492791);
-      h = Math.imul(h ^ (h >>> 13), 0x5bd1e995); h ^= h >>> 15;
-      return (h >>> 0) / 4294967296;
-    },
+    hash: sitgesStHash,
   };
   // помощники 7.1 — неперечисляемые: отпечаток (__game.fingerprint) пишет и имена функций, C.street не меняется
   for (const [k, fn] of Object.entries({ axis, project, near, wallFit })) Object.defineProperty(S, k, { value: fn });

@@ -10,7 +10,7 @@
 //   Помощник lmChurchMesher() — сетка из треугольников по материалам (стены, скаты, наклонные балки), один меш на
 //   материал; его можно перенести в каркас.
 // Определяет: LMCH, lmChurchMesher, SITGES_LM_CHURCH.
-// Использует: lmMat, lmBox, lmArch, lmExtrude, lmCollide, lmPrism, lmRoof, lmFrame, lmCollideBox, lmCyl
+// Использует: LMK, lmMat, lmBox, lmArch, lmExtrude, lmCollide, lmPrism, lmRoof, lmFrame, lmCollideBox, lmCyl
 //   (js/maps/sitges/landmarks3d.js); last (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
