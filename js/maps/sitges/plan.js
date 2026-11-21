@@ -182,12 +182,21 @@ function sitgesPlanBase(C) {
     return (H[k] * (1 - tx) + H[k + 1] * tx) * (1 - tz) + (H[k + T.nx] * (1 - tx) + H[k + T.nx + 1] * tx) * tz;
   };
   const pois = G.pois.map(([name, type, x, z]) => ({ name, type, x, z }));
-  // точки OSM по видам (SITGES_PTS.kinds): { shop: [[x, z], …], tree: …, … }
+  // точки OSM по видам (SITGES_PTS.kinds): { shop: [[x, z], …], tree: …, … }; у видов SITGES_PTS.vk — третье число:
+  // stop, give_way — направление движения к знаку (угол atan2(dx, dz), рад; null — неизвестно), recycling — биты
+  // контейнеров (1 стекло, 2 бумага, 4 пластик, 8 органика, 16 прочее, 32 одежда)
   const points = {};
   if (typeof SITGES_PTS !== 'undefined') {
     const km = sitgesDec(SITGES_PTS.m), [pp2] = sitgesPts(SITGES_PTS.p, [km.length]);
+    const vk = SITGES_PTS.vk || [], vv = SITGES_PTS.v ? sitgesDec(SITGES_PTS.v) : [];
+    let n = 0;
     for (const k of SITGES_PTS.kinds) points[k] = [];
-    km.forEach((k, i) => points[SITGES_PTS.kinds[k]].push(pp2[i]));
+    km.forEach((k, i) => {
+      const kind = SITGES_PTS.kinds[k];
+      if (!vk.includes(kind)) { points[kind].push(pp2[i]); return; }
+      const v = vv[n++];
+      points[kind].push([pp2[i][0], pp2[i][1], kind === 'recycling' ? v : v >= 120 ? null : v * Math.PI / 60]);
+    });
   } else points.shop = [];
   // калитки и ворота (data-gates.js, 4а.3): входы кадастра, окна съездов по ортофото, служебные проезды —
   // { ent: [{ p, x, z }], win: [{ p, x, z, sc }], svc: [{ p, x, z }], winW, thr }; p — индекс в parcels
