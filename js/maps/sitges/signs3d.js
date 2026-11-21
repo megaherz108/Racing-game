@@ -31,7 +31,9 @@ const SITGES_SIGN3D = {
   board: { d: 0.1 },      // глубина короба доски от стены, м
   blade: { d: 0.08, bar: 0.04 },   // толщина флажка; сечение кронштейна, м
   cross: { d: 0.12, bar: 0.05 },
-  awning: { under: 0x8a8a8a, cheek: 0.6 },  // тон изнанки; щека — доля фестона под тентом
+  // тон изнанки; щека — доля фестона под тентом; над террасой: изнанка светлее (ткань на просвет, кадры 01, 07 sv/signs),
+  // сечение складного локтя
+  awning: { under: 0x8a8a8a, cheek: 0.6, underExt: 0xc9c4ba, arm: 0.04 },
   letters: { rail: 0.06, post: 0.05, every: 1.6, back: 0x2e2e2e },
   totem: { d: 0.32, leg: [0.3, 0.22] },
   metal: 0x34363a, body: 0x45494f,
@@ -46,6 +48,8 @@ function sitgesBuildSigns(K) {
   const { D, rk, grid } = K, C = D.C, P = SITGES_SIGN3D, S = SITGES_SIGNS, t0 = performance.now();
   if (!C.signs || !C.signs.length) return;
   const { MAT, lod } = rk;
+  // вынос маркиз над террасами (этап 7, группа F): индекс в C.signs → [вынос, перепад]
+  const awnF = C.street && C.street.groups && C.street.groups.F, awnExt = new Map(((awnF && awnF.awn) || []).map(([i, d, drop]) => [i, [d, drop]]));
 
   /* ---------- атлас: ячейка на ключ + ступень пропорций ---------- */
   const faceH = s => s.form === 'awning' ? s.h / SITGES_SIGN.awningVal : s.h;   // у маркизы ячейка — тент + фестон
@@ -149,26 +153,36 @@ function sitgesBuildSigns(K) {
         bar('sign', [s.x, s.y, s.z], [s.x + s.nx * (E.out - sz / 2), s.y, s.z + s.nz * (E.out - sz / 2)], Q.bar);
       }
     } else if (f === 'awning') {
-      // тент от стены (верх — на drop выше фестона) к фестону на выносе d; ячейка: низ awningVal — фестон
-      const Aw = S.awning, fv = SITGES_SIGN.awningVal, hw = s.w / 2;
-      const yT = s.y + s.h / 2, yA = yT + Aw.drop, yB = s.y - s.h / 2;
+      // тент от стены (верх — на drop выше фестона) к фестону на выносе d; ячейка: низ awningVal — фестон.
+      // Над террасой (этап 7, группа F — awn в C.street.groups.F) вынос 3–5 м: крепление у стены то же, фестон ниже
+      // на свой перепад; под тентом — складные локти от стены к фестону
+      const ext = awnExt.get(i), Aw = ext ? { d: ext[0], drop: ext[1] } : S.awning, fv = SITGES_SIGN.awningVal, hw = s.w / 2;
+      const yA = s.y + s.h / 2 + S.awning.drop, yT = yA - Aw.drop, yB = yT - s.h;
       const w0 = [s.x, yA, s.z], o0 = [s.x + s.nx * Aw.d, yT, s.z + s.nz * Aw.d];
       const L = Math.hypot(Aw.d, Aw.drop), nUp = [s.nx * Aw.drop / L, Aw.d / L, s.nz * Aw.drop / L];
-      const vF = at(uv, 0, fv)[1];
+      const vF = at(uv, 0, fv)[1], under = ext ? P.awning.underExt : P.awning.under;
       const top = [[s.x - R[0] * hw, yA, s.z - R[2] * hw], [s.x + R[0] * hw, yA, s.z + R[2] * hw], [o0[0] + R[0] * hw, yT, o0[2] + R[2] * hw], [o0[0] - R[0] * hw, yT, o0[2] - R[2] * hw]];
       // верх тента: у стены — верх ячейки, у фестона — граница полос и фестона
       rk.quad('sign', top, nUp, 0xffffff, [[uv[0], uv[3]], [uv[2], uv[3]], [uv[2], vF], [uv[0], vF]]);
-      rk.quad('sign', top, neg(nUp), P.awning.under, [[uv[0], uv[3]], [uv[2], uv[3]], [uv[2], vF], [uv[0], vF]]);
+      rk.quad('sign', top, neg(nUp), under, [[uv[0], uv[3]], [uv[2], uv[3]], [uv[2], vF], [uv[0], vF]]);
       // фестон: лицо и изнанка
       const fc = [o0[0], (yT + yB) / 2, o0[2]], aR = R.map(v => v * hw), aU = [0, s.h / 2, 0];
       rect('sign', fc, aR, aU, N, 0xffffff, [uv[0], uv[1], uv[2], vF]);
-      rect('sign', fc, neg(aR), aU, neg(N), P.awning.under, [uv[0], uv[1], uv[2], vF]);
+      rect('sign', fc, neg(aR), aU, neg(N), under, [uv[0], uv[1], uv[2], vF]);
       // щёки по бокам: треугольник под тентом (цвет первой полосы), обе стороны
       const stripe = [uv[0] + 2 * du, (vF + uv[3]) / 2], yC = yT - s.h * P.awning.cheek;
       for (const k of [-1, 1]) {
         const ex = R[0] * hw * k, ez = R[2] * hw * k;
-        const tri = [[s.x + ex, yA, s.z + ez], [o0[0] + ex, yT, o0[2] + ez], [o0[0] + ex, yC, o0[2] + ez], [s.x + ex, yC + 0.15, s.z + ez]];
-        for (const sg of [1, -1]) rk.quad('sign', tri, [R[0] * k * sg, 0, R[2] * k * sg], sg > 0 ? 0xffffff : P.awning.under, [stripe, stripe, stripe, stripe]);
+        // у длинной (над террасой) — треугольник у фестона: щека до стены была бы стеной под тентом
+        const tri = ext ? [[s.x + ex, yA, s.z + ez], [o0[0] + ex, yT, o0[2] + ez], [o0[0] + ex, yC, o0[2] + ez], [o0[0] - s.nx * 0.6 + ex, yT + Aw.drop * 0.6 / Aw.d, o0[2] - s.nz * 0.6 + ez]]
+          : [[s.x + ex, yA, s.z + ez], [o0[0] + ex, yT, o0[2] + ez], [o0[0] + ex, yC, o0[2] + ez], [s.x + ex, yC + 0.15, s.z + ez]];
+        for (const sg of [1, -1]) rk.quad('sign', tri, [R[0] * k * sg, 0, R[2] * k * sg], sg > 0 ? 0xffffff : under, [stripe, stripe, stripe, stripe]);
+        // складной локоть: от стены под креплением к фестону, в 0,3 м от края
+        if (ext) {
+          const ax = R[0] * (hw - 0.3) * k, az = R[2] * (hw - 0.3) * k;
+          bar('sign', [s.x + s.nx * 0.05 + ax, yA - 0.45, s.z + s.nz * 0.05 + az], [o0[0] - s.nx * 0.1 + ax, yT - 0.06, o0[2] - s.nz * 0.1 + az], P.awning.arm);
+          tris += 12;
+        }
       }
       tris += 10;
     } else if (f === 'letters') {
