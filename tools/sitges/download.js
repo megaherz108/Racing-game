@@ -25,6 +25,13 @@
 //   alc/            — запас для деревьев там, где прибрежного лидара нет (часть города за ж/д): высоты растительности
 //                     над землёй территориального лидара 1 м 2021–2023 (WMS elevacions-territorial), все плитки;
 //                     калибровка alc/calib.json. CC BY 4.0 ICGC
+//   overture-places.json — места Overture Maps (тема places, последний выпуск) по BBOX: заведения, которых нет в OSM
+//                     (этап 6а.7). GeoParquet читает tools/sitges/overture.py через DuckDB; Python берётся свой —
+//                     raw/.venv с одним пакетом duckdb (создаётся здесь при первом запуске, нужен python в PATH).
+//                     Лицензия по записи: CDLA Permissive 2.0, Apache 2.0 (Foursquare), CC0 (AllThePlaces)
+//   turisme.json    — Registre de Turisme de Catalunya (открытые данные Generalitat, analisi.transparenciacatalunya.cat,
+//                     набор t2h3-cgys): отели, хостелы и туристические апартаменты Ситжеса с адресом и кадастровым
+//                     номером; колонки о владельцах (имя, CIF) не берём. Llicència oberta d'ús d'informació – Catalunya
 // Печатает только сводку: что скачано и сколько весит.
 const fs = require('fs');
 const path = require('path');
@@ -46,6 +53,33 @@ async function get(url, opts = {}) {
     console.log(`  ответ ${why}, повтор через 20 с…`);
     await new Promise(r => setTimeout(r, 20000));
   }
+}
+
+/* ---------- Overture Maps: места (этап 6а.7) ---------- */
+async function overture() {
+  const f = path.join(RAW, 'overture-places.json');
+  if (have(f)) return console.log('overture-places.json — уже есть,', mb(f));
+  const venv = path.join(RAW, '.venv'), py = path.join(venv, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+  if (!fs.existsSync(py)) {
+    console.log('Overture: свой Python в raw/.venv с пакетом duckdb…');
+    execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['-m', 'venv', venv], { stdio: 'inherit' });
+    execFileSync(py, ['-m', 'pip', 'install', '-q', 'duckdb'], { stdio: 'inherit' });
+  }
+  console.log('Overture: места по прямоугольнику карты (≈ 1 мин)…');
+  execFileSync(py, ['-I', path.join(__dirname, 'overture.py'), BBOX.s, BBOX.w, BBOX.n, BBOX.e, f].map(String), { stdio: 'inherit' });
+}
+
+/* ---------- Registre de Turisme de Catalunya: жильё для туристов (этап 6а.7) ---------- */
+async function turisme() {
+  const f = path.join(RAW, 'turisme.json');
+  if (have(f)) return console.log('turisme.json — уже есть,', mb(f));
+  // только нужные колонки (без владельцев — это персональные данные); частные квартиры (HUT) и общие жилища не берём
+  const cols = ['tipus_establiment', 'n_mero_inscripci', 'r_tol', 'estat', 'tipus_de_via', 'nom_de_la_via', 'numero',
+    'codi_postal', 'municipi', 'referencia_cadastral', 'grup', 'modalitat', 'categoria', 'total_places', 'marca_tur_stica'];
+  const q = new URLSearchParams({ $select: cols.join(','), $where: "municipi='Sitges' AND tipus_establiment in ('Hotels','Apartaments Turístics')", $limit: '5000' });
+  console.log('Registre de Turisme: запрос…');
+  fs.writeFileSync(f, await get('https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?' + q));
+  console.log('turisme.json —', JSON.parse(fs.readFileSync(f, 'utf8')).length, 'записей,', mb(f));
 }
 
 /* ---------- OSM ---------- */
@@ -239,6 +273,8 @@ async function calibrate(kind = 'dsm') {
   await catastro(CAT.ad);
   await dtm();
   await points();
+  await overture();
+  await turisme();
   if (fs.existsSync(path.join(OUT, 'data-geo.js'))) { await tiles('orto'); await tiles('dsm'); await calibrate();
     await tiles('sup'); await calibrate('sup'); await tiles('ir'); await tiles('alc'); await calibrate('alc'); }
   else console.log('orto/, dsm/ — нужен data-geo.js: запусти build.js и затем download.js ещё раз');
