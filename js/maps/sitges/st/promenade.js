@@ -34,8 +34,9 @@ const stPromCfg = {
   beach: { b0: 0.2, k: 0.07, max: 1.8, near: 20, fade: 32 },
   // step — шаг точек стены; min…max — ступень (выше — обрыв или склон, этап G); topIn — верх: рельеф в этих м от края;
   // band — узлы ближе к стене — на уровне низа; flat — за стеной до стольких м рельеф не ниже верха, deck — настил
-  // (накрывает ложбину), raise — дальше рельеф прежний; ext — стена и настил за концом цепочки; t — толщина стены
-  wall: { step: 2, min: 0.6, max: 4.5, topIn: [5, 12], band: 3.6, flat: 7.1, deck: 7.6, raise: 13, ext: 2, minLen: 10, join: 4.5, t: 0.45, bury: 0.5 },
+  // (накрывает ложбину), raise — дальше рельеф прежний; ext — стена и настил за концом цепочки; t — толщина стены;
+  // away — на 10 м в сушу от края море дальше хотя бы на столько (край вдоль берега)
+  wall: { step: 2, min: 0.6, max: 4.5, topIn: [5, 12], band: 3.6, flat: 7.1, deck: 7.6, raise: 13, ext: 2, minLen: 10, join: 4.5, t: 0.45, bury: 0.5, away: 6 },
   lift: 0.025,                         // настил и мощение над рельефом (дорожки OSM — 0,03: они поверх)
   paveMax: 30,                         // мощение — до тротуара, проезжей части, дома или зелени, не дальше, м от стены
   endD: 3,                             // спуск — конец дорожки OSM ближе стольких м к стене
@@ -77,7 +78,10 @@ function stPromTerrain(C) {
       const m = Math.max(1, Math.ceil(L / W.step));
       for (let k = 0; k < m; k++) {
         const f = (k + 0.5) / m, x = ax + (bx - ax) * f, z = az + (bz - az) * f;
-        const land = !isSea(x + nx * 3, z + nz * 3) && !inBeach(x + nx * 3, z + nz * 3) && !isSea(x + nx * 8, z + nz * 8) && dS(x, z) >= 3;
+        // за краем суша (не море, не другой пляж), и край — вдоль берега: от него в сушу море дальше (у корней
+        // волнорезов и вокруг построек на пляже край идёт поперёк берега — там стены нет)
+        const land = !isSea(x + nx * 3, z + nz * 3) && !inBeach(x + nx * 3, z + nz * 3) && !isSea(x + nx * 8, z + nz * 8) && !inBeach(x + nx * 8, z + nz * 8)
+          && dS(x, z) >= 3 && dS(x + nx * 10, z + nz * 10) - dS(x, z) >= W.away;
         const hs = [];
         for (let d = W.topIn[0]; d <= W.topIn[1]; d++) hs.push(C.ground(x + nx * d, z + nz * d));
         const top = hs.sort((u, v) => u - v)[hs.length >> 1];          // медиана: за променадом бывает склон
@@ -317,7 +321,7 @@ const SITGES_ST_D = {
     // Marítim: проём в валике, где дорожка пересекает линию ограды; от проёма к спуску — дорожка по газону
     for (const h of railX) {
       if (out.gaps.some(g => g[0] === h.wi && g[3] === 1 && Math.abs((g[1] + g[2]) / 2 - h.a) < 4)) continue;
-      out.gaps.push([h.wi, r2(h.a - 1.4), r2(h.a + 1.4), 1]);
+      out.gaps.push([h.wi, r2(h.a - 1.6), r2(h.a + 1.6), 1]);
       const d = out.desc.find(e => e.w === h.wi && Math.abs(e.a - h.a) < 12);
       if (d) out.paths.push([h.wi, r2(h.a), r2(d.kind === 'ramp' ? (d.dir > 0 ? d.a0 + RP.w / 2 : d.a1 - RP.w / 2) : d.a)]);
     }
@@ -689,15 +693,17 @@ function stPromTex() {
     xt.fillStyle = grd;
     xt.beginPath(); xt.moveTo(x0, 0); xt.lineTo(x0 + 64, 0); xt.lineTo(x0 + 64, 40); xt.arc(x0 + 32, 40, 32, 0, Math.PI); xt.closePath(); xt.fill();
   }
-  // плитка спинки скамьи: треугольники (синий + кремовый, зелёный + жёлтый)
+  // плитка спинки скамьи: клетки 0,14 м (14 × 3 на 1,9 × 0,42 м), в клетке — два треугольника по диагонали.
+  // Синяя с кремовой — «вертушка» (диагональ поворачивается в блоке 2 × 2, f-passeig-maritim-01), зелёная с жёлтой —
+  // все клетки одинаково (пила, f-passeig-maritim-02)
   const bench = C.bench.map((col, k) => {
-    const [c, x] = cv(256, 64, k ? '#e8d978' : '#efe4c8');
+    const Q = 28, [c, x] = cv(14 * Q, 3 * Q, k ? '#e3d36a' : '#efe4c8');
     x.fillStyle = col;
-    for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) {
-      const X = i * 16, Y = j * 16;
-      x.beginPath();
-      if ((i + j) % 2) { x.moveTo(X, Y); x.lineTo(X + 16, Y); x.lineTo(X, Y + 16); } else { x.moveTo(X + 16, Y); x.lineTo(X + 16, Y + 16); x.lineTo(X, Y + 16); }
-      x.fill();
+    for (let i = 0; i < 14; i++) for (let j = 0; j < 3; j++) {
+      const X = i * Q, Y = j * Q, r = k ? 0 : (i % 2) + 2 * (j % 2);     // какой угол клетки — цветной треугольник
+      const P4 = [[X, Y], [X + Q, Y], [X + Q, Y + Q], [X, Y + Q]], a = [0, 1, 3, 2][r];
+      x.beginPath(); x.moveTo(...P4[a]); x.lineTo(...P4[(a + 1) % 4]); x.lineTo(...P4[(a + 3) % 4]); x.fill();
+      x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 1; x.strokeRect(X + 0.5, Y + 0.5, Q - 1, Q - 1);
     }
     return tex(c);
   });
