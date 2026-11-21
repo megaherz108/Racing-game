@@ -7,6 +7,7 @@
 //   glow — что светится ночью, в своём цвете (готовая emissiveMap: emissive = белый × NIGHT_U), чёрное — не светится;
 //     в половину разрешения map (свечение и так мягкое). Что светится — SITGES_SIGN.cat[…].glow: 'text' — буквы
 //     (типовые, бары, банки, отели), 'all' — весь короб (супермаркеты, заправки), крест аптеки — сам крест.
+//   form 'door' (этап 6а.6, signs3d.js): полотно двери, cat — вид (glass, wood, double, hotel) или pane — стекло.
 //   uv['__solid'] — белая ячейка 16 px (без свечения): металл, ножки, корпуса — цвет из вершин (signs3d.js).
 //   uv: v снизу вверх (flipY, как у всех текстур three.js): v0 — низ ячейки, v1 — верх. Флажок (blade) двусторонний:
 //     обратной стороне брать u наоборот (u1 → u0), иначе надпись зеркальная.
@@ -369,8 +370,61 @@ function sitgesSignAtlas(items) {
     }
   }
 
+  // дверь (этап 6а.6, doors.js): it.cat — вид: glass (стекло в алюминиевой раме, ручка-штанга), wood (деревянная
+  // с филёнками и окошком), double (две створки: дерево и большое стекло), hotel (две стеклянные створки в латунной
+  // раме, длинные ручки), pane (стекло витрины по бокам и над дверью). Стекло светится ночью тёплым, как витрины
+  // шейдера фасада (свечение × NIGHT_U × 1,5 в signs3d.js ≈ витрина facade.js)
+  const LIT = '#d9ccae';
+  function door(x, c, g) {
+    const { w, h } = c, x0 = c.x, y0 = c.y, t = c.it.cat;
+    const glass = (gx0, gy0, gw, gh) => {
+      if (g) { x.fillStyle = LIT; x.fillRect(gx0, gy0, gw, gh); return; }
+      const gr = x.createLinearGradient(0, gy0, 0, gy0 + gh);
+      gr.addColorStop(0, '#5d7484'); gr.addColorStop(0.45, '#2c3a44'); gr.addColorStop(1, '#3a4650');
+      x.fillStyle = gr; x.fillRect(gx0, gy0, gw, gh);
+      x.fillStyle = 'rgba(255,255,255,0.08)';            // блик
+      x.beginPath(); x.moveTo(gx0 + gw * 0.15, gy0); x.lineTo(gx0 + gw * 0.45, gy0); x.lineTo(gx0 + gw * 0.1, gy0 + gh * 0.6); x.lineTo(gx0, gy0 + gh * 0.6); x.closePath(); x.fill();
+    };
+    const fill = (col, a, b, cw, chh) => { if (!g) { x.fillStyle = col; x.fillRect(a, b, cw, chh); } };
+    if (!g) { x.fillStyle = '#000'; x.fillRect(x0 - PAD, y0 - PAD, w + 2 * PAD, h + 2 * PAD); }
+    const fr = Math.max(2, Math.round(w * 0.07));
+    if (t === 'pane') {
+      glass(x0, y0, w, h);
+      fill('#3b3f44', x0, y0 + h * 0.12, w, Math.max(1, Math.round(h * 0.012)));   // перемычка
+      return;
+    }
+    if (t === 'glass') {
+      fill('#44484d', x0, y0, w, h);
+      glass(x0 + fr, y0 + fr, w - 2 * fr, h - fr * 3);
+      fill('#c9ccd0', x0 + w * 0.12, y0 + h * 0.5, w * 0.76, Math.max(2, h * 0.018));  // штанга
+      fill('#44484d', x0 + fr, y0 + h - fr * 2.5, w - 2 * fr, fr * 0.6);
+      return;
+    }
+    if (t === 'wood') {
+      fill('#5e3a1f', x0, y0, w, h);
+      glass(x0 + w * 0.22, y0 + h * 0.08, w * 0.56, h * 0.26);
+      if (!g) {
+        x.strokeStyle = '#3e2512'; x.lineWidth = Math.max(1, w * 0.03);
+        for (const [a, b] of [[0.42, 0.24], [0.7, 0.24]]) { x.strokeRect(x0 + w * 0.14, y0 + h * a, w * 0.72, h * b - h * 0.03); }
+        x.fillStyle = '#c9a54a'; x.beginPath(); x.arc(x0 + w * 0.8, y0 + h * 0.56, Math.max(1.5, w * 0.04), 0, 7); x.fill();
+      }
+      return;
+    }
+    // double, hotel: две створки
+    const frame = t === 'hotel' ? '#a08a52' : '#4a2e1f', half = w / 2;
+    fill(frame, x0, y0, w, h);
+    for (const k of [0, 1]) {
+      const lx = x0 + k * half;
+      glass(lx + fr, y0 + fr, half - 1.5 * fr, h - (t === 'hotel' ? 2 * fr : h * 0.3));
+      if (t === 'double') fill('#3a2416', lx + fr * 1.5, y0 + h * 0.78, half - 2.5 * fr, h * 0.14);   // филёнка внизу
+      const hx = k ? lx + fr * 1.6 : lx + half - fr * 2.2;
+      fill(t === 'hotel' ? '#d8c79a' : '#c9a54a', hx, y0 + h * (t === 'hotel' ? 0.3 : 0.45), Math.max(2, w * 0.025), h * (t === 'hotel' ? 0.4 : 0.1));
+    }
+  }
+
   const draw = (x, c, g) => {
     const it = c.it;
+    if (it.form === 'door') { door(x, c, g); return; }
     if (it.form === 'solid') { if (!g) { x.fillStyle = '#ffffff'; x.fillRect(c.x - PAD, c.y - PAD, c.w + 2 * PAD, c.h + 2 * PAD); } return; }
     const st = styleOf(it);
     c.st = st;

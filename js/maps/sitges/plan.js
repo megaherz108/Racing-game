@@ -10,6 +10,7 @@
 //   sitgesPlanFenceStyles        стиль забора по участку, году дома и району (js/maps/sitges/fencestyle.js)
 //   sitgesPlanGates              калитки и ворота на заборах: входы кадастра, съезды, OSM (js/maps/sitges/gates.js)
 //   sitgesPlanFacades            балконы по sitgesBalcony() и карнизы (js/maps/sitges/styles.js)
+//   sitgesPlanSigns, sitgesPlanDoors  вывески заведений и их входные двери (js/maps/sitges/signs.js, doors.js)
 //   sitgesPlanMinimap            мини-карта и текстура земли (js/maps/sitges/minimap.js)
 // Оси: +z — от моря в сушу (верх мини-карты), +x — вдоль берега на юго-запад (Террамар), −x — к марине.
 // Этапы 1–3 (docs/sitges-plan.md): рельеф, море, улицы и ж/д; здания по контурам и этажности кадастра.
@@ -25,7 +26,7 @@
 //   (js/maps/sitges/houses.js); sitgesPlanLandmarks (js/maps/sitges/landmarks.js); sitgesPlanFences
 //   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
 //   (js/maps/sitges/fencestyle.js); sitgesPlanGates (js/maps/sitges/gates.js); sitgesPlanTrees
-//   (js/maps/sitges/trees.js); sitgesPlanSigns (js/maps/sitges/signs.js).
+//   (js/maps/sitges/trees.js); sitgesPlanSigns (js/maps/sitges/signs.js); sitgesPlanDoors (js/maps/sitges/doors.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -85,6 +86,7 @@ function sitgesData() {
   sitgesPlanTrees(C);
   sitgesPlanFacades(C);
   sitgesPlanSigns(C);
+  sitgesPlanDoors(C);
   sitgesPlanMinimap(C);
   const { HX, HZ, rect, north, northAt, inside, roads, drive, blds, pois, minimap, mmExt, mmExtZ, mmBg, ground, waterAt } = C;
   // отрезки дорог по ~20 м — для превью режима на экране выбора (js/ui.js)

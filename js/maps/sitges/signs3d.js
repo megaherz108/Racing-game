@@ -10,6 +10,8 @@
 //   кронштейне, светятся; буквы отеля — плоскость с alphaTest (изнанка тёмная), над плоской крышей — рама и ножки;
 //   стела — короб поперёк улицы (читается с дороги в обе стороны) на ножке, в сетке столкновений (OBB). Навес АЗС —
 //   не строится (заправки за границей карты, раскладка их не даёт).
+//   Двери заведений (этап 6а.6, C.doors — doors.js): рама поверх стены, полотно и стекло по бокам заглублены в неё
+//   (закрывают витрину шейдера на оси); у отеля — козырёк с названием и ступенька. Стекло ночью светится.
 //   Материал один (MAT['sign'], под двумя ключами копилки: 'sign' — ближние, 'sign-far' — буквы отелей, видны
 //   дальше): map — атлас, emissiveMap — его маска свечения, свечение × NIGHT_U (как окна в facade.js), источников
 //   света нет. Металл и корпуса — белая ячейка атласа '__solid' с цветом вершин. Тени не отбрасывают.
@@ -33,6 +35,11 @@ const SITGES_SIGN3D = {
   letters: { rail: 0.06, post: 0.05, every: 1.6, back: 0x2e2e2e },
   totem: { d: 0.32, leg: [0.3, 0.22] },
   metal: 0x34363a, body: 0x45494f,
+  // двери (6а.6, C.doors — doors.js): рама — брус сечением frame, выступает на out м; полотно и стекло — на inset м
+  // от стены (заглублены в раму); цвет рамы по виду; у отеля козырёк (вынос, толщина, шире проёма на) и ступенька
+  door: { frame: 0.08, out: 0.12, inset: 0.04,
+    col: { glass: 0x4a4e53, wood: 0x5a3a22, double: 0x4a2e1f, hotel: 0x8f7a48 },
+    canopy: { d: 1.4, t: 0.24, wider: 0.8 }, step: { h: 0.14, d: 0.55, col: 0xb9b3a6 } },
 };
 
 function sitgesBuildSigns(K) {
@@ -48,6 +55,17 @@ function sitgesBuildSigns(K) {
     if (!items.has(k)) items.set(k, { key: k, text: s.text, cat: s.cat, brand: s.brand, form: s.form, aspect: a });
     cellOf.push(k);
   }
+  // двери: полотно по виду, стекло (pane), козырёк отеля с названием (доска гостиницы)
+  const doors = C.doors || [], DQ = P.door;
+  for (const d of doors) {
+    const k = 'door|' + d.type;
+    if (!items.has(k)) items.set(k, { key: k, text: '', cat: d.type, brand: null, form: 'door', aspect: d.dw / d.dh });
+    if (d.type === 'hotel' && d.text) {
+      const kc = 'canopy|hotel|' + d.text;
+      if (!items.has(kc)) items.set(kc, { key: kc, text: d.text, cat: 'hotel', brand: null, form: 'board', aspect: (d.w + DQ.canopy.wider) / DQ.canopy.t });
+    }
+  }
+  if (doors.length) items.set('door|pane', { key: 'door|pane', text: '', cat: 'pane', brand: null, form: 'door', aspect: 0.3 });
   const A = sitgesSignAtlas([...items.values()]), du = 1 / A.size[0], dv = 1 / A.size[1];
   const so = A.uv.get('__solid'), SOLID = [(so[0] + so[2]) / 2, (so[1] + so[3]) / 2];
 
@@ -179,5 +197,30 @@ function sitgesBuildSigns(K) {
     } else { cnt.skip++; return; }
     cnt[f]++;
   });
+  /* ---------- двери ---------- */
+  const PANE = A.uv.get('door|pane');
+  for (const d of doors) {
+    const N = [d.nx, 0, d.nz], R = [d.nz, 0, -d.nx], fr = DQ.frame, col = DQ.col[d.type];
+    const g0 = d.y - d.h / 2;
+    const at2 = (u, y, o) => [d.x + R[0] * u + N[0] * o, y, d.z + R[2] * u + N[2] * o];
+    // рама: стойки и верх (порог и перемычка над полотном — в текстуре: ≈ 40 треугольников на дверь)
+    for (const k of [-1, 1]) box('sign', at2(k * (d.w / 2 - fr / 2), d.y, DQ.out / 2), R, UP, N, fr, d.h, DQ.out, col, SOLID, null, SOLID);
+    box('sign', at2(0, g0 + d.h - fr / 2, DQ.out / 2), R, UP, N, d.w - 2 * fr, fr, DQ.out, col, SOLID, null, SOLID);
+    // полотно у низа по середине; стекло — по бокам и над ним (перемычка — граница полотна)
+    const iw = d.w - 2 * fr, ih = d.h - fr, iy0 = g0, o = DQ.inset;
+    const dw = Math.min(d.dw, iw), dh = Math.min(d.dh, ih);
+    rect('sign', at2(0, iy0 + dh / 2, o), R.map(v => v * dw / 2), [0, dh / 2, 0], N, 0xffffff, A.uv.get('door|' + d.type));
+    const sw = (iw - dw) / 2;
+    if (sw > 0.03) for (const k of [-1, 1]) rect('sign', at2(k * (dw / 2 + sw / 2), iy0 + ih / 2, o), R.map(v => v * sw / 2), [0, ih / 2, 0], N, 0xffffff, PANE);
+    if (ih - dh > 0.05) rect('sign', at2(0, iy0 + dh + (ih - dh) / 2, o), R.map(v => v * dw / 2), [0, (ih - dh) / 2, 0], N, 0xffffff, PANE);
+    if (d.type === 'hotel') {
+      // козырёк с названием на кромке и ступенька
+      const Cn = DQ.canopy, cw = d.w + Cn.wider, cy = g0 + d.h + Cn.t / 2 + 0.05;
+      const cuv = d.text ? A.uv.get('canopy|hotel|' + d.text) : SOLID;
+      box('sign', at2(0, cy, Cn.d / 2), R, UP, N, cw, Cn.t, Cn.d, 0xffffff, cuv, null, d.text ? edge(cuv) : SOLID);
+      box('sign', at2(0, g0 - 0.06 + DQ.step.h / 2, DQ.step.d / 2), R, UP, N, cw, DQ.step.h + 0.12, DQ.step.d, DQ.step.col, SOLID, null, SOLID);
+    }
+    cnt.door = (cnt.door || 0) + 1;
+  }
   Object.assign(K, { signStats: { ...C.signStats, built: cnt, tris, cells: items.size, px: A.px, size: A.size, ms: Math.round(performance.now() - t0) } });
 }
