@@ -32,7 +32,8 @@
 // Отладка: tools/sitges/traffic-debug.js (сводка и схема сверху).
 // Определяет: SITGES_NET, sitgesNetSCC, sitgesTrafficGraph.
 // Использует: clamp (js/core.js); trafficGraphReport (js/maps/coast/trafficnet.js); sitgesInPoly, sitgesSeg
-//   (js/maps/sitges/geom.js); stMarkSignal (js/maps/sitges/st/marks.js); tPiece (js/traffic/graph.js).
+//   (js/maps/sitges/geom.js); stMarkSignal (js/maps/sitges/st/marks.js); tPiece, tPieceAt, turnPiece, tPieceMinR
+//   (js/traffic/graph.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -61,6 +62,7 @@ const SITGES_NET = {
   shift: 2,           // объезд предметов: сдвиг оси не больше, м
   clearCar: 2.4, clearLong: 4,   // дом над проездом: низ выше полосы меньше — нельзя никому / длинным
   clearDeck: 2,       // перила моста над полосой: низ выше меньше — нельзя никому (Hummer — верх коллайдера 1,81 м)
+  cross: { dy: 1.5, end: 3 },   // пересечение осей без общей вершины OSM: на одном уровне (высоты ближе dy), не у концов улиц
   sign: 45,           // STOP / «уступи»: до конца полосы не дальше, м
   stopGap: 2.4,       // конец полосы (там стоит центр ждущей машины) — не ближе к оси другого въезда в узел, м
   signal: 35,         // светофор OSM — узел не дальше, м
@@ -171,20 +173,67 @@ function sitgesTrafficGraph(C, grid, ground, walkAt, decks) {
     if (!at.has(q.k)) at.set(q.k, []);
     at.get(q.k).push({ st, i });
   });
+  /* ---------- пересечения без общей вершины OSM ---------- */
+  // Оси двух улиц пересекаются на одном уровне (высоты оси расходятся меньше cross.dy), но общей вершины OSM там нет —
+  // без узла полосы проходили друг сквозь друга и машины сталкивались на полном ходу (Carrer del Camí del Coll ×
+  // Carrer d'en Pepe de Garraf у (1214, 592)). Обеим улицам — общий узел (ключ X…) в ближайшей к пересечению точке оси;
+  // у концов улиц (ближе cross.end) не ищем: там примыкание, а не пересечение. Раскладку не меняет.
+  const xKey = new Map(), crossings = [];             // улица → Map(индекс точки оси → ключ узла пересечения)
+  {
+    const L = use.filter(st => !ringOf.has(st)), cells = new Map(), C0 = 25;
+    // отрезки осей — в клетки 25 м (каждый отрезок — во все клетки своей рамки)
+    L.forEach((st, a) => { for (let i = 1; i < st.v.length; i++) {
+      const p = st.v[i - 1], q = st.v[i];
+      for (let cx = Math.floor(Math.min(p.x, q.x) / C0); cx <= Math.floor(Math.max(p.x, q.x) / C0); cx++)
+        for (let cz = Math.floor(Math.min(p.z, q.z) / C0); cz <= Math.floor(Math.max(p.z, q.z) / C0); cz++) {
+          const k = cx * 100003 + cz; if (!cells.has(k)) cells.set(k, []); cells.get(k).push(a, i);
+        }
+    } });
+    const nearest = (st, x, z) => { let bi = 0, bd = Infinity; st.v.forEach((q, i) => { const d = (q.x - x) ** 2 + (q.z - z) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+    const hits = [];
+    for (const list of cells.values()) for (let m = 0; m < list.length; m += 2) for (let n = m + 2; n < list.length; n += 2) {
+      const a = list[m], b = list[n];
+      if (a === b) continue;
+      const P = L[a].v, Q = L[b].v, i = list[m + 1], j = list[n + 1], p0 = P[i - 1], p1 = P[i], q0 = Q[j - 1], q1 = Q[j];
+      const rx = p1.x - p0.x, rz = p1.z - p0.z, sx = q1.x - q0.x, sz = q1.z - q0.z, den = rx * sz - rz * sx;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((q0.x - p0.x) * sz - (q0.z - p0.z) * sx) / den, u = ((q0.x - p0.x) * rz - (q0.z - p0.z) * rx) / den;
+      if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+      const sa = p0.s + (p1.s - p0.s) * t, sb = q0.s + (q1.s - q0.s) * u;
+      if (sa < N.cross.end || sa > P[P.length - 1].s - N.cross.end || sb < N.cross.end || sb > Q[Q.length - 1].s - N.cross.end) continue;
+      if (Math.abs(p0.y + (p1.y - p0.y) * t - q0.y - (q1.y - q0.y) * u) > N.cross.dy) continue;
+      const x = p0.x + rx * t, z = p0.z + rz * t;
+      if (!hits.some(h => h.a === Math.min(a, b) && h.b === Math.max(a, b) && Math.hypot(h.x - x, h.z - z) < 3)) hits.push({ a: Math.min(a, b), b: Math.max(a, b), x, z });
+    }
+    for (const { a, b, x, z } of hits) {
+      const A = L[a], B = L[b], ia = nearest(A, x, z), ib = nearest(B, x, z), qa = A.v[ia], qb = B.v[ib];
+      // общий узел: вершина OSM одной из улиц (если есть), иначе новый ключ; уже общая вершина — пересечение учтено
+      if (qa.nd && qb.nd) continue;
+      const k = qa.nd ? qa.k : qb.nd ? qb.k : 'X' + crossings.length;
+      if (!at.has(k)) at.set(k, []);
+      for (const [st, i, q] of [[A, ia, qa], [B, ib, qb]]) {
+        if (q.nd) continue;
+        if (!xKey.has(st)) xKey.set(st, new Map());
+        xKey.get(st).set(i, k); at.get(k).push({ st, i });
+      }
+      crossings.push({ x, z, streets: [A.name || A.cls, B.name || B.cls], k });
+    }
+  }
+  const keyOf = (st, i) => (xKey.has(st) && xKey.get(st).get(i)) || st.v[i].k;
   const isNode = (st, i) => {
-    const q = st.v[i];
-    return i === 0 || i === st.v.length - 1 || ringKey.has(q.k) || at.get(q.k).length >= 2;
+    const q = st.v[i], k = keyOf(st, i);
+    return i === 0 || i === st.v.length - 1 || ringKey.has(k) || at.get(k).length >= 2;
   };
   // участки улиц между узлами
   let segs = [];
   for (const st of use) {
     if (ringOf.has(st)) continue;
     const idx = [];
-    st.v.forEach((q, i) => { if (q.nd && isNode(st, i)) idx.push(i); });
+    st.v.forEach((q, i) => { if ((q.nd || keyOf(st, i) !== q.k) && isNode(st, i)) idx.push(i); });
     for (let k = 0; k + 1 < idx.length; k++) {
       const i0 = idx[k], i1 = idx[k + 1], v = st.v;
       const ws = []; for (let i = i0; i <= i1; i++) ws.push(2 * v[i].hw);
-      segs.push({ st, i0, i1, ka: v[i0].k, kb: v[i1].k, s0: v[i0].s, s1: v[i1].s, len: v[i1].s - v[i0].s, w: median(ws) });
+      segs.push({ st, i0, i1, ka: keyOf(st, i0), kb: keyOf(st, i1), s0: v[i0].s, s1: v[i1].s, len: v[i1].s - v[i0].s, w: median(ws) });
     }
   }
   // слияние узлов: участок короче merge — внутри перекрёстка; кольцо — один узел
@@ -668,7 +717,7 @@ function sitgesTrafficGraph(C, grid, ground, walkAt, decks) {
     lights,
     major: { minor: all.filter(e => !e.major && (e.B.deg > 2)).length, signed: all.filter(e => e.sign).length },
     shifted, blocked: blocked.slice(0, 12), blockedN: blocked.length,
-    turns: TS, stopMoved,
+    turns: TS, stopMoved, crossings: crossings.map(c => `${c.streets.join(' × ')} (${Math.round(c.x)}, ${Math.round(c.z)})`),
   });
   return G;
 }

@@ -18,9 +18,11 @@
 // аварии без игроков (где и кто), самое долгое ожидание у перекрёстка и стояние (где и кто), машины, застрявшие
 // насовсем (стоят до конца прогона), проезды перекрёстков (на красный — отдельно), встречные на узком участке,
 // сбитые прилавки.
-// Определяет: trafficTest.
-// Использует: world (js/maps/registry.js); cars, FIXED, simTime, PH, GROUND_GROUPS, stepWorld (js/physics.js); tPieceAt, tPieceProject,
-//   tPieceIdx (js/traffic/graph.js); Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js).
+// Определяет: TRAFFIC_TEST_SCEN, trafficTest.
+// Использует: clamp (js/core.js); waterLevel (js/world.js); world (js/maps/registry.js); cars, PH, GROUND_GROUPS,
+//   FIXED, stepWorld, simTime (js/physics.js); tPieceAt, tPieceProject, trafficLight, tPieceIdx
+//   (js/traffic/graph.js); Traffic (js/traffic/traffic.js); TRAFFIC_SIG_SHORT (js/traffic/driver.js); startMatch,
+//   countdown, endMatch (js/match.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -87,22 +89,22 @@ async function trafficTest({ map = 'coast', scen = TRAFFIC_TEST_SCEN[map] || ['s
       tc.__used = true; Traffic.place(tc, e, 0, s, false);
       return tc;
     };
-    // место для игрока у дороги: не ближе 9 м к полосам, не в воде, не в доме и не на предмете
-    const nearPt = (e, x, z, r) => {
-      const P = e.lp[0].pts;
+    // место для игрока у дороги: не ближе 9 м к полосам и 20 м к узлам, не в воде, не в доме и не на предмете
+    // ребро (любая его полоса) проходит ближе r к точке (x, z)
+    const nearPt = (e, x, z, r) => e.lp.some(({ pts: P }) => {
       for (let i = 1; i < P.length; i++) {
         const a = P[i - 1], b = P[i], dx = b[0] - a[0], dz = b[1] - a[1], u = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
         if ((a[0] + dx * u - x) ** 2 + (a[1] + dz * u - z) ** 2 < r * r) return true;
       }
       return false;
-    };
+    });
     const park = (x0, z0, not) => {
       for (let r = 0; r < 600; r += 6) for (let a = 0; a < 6.28; a += 0.5) {
         const x = x0 + Math.cos(a) * r, z = z0 + Math.sin(a) * r, y = world.ground(x, z);
         if (not && Math.hypot(x - not[0], z - not[1]) < 7) continue;
         if (y < waterLevel(x, z) + 0.3 || world.occludes && (world.occludes(x, y + 1, z) || world.occludes(x, y + 2.5, z))) continue;
         if (world.grid && world.grid.query(x - 3, x + 3, z - 3, z + 3).length) continue;
-        if (E.some(e => nearPt(e, x, z, 9))) continue;
+        if (E.some(e => nearPt(e, x, z, 9)) || G.nodes.some(n => (n.x - x) ** 2 + (n.z - z) ** 2 < 400)) continue;   // и не у перекрёстка (повороты)
         return [x, z];
       }
       return [x0, z0];
@@ -143,7 +145,8 @@ async function trafficTest({ map = 'coast', scen = TRAFFIC_TEST_SCEN[map] || ['s
       const why = tc => {
         if (tc.waiting) return tc.e.B.sig || (tc.ne.B.sig && tc.ne.len < TRAFFIC_SIG_SHORT) ? 'светофор' : tc.isLeft ? 'налево, ждёт' : 'ждёт у перекрёстка';
         if (tc.obsBy) return 'впереди ' + (tc.obsBy.type ? `${tc.obsBy.type.id} ${tc.obsBy.kind} ${xz(tc.obsBy)}` : 'игрок');
-        const lv = tc.far ? null : tc.body.linvel();
+        if (tc.far) return `без физики (вдали), v ${tc.v.toFixed(1)}, s ${tc.s.toFixed(1)} из ${tc.piece.len.toFixed(1)}`;
+        const lv = tc.body.linvel();
         if (lv && tc.v > 0.3 && Math.hypot(lv.x, lv.z) < 0.3) return `хочет ${tc.v.toFixed(1)} м/с, упёрся: ${touching(tc) || 'ни во что'}`;
         return `v ${tc.v.toFixed(1)}, s ${tc.s.toFixed(1)} из ${tc.piece.len.toFixed(1)}, касается: ${(!tc.far && touching(tc)) || '—'}`;
       };
@@ -182,11 +185,13 @@ async function trafficTest({ map = 'coast', scen = TRAFFIC_TEST_SCEN[map] || ['s
           if (pk === 'lane' && tc.kind === 'turn' && tc.node && (tc.node.deg || tc.node.out.length) > 2) {
             passes++;
             const B = tc.node;
-            if (B.sig && tc.e.grp >= 0) {
+            // фаза светофора: «Ситжес» — по группе рукава, «Город» — по оси улицы
+            const ph = B.sig && tc.e.grp >= 0 ? t => B.sig.phase(tc.e.grp, t) : B.lit ? t => trafficLight(B.x, B.z, tc.e.axis, t) : null;
+            if (ph) {
               sigPass++;
               // на красный — красный горит уже 0,7 с (въехавший в первые доли секунды не успевал остановиться)
-              if (B.sig.phase(tc.e.grp, simTime) === 'r' && B.sig.phase(tc.e.grp, simTime - 0.7) === 'r') {
-                let k = 1; while (k < 60 && B.sig.phase(tc.e.grp, simTime - k * 0.1) === 'r') k++;
+              if (ph(simTime) === 'r' && ph(simTime - 0.7) === 'r') {
+                let k = 1; while (k < 60 && ph(simTime - k * 0.1) === 'r') k++;
                 redRun++; redAt = `${tc.type.id} ${nm(tc.e)} ${xz(tc)}, красный ${(k * 0.1).toFixed(1)} с, v ${tc.v.toFixed(1)}${tc.goYellow ? ', решил на жёлтый' : ''}`;
               }
             }

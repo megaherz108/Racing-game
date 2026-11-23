@@ -2,9 +2,9 @@
 // enterEdge/enterTurn — маршрут по полосам и выбор поворота; blocked, conflicts, oncoming, exitBlocked — кто кому
 //   уступает; scanAhead — дистанция до машин и игроков впереди; preStep(dt) — скорость и поворот перед шагом физики.
 // follow — прицеп за тягачом (трактриса: ось тележки тянется к сцепке).
-// Определяет: Traffic.enterEdge, Traffic.enterTurn, Traffic.blocked, Traffic.giveWay, Traffic.roundYield,
-//   Traffic.acquire, Traffic.release, Traffic.conflicts, Traffic.oncoming, Traffic.exitBlocked, Traffic.scanAhead,
-//   Traffic.checkFlat, Traffic.preStep, Traffic.follow.
+// Определяет: TRAFFIC_SIG_SHORT, Traffic.enterEdge, Traffic.enterTurn, Traffic.blocked, Traffic.giveWay,
+//   Traffic.roundYield, Traffic.acquire, Traffic.release, Traffic.conflicts, Traffic.oncoming, Traffic.exitBlocked,
+//   Traffic.scanAhead, Traffic.checkFlat, Traffic.preStep, Traffic.follow.
 // Использует: clamp (js/core.js); angLerp (js/world.js); cars, simTime, qrot (js/physics.js); turnPiece, tPieceMinR,
 //   tPieceIdx, tPieceAt, tPieceProject, trafficLight (js/traffic/graph.js); Traffic, TRAFFIC_NEAR, TRAFFIC_FAR
 //   (js/traffic/traffic.js).
@@ -156,7 +156,6 @@ Object.assign(Traffic, {
     }
     const test = (o, ox, oz, ohw, ohl) => {
       if (Math.abs(o.y - tc.y) > 3) return;           // на другом уровне: под эстакадой или на ней
-      let ph = null;                                  // направление нашего пути у ближайшей к o точки
       const dx = ox - tc.x, dz = oz - tc.z;
       let fwd = dx * fx + dz * fz, lat;
       if (P ? dx * dx + dz * dz > 45 * 45 : fwd <= 0 || fwd > 40) return;
@@ -166,7 +165,7 @@ Object.assign(Traffic, {
           if (P.cum[k - 1] > tc.s + 45) break;
           const a = P.pts[k - 1], b = P.pts[k], sx = b[0] - a[0], sz = b[1] - a[1], L2 = sx * sx + sz * sz || 1;
           const u = clamp(((ox - a[0]) * sx + (oz - a[1]) * sz) / L2, 0, 1), d = (a[0] + sx * u - ox) ** 2 + (a[1] + sz * u - oz) ** 2;
-          if (d < bd) { bd = d; bs = P.cum[k - 1] + Math.sqrt(L2) * u; ph = Math.atan2(sx, sz); }
+          if (d < bd) { bd = d; bs = P.cum[k - 1] + Math.sqrt(L2) * u; }
         }
         if (bs < 0) return;
         const ax = ox - ex, az = oz - ez, past = ax * efx + az * efz;
@@ -177,7 +176,7 @@ Object.assign(Traffic, {
           for (let k = 1; k < Q.pts.length; k++) {
             const a = Q.pts[k - 1], b = Q.pts[k], sx = b[0] - a[0], sz = b[1] - a[1], L2 = sx * sx + sz * sz || 1;
             const u = clamp(((ox - a[0]) * sx + (oz - a[1]) * sz) / L2, 0, 1), d = (a[0] + sx * u - ox) ** 2 + (a[1] + sz * u - oz) ** 2;
-            if (d < qd) { qd = d; qs = Q.cum[k - 1] + Math.sqrt(L2) * u; ph = Math.atan2(sx, sz); }
+            if (d < qd) { qd = d; qs = Q.cum[k - 1] + Math.sqrt(L2) * u; }
           }
           const qe = Q.pts[Q.pts.length - 1], bx = ox - qe[0], bz = oz - qe[1], past2 = bx * tc.ne.ix + bz * tc.ne.iz;
           if (qs >= Q.len - 0.01 && past2 > 0) { fwd = P.len - tc.s + Q.len + past2; lat = bx * tc.ne.iz - bz * tc.ne.ix; }
@@ -186,9 +185,6 @@ Object.assign(Traffic, {
         else if (bs >= P.len - 0.01 && past > 0) { fwd = P.len - tc.s + past; lat = ax * efz - az * efx; }   // за перекрёстком — по выездной полосе
         else { fwd = bs - tc.s; lat = Math.sqrt(bd); if (fwd <= 0) return; }
       } else lat = dx * fz - dz * fx;
-      // длинная машина (автобус, грузовик) стоит под углом к нашему пути: вбок она занимает |sin| · L/2 + |cos| · W/2,
-      // а не W/2 (такси в повороте не видело автобус, ждущий у стоп-линии поперёк его пути)
-      if (ph !== null && o.type && o.type.long) { const a = o.h - ph; ohw = Math.max(ohw, Math.abs(Math.sin(a)) * o.L / 2 + Math.abs(Math.cos(a)) * o.W / 2); }
       if (Math.abs(lat) < tc.W / 2 + ohw + 0.4 && fwd - tc.L / 2 - ohl < best) { best = fwd - tc.L / 2 - ohl; by = o; }
     };
     if (!(tc.ghostT > 0)) for (const o of this.nearby(tc.x, tc.z)) if (o !== tc && o !== tc.trailer && !o.dead) test(o, o.x, o.z, o.W / 2, (o.L + o.W) / 4);
@@ -197,15 +193,14 @@ Object.assign(Traffic, {
     return best;
   },
 
-  // Ровный ли участок маршрута бота: высота поверхности через каждые 1,5 м вдоль участка (на уровне, где бот сейчас;
-  // реже — пропускает «стол» перехода «Ситжеса»: бот ехал сквозь него).
+  // Ровный ли участок маршрута бота: высота поверхности через каждые 3 м вдоль участка (на уровне, где бот сейчас).
   // Ровный — tc.flatY = высота, иначе null (мосты, пандусы эстакады, холмы). Проверяется раз на участок.
   checkFlat(tc) {
     const p = tc.piece, w = this.world;
     tc.flatOf = p; tc.flatY = null;
     if (tc.kind === 'lane' && tc.e.bridge) return;
     let lo = Infinity, hi = -Infinity;
-    for (let s = 0; ; s += 1.5) {
+    for (let s = 0; ; s += 3) {
       tPieceAt(p, Math.min(s, p.len), _tp);
       const y = w.surface(_tp[0], _tp[1], tc.y + 1.5);
       if (y < lo) lo = y; if (y > hi) hi = y;
