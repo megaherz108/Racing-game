@@ -53,6 +53,8 @@
 - `landmarks3d.js` — постройка достопримечательностей и помощники `lm*`; модели — `lm/<id>.js`.
 - `signtex.js` — атлас надписей; `signs3d.js` — постройка вывесок и дверей.
 - `street3d.js` — постройка мелочей улиц (`S.place`, `S.lights`).
+- `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground)`, настройки `SITGES_NET`; строится при
+  заезде, раскладку не меняет.
 - `labels.js` — подписи адресов над домами для отладки (`save.addr`, клавиша L, данные `data-addr.js`).
 
 ## Инструменты `tools/sitges/`
@@ -74,6 +76,7 @@
 - `fence-debug.js` — заборы: `__fenceMap`, `__fenceShots`, `__sitgesFind` (схема и кадр у адреса).
 - `lm-debug.js` — строения: `__lmInfo`, `__lmMap`, `__lmShots`.
 - `sign-debug.js` — вывески: `__signMap`, `__signInfo`, `__signShots` (кадры у вывески).
+- `traffic-debug.js` — граф трафика: `__netInfo` (сводка), `__netMap` (схема сверху), `__netGraph`.
 - `street-debug.js` — мелочи улиц: `__stInfo`, `__stMap`, `__stShots`, тестовая группа `__stDemo`.
 - `signs-show.js` — витрина атласа вывесок (≈ 40 образцов).
 - `trees-show.js` — витрина моделей деревьев; `trees-shots.js` — кадры раскладки деревьев.
