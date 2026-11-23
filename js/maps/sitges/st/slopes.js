@@ -60,7 +60,7 @@ const stSlopeCfg = {
   pool: { rim: 0.3, rimH: 0.06, lift: 0.08, minA: 4 },
   colors: {
     // бут: раствор и камни (серо-бежевые, светлые, охристые, серые — sv/slope 07, 12; h-church-01)
-    mortar: '#d6cdbd', stones: ['#c8bca6', '#b9ad97', '#d3c8b2', '#ab9f8b', '#c6b28e', '#b3aa9c'], cap: '#cfc4ae', deck: '#b8af9c', rock: '#aea18a', paving: '#d3cdc1', lawn: '#5a7d36',
+    mortar: '#d6cdbd', stones: ['#c8bca6', '#b9ad97', '#d3c8b2', '#ab9f8b', '#c6b28e', '#b3aa9c'], cap: '#cfc4ae', deck: '#b8af9c', rock: '#aea18a', paving: '#c9c3b7', lawn: '#5a7d36',
     water: '#46b7d6', rim: '#e3ddd0',
   },
   rockPaint: [160, 148, 126],           // цвет скалы на текстуре земли (ground.js)
@@ -507,7 +507,8 @@ function stSlopeTex() {
   if (stSlopeTexCache) return stSlopeTexCache;
   const rng = mulberry32(731), Cc = stSlopeCfg.colors;
   const cv = (w, h, base) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = base; x.fillRect(0, 0, w, h); return [c, x]; };
-  const col = (hex, f, dr = 0, dg = 0, db = 0) => { const c = new THREE.Color(hex); return `rgb(${clamp(c.r * 255 * f + dr, 0, 255) | 0},${clamp(c.g * 255 * f + dg, 0, 255) | 0},${clamp(c.b * 255 * f + db, 0, 255) | 0})`; };
+  // цвет холста — в sRGB, как записан (THREE.Color хранит линейный)
+  const col = (hex, f, dr = 0, dg = 0, db = 0) => { const v = parseInt(hex.slice(1), 16), ch = (s, d) => clamp(((v >> s) & 255) * f + d, 0, 255) | 0; return `rgb(${ch(16, dr)},${ch(8, dg)},${ch(0, db)})`; };
   const tex = c => { const t = canvasTex(c); t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.userData = { shared: true }; return t; };
   const grain = (x, w, h, n, a) => { for (let i = 0; i < n; i++) { x.fillStyle = rng() < 0.5 ? `rgba(255,255,255,${rng() * a})` : `rgba(0,0,0,${rng() * a})`; x.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2); } };
   // бут (sv/slope 12, 07; h-church-01): серо-бежевые и охристые камни 0,12–0,35 м в светлом растворе, 2 м на 512 px
