@@ -23,7 +23,10 @@ const SITGES_RB = {
   dash: [3, 5],        // штрих и промежуток оси, м
   zebra: { len: 3, stripe: 0.5, step: 1.0 },
   rail: { bed: 0.35, half: 2.2, top: 1.5, gauge: 0.72, h: 0.16, fence: 3.3, fenceH: 1.8 },
-  deck: { t: 0.9, parapet: 1.0 },
+  // настил моста: толщина и высота перил; under — улица под перилами проходит под мостом, если просвет под настилом
+  // где-то на её проезжей части не меньше under м, иначе это стык моста с улицей в одном уровне — там перил нет;
+  // над проходящей под мостом улицей настил толщиной thin; piece — шаг проверки перил, м
+  deck: { t: 0.9, thin: 0.5, parapet: 1.0, under: 2, piece: 0.5 },
   wall: { h: 1.2, t: 0.5, off: 9 },   // стена по границе: высота, толщина, отступ от линии границы на севере
 };
 
@@ -172,15 +175,18 @@ function sitgesBuildRoads(K) {
   };
   const offs = (q, d) => [q.x - q.tz * d, q.z + q.tx * d];   // d > 0 — сторона 0 (левая)
   const DK = P.deck;
-  // solid — столкновения (у настила ж/д их нет: под ним проезжая часть, а коллайдер стенки — столб от земли)
-  const parapet = (ax, az, ay, bx, bz, by, nx, nz, solid = true) => {
+  // solid — столкновения (у настила ж/д их нет: под ним проезжая часть). Коллайдер — только на высоте стенки
+  // (от низа настила до верха перил, y0 / y1 в сетке): под мостом проезжают игроки и трафик
+  // dt — толщина настила (наружная грань стенки закрывает его бок)
+  const parapet = (ax, az, ay, bx, bz, by, nx, nz, solid = true, dt = DK.t) => {
     // стенка толщиной 0,3 м над настилом: две грани и верх
     const t = 0.3, ox = nx * t, oz = nz * t;
-    wallQuad('stone', ax, az, ay - DK.t, ay + DK.parapet, bx, bz, by - DK.t, by + DK.parapet, nx, nz, 0xd8d0c0);
+    wallQuad('stone', ax, az, ay - dt, ay + DK.parapet, bx, bz, by - dt, by + DK.parapet, nx, nz, 0xd8d0c0);
     wallQuad('stone', ax - ox, az - oz, ay, ay + DK.parapet, bx - ox, bz - oz, by, by + DK.parapet, -nx, -nz, 0xd8d0c0);
     quad('stone', [[ax, ay + DK.parapet, az], [bx, by + DK.parapet, bz], [bx - ox, by + DK.parapet, bz - oz], [ax - ox, ay + DK.parapet, az - oz]], UP, 0xe8e0d0);
     const cx = (ax + bx) / 2 - ox / 2, cz = (az + bz) / 2 - oz / 2, L = Math.hypot(bx - ax, bz - az);
-    if (solid && L > 0.2) grid.addOBB(cx, cz, t, L, Math.atan2(bx - ax, bz - az), Math.max(ay, by) + DK.parapet - g(cx, cz));
+    if (solid && L > 0.2) Object.assign(grid.addOBB(cx, cz, t, L, Math.atan2(bx - ax, bz - az), Math.max(ay, by) + DK.parapet - g(cx, cz)),
+      { y0: Math.min(ay, by) - dt, y1: Math.max(ay, by) + DK.parapet });
   };
 
   const cnt = { ribbon: 0, walk: 0, corner: 0, dash: 0, zebra: 0, deck: 0, fence: 0, wall: 0 };
@@ -250,20 +256,64 @@ function sitgesBuildMarks(K) {
 
   /* ---------- мосты и путепроводы улиц: настил, парапеты ---------- */
   const DK = P.deck;
+  // линия перил участка a → b (сторона sg): концы и высоты настила
+  const rail = (a, b, sg) => {
+    const wa = a.hw + Math.max(a.sw[0], a.sw[1]) + 0.3, wb = b.hw + Math.max(b.sw[0], b.sw[1]) + 0.3;
+    const [ax, az] = offs(a, sg * wa), [bx, bz] = offs(b, sg * wb);
+    return { ax, az, ay: a.y + P.lift.drive, bx, bz, by: b.y + P.lift.drive, L: Math.hypot(bx - ax, bz - az) };
+  };
+  // точки перил через piece м: что под ними — проезжая часть другой улицы (carriageAt) и просвет под настилом
+  const railPts = (r, own, fn) => {
+    const n = Math.max(1, Math.ceil(r.L / DK.piece));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, x = r.ax + (r.bx - r.ax) * t, z = r.az + (r.bz - r.az) * t, c = C.carriageAt(x, z, own);
+      fn(k, n, c, c ? r.ay + (r.by - r.ay) * t - DK.t - g(x, z) : 0);
+    }
+  };
+  // улицы под перилами: наибольший просвет под настилом над проезжей частью каждой (мост × улица). Меньше under —
+  // стык моста с улицей в одном уровне (конец моста на перекрёстке, мостик у дороги): перила там стояли бы поперёк улицы
+  const under = new Map();
   for (const st of C.streets) {
     const v = st.v;
+    for (let i = 0; i + 1 < v.length; i++) if (v[i].deck) for (const sg of [1, -1]) railPts(rail(v[i], v[i + 1], sg), st, (k, n, c, cl) => {
+      if (!c) return;
+      let m = under.get(st); if (!m) under.set(st, m = new Map());
+      m.set(c.st, Math.max(m.get(c.st) ?? -Infinity, cl));
+    });
+  }
+  cnt.railCut = 0; cnt.deckThin = 0;
+  for (const st of C.streets) {
+    const v = st.v, U = under.get(st);
     for (let i = 0; i + 1 < v.length; i++) {
       const a = v[i], b = v[i + 1];
       if (!a.deck) continue;
       const wa = a.hw + Math.max(a.sw[0], a.sw[1]) + 0.3, wb = b.hw + Math.max(b.sw[0], b.sw[1]) + 0.3;
-      decks.slab([a.x, a.y + P.lift.drive, a.z], [b.x, b.y + P.lift.drive, b.z], 2 * Math.max(wa, wb), DK.t);
-      // боковины настила и низ
-      for (const sg of [1, -1]) {
-        const [ax, az] = offs(a, sg * wa), [bx, bz] = offs(b, sg * wb);
-        parapet(ax, az, a.y + P.lift.drive, bx, bz, b.y + P.lift.drive, sg * -a.tz, sg * a.tx);
+      // перила — кусками, без мест над улицей в одном уровне с настилом (cut); над улицей, проходящей под мостом, —
+      // настил тоньше (thin): просвет под ним — по рельефу, а он в выемках у мостов не глубже ≈ 2,5 м
+      const R = [1, -1].map(sg => ({ r: rail(a, b, sg), sg, cut: null })); let thin = false;
+      if (U) for (const S of R) railPts(S.r, st, (k, n, c) => {
+        if (!c) return;
+        if (U.get(c.st) < DK.under) (S.cut || (S.cut = new Uint8Array(n)))[k] = 1; else thin = true;
+      });
+      const t = thin ? DK.thin : DK.t;
+      if (thin) cnt.deckThin++;
+      decks.slab([a.x, a.y + P.lift.drive, a.z], [b.x, b.y + P.lift.drive, b.z], 2 * Math.max(wa, wb), t);
+      for (const { r, sg, cut } of R) {
+        const nx = sg * -a.tz, nz = sg * a.tx;
+        if (!cut) { parapet(r.ax, r.az, r.ay, r.bx, r.bz, r.by, nx, nz, true, t); continue; }
+        cnt.railCut++;
+        const at = u => [r.ax + (r.bx - r.ax) * u, r.az + (r.bz - r.az) * u, r.ay + (r.by - r.ay) * u];
+        for (let k = 0, n = cut.length; k < n; k++) {
+          if (cut[k]) continue;
+          let j = k; while (j + 1 < n && !cut[j + 1]) j++;
+          const [x0, z0, y0] = at(k / n), [x1, z1, y1] = at((j + 1) / n);
+          parapet(x0, z0, y0, x1, z1, y1, nx, nz, true, t);
+          k = j;
+        }
       }
+      // низ настила
       const [lx0, lz0] = offs(a, wa), [rx0, rz0] = offs(a, -wa), [lx1, lz1] = offs(b, wb), [rx1, rz1] = offs(b, -wb);
-      quad('stone', [[lx0, a.y - DK.t, lz0], [lx1, b.y - DK.t, lz1], [rx1, b.y - DK.t, rz1], [rx0, a.y - DK.t, rz0]], [0, -1, 0], 0xb0a898);
+      quad('stone', [[lx0, a.y - t, lz0], [lx1, b.y - t, lz1], [rx1, b.y - t, rz1], [rx0, a.y - t, rz0]], [0, -1, 0], 0xb0a898);
       cnt.deck++;
     }
   }

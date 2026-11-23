@@ -3,8 +3,8 @@
 // bakeModel() «запекает» модель: кузов отдельно, остальное слито в одну геометрию с цветом/материалом в вершинах.
 // TRAFFIC_TYPES — частота появления, скорость, разгон каждого типа.
 // Определяет: canvasMat, addWheels, buildTaxiModel, buildBusModel, buildTruckModel, bakeModel, bakedPartsMaterial,
-//   mergeBakedParts, CAR_PAINTS, TRAFFIC_TYPES.
-// Использует: CARS (js/data.js); makeWheel, box, MAT (js/core.js); buildCarModel (js/car-models.js).
+//   mergeBakedParts, CAR_PAINTS, TRAFFIC_TYPES, SITGES_TRAFFIC_TYPES.
+// Использует: CARS, PAINTS (js/data.js); makeWheel, box, MAT (js/core.js); buildCarModel (js/car-models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -168,4 +168,20 @@ const TRAFFIC_TYPES = [
   { id: 'bus', w: 7, vmax: 9.5, mass: 9000, accel: 1.3, paints: [0x2f8f5b, 0xd23a2f, 0x2a5bd7, 0xf2c230] },
   { id: 'truck', w: 9, vmax: 10.5, mass: 7000, accel: 1.5, paints: [0xd23a2f, 0x2a5bd7, 0x2f8f5b, 0xff8a2a, 0x6b6f74] },
 ];
+// «Ситжес» (docs/sitges/stage-8.md, «Машины»): все 10 машин игроков во всех 12 цветах гаража (PAINTS), такси, автобусы
+// и грузовики (long — только по широким дорогам графа: e.noLong, js/maps/sitges/trafficnet.js). Скорость — городская:
+// предел улицы задаёт граф (vprof: ≈ 30 км/ч, на узких и брусчатке ниже), vmax — выше него, чтобы не мешать.
+// Доли: обычные и такси — чаще, Mustang и WRX — реже, Hummer, 911, Aventador — редко, автобусов и грузовиков немного
+const SITGES_TRAFFIC_TYPES = (() => {
+  const garage = PAINTS.map(p => p.hex);
+  const car = (id, w, mass, accel = 2.6) => ({ id, w, vmax: 11, mass, accel, paints: garage });
+  return [
+    car('corolla', 12, 1300), car('golf', 12, 1250), car('accord', 12, 1450), car('x5', 12, 2100, 2.4), car('niva', 12, 1300, 2.2),
+    car('mustang', 5, 1700, 3), car('wrx', 5, 1500, 3),
+    car('hummer', 2, 2900, 2), car('p911', 2, 1450, 3.2), car('aventador', 2, 1600, 3.5),
+    { id: 'taxi', w: 12, vmax: 11, mass: 1300, accel: 2.8, paints: [0xf2c230] },
+    { id: 'bus', w: 3, vmax: 9.5, mass: 9000, accel: 1.3, long: true, paints: [0x2f8f5b, 0xd23a2f, 0x2a5bd7, 0xf2c230] },
+    { id: 'truck', w: 3, vmax: 9.5, mass: 7000, accel: 1.5, long: true, paints: [0xd23a2f, 0x2a5bd7, 0x2f8f5b, 0xff8a2a, 0x6b6f74] },
+  ];
+})();
 

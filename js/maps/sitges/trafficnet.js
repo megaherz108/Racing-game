@@ -14,21 +14,21 @@
 //   Высота hy — высота оси (полотно, настилы мостов, путепроводы и спуски под них — этап 2); скорость vprof —
 //     по классу (на узких и брусчатке — slow), в повороте — по радиусу, с запасом на торможение перед ним.
 //   Главная дорога узла — по классу (prio), при равном — сквозная; въезд со STOP / «уступи» этапа 7B (точки OSM) —
-//     второстепенный (e.sign). Светофоры OSM (2) — узлу sig, рёбрам группа фаз grp 0/1 (пары встречных рукавов);
-//     n.lit не ставится: водитель пока знает только оси x / z «Города» (группы — шаг 8.1).
+//     второстепенный (e.sign: 'stop' — водитель останавливается полностью). Светофоры OSM (2) — узлу sig с фазой
+//     phase(grp, t), рёбрам группа фаз grp 0/1 (пары встречных рукавов); n.lit («Город», оси x / z) не ставится.
 //   Запреты: Hummer (W 2,2) — не на самые узкие улицы (hummer: двусторонние уже two, односторонки уже one; maxW);
 //     автобусам и грузовикам — только широкие дороги (wide: классы cls, двусторонние не уже minW, односторонки не уже
-//     minW1, без поворотов круче minR; иначе noLong). Мост, перила которого задевают полосу, — e.blocked. Подграф каждой машины
+//     minW1, без поворотов круче minR; иначе noLong). Перила моста над полосой (коллайдер — от низа настила, js/maps/sitges/roads3d.js) — ниже clearDeck — e.blocked. Подграф каждой машины
 //     (Hummer, длинные) тоже сильно связный — рёбра вне его самой большой части ей запрещаются.
 //   Предметы на проезжей части (столбики, «столы», террасы, стволы, дома над проездами): где полоса их задевает
 //     (с запасом в полуширину самой широкой допущенной машины), ось участка плавно сдвигается вбок (до shift м,
-//     не за бордюр); что осталось — в отчёте (blocked). Проезд под домом ниже 4 м — длинным нельзя.
+//     не за бордюр); что осталось — в отчёте (blocked). Проезд под домом или мостом ниже 4 м — длинным нельзя.
 // sitgesTrafficGraph(C, grid, ground) → { nodes, edges, report, dropped }; grid — сетка неподвижных препятствий
 //   построенного мира (world.grid), ground — world.ground. Подключение к трафику (world.trafficGraph) — шаг 8.1.
 // Отладка: tools/sitges/traffic-debug.js (сводка и схема сверху).
 // Определяет: SITGES_NET, sitgesNetSCC, sitgesTrafficGraph.
 // Использует: clamp (js/core.js); trafficGraphReport (js/maps/coast/trafficnet.js); sitgesInPoly, sitgesSeg
-//   (js/maps/sitges/geom.js); tPiece (js/traffic/graph.js).
+//   (js/maps/sitges/geom.js); stMarkSignal (js/maps/sitges/st/marks.js); tPiece (js/traffic/graph.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -56,6 +56,7 @@ const SITGES_NET = {
   margin: 0.1,        // запас до предмета сверх полуширины машины, м
   shift: 2,           // объезд предметов: сдвиг оси не больше, м
   clearCar: 2.4, clearLong: 4,   // дом над проездом: низ выше полосы меньше — нельзя никому / длинным
+  clearDeck: 2,       // перила моста над полосой: низ выше меньше — нельзя никому (Hummer — верх коллайдера 1,81 м)
   sign: 45,           // STOP / «уступи»: до конца полосы не дальше, м
   signal: 35,         // светофор OSM — узел не дальше, м
 };
@@ -249,10 +250,12 @@ function sitgesTrafficGraph(C, grid, ground) {
     for (const it of grid.query(x - m - 1, x + m + 1, z - m - 1, z + m + 1)) {
       if (it.brk) continue;                                       // сбиваемое сносят
       if (x < it.minX - m || x > it.maxX + m || z < it.minZ - m || z > it.maxZ + m) { if (it.box) continue; }
+      // предмет с высотами низа и верха (дом над проездом, перила моста): полоса над ним или далеко под ним — мимо
+      if (it.y1 !== undefined && (it.y1 < y + 0.2 || it.y0 > y + N.clearLong)) continue;
+      const low = it.y0 !== undefined && it.y0 > y + (it.poly ? N.clearCar : N.clearDeck);   // проезд под ним — только не длинным
       if (it.poly) {
-        if (it.y1 !== undefined && (it.y1 < y + 0.2 || it.y0 > y + N.clearLong)) continue;
         if (!inside(x, z, it.poly, m)) continue;
-        if (it.y0 !== undefined && it.y0 > y + N.clearCar) { res = 2; continue; }
+        if (low) { res = 2; continue; }
         return 1;
       }
       // столб, ящик, ствол: от земли на h (как коллайдер, js/physics.js); полоса выше его верха (настил) — мимо
@@ -260,7 +263,7 @@ function sitgesTrafficGraph(C, grid, ground) {
       if (ground && y > ground(cx, cz) + it.h + 0.3) continue;
       if (it.obb) {
         const o = it.obb, c = Math.cos(o.rot), s = Math.sin(o.rot), dx = x - o.x, dz = z - o.z;
-        if (Math.abs(dx * c - dz * s) < o.w / 2 + m && Math.abs(dx * s + dz * c) < o.d / 2 + m) return 1;
+        if (Math.abs(dx * c - dz * s) < o.w / 2 + m && Math.abs(dx * s + dz * c) < o.d / 2 + m) { if (low) { res = 2; continue; } return 1; }
       } else if (!it.box && it.r != null) { if (Math.hypot(x - it.x, z - it.z) < it.r + m) return 1; }
       else return 1;
     }
@@ -420,9 +423,11 @@ function sitgesTrafficGraph(C, grid, ground) {
   for (const e of edges) e.major = !!(e.B.major && e.B.major.has(e.st)) && !e.sign;
 
   /* ---------- светофоры OSM: перекрёсток (группы рукавов) или переход посреди улицы ---------- */
-  // У перекрёстка (узел ≥ 3 рукавов не дальше N.signal): n.sig, у въездов grp — группа 0: главная улица и встречные
-  // ей, группа 1 — остальные. Посреди улицы (пешеходный переход): у рёбер этой улицы рядом e.light — длина полосы до
-  // светофора, м (фаза 0 — машинам, 1 — пешеходам; водителю — шаг 8.1)
+  // У перекрёстка (узел ≥ 3 рукавов не дальше N.signal): n.sig = { x, z, phase }, у въездов grp — группа 0: улица,
+  // где стоит голова светофора 7B (иначе главная), и встречные ей, группа 1 — остальные; фаза — phase(grp, simTime)
+  // (stMarkSignal, js/maps/sitges/st/marks.js — та же, что у ламп). Посреди улицы (пешеходный переход): у рёбер этой
+  // улицы рядом e.light — длина полосы до светофора, м (фаза 0 — машинам, 1 — пешеходам; водитель такие пока не знает —
+  // их нет)
   const lights = [];
   const lanePos = (e, x, z) => {
     const P = e.lp[0].pts;
@@ -444,10 +449,10 @@ function sitgesTrafficGraph(C, grid, ground) {
       continue;
     }
     if (!n) { lights.push({ x, z, miss: true }); continue; }
-    const inc = edges.filter(e => e.B === n);
-    const ref = inc.find(e => e.major) || inc[0];
+    const inc = edges.filter(e => e.B === n), head = C.carriageAt(x, z);
+    const ref = (head && inc.find(e => e.st === head.st)) || inc.find(e => e.major) || inc[0];
     for (const e of inc) e.grp = e === ref || e.st === ref.st || e.ex * ref.ex + e.ez * ref.ez < -0.5 ? 0 : 1;
-    n.sig = { x, z };
+    n.sig = { x, z, phase: stMarkSignal };
     lights.push({ x, z, kind: 'перекрёсток', node: [+n.x.toFixed(1), +n.z.toFixed(1)], in: inc.length, g0: inc.filter(e => e.grp === 0).length, g1: inc.filter(e => e.grp === 1).length });
   }
 

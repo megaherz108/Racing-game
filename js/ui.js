@@ -438,11 +438,11 @@ function renderAddr() {
     <span class="thint">L · и в заезде</span>`;
 }
 function setAddr(v) { save.addr = !!v; persist(); renderAddr(); }
-// интенсивность трафика (на «Побережье» — своё число машин на всю карту, world.traffic)
+// интенсивность трафика (на «Побережье» и «Ситжесе» — своё число машин, world.traffic)
 function renderTraffic() {
   $('trafficLine').innerHTML = `Трафик: ${TRAFFIC_LEVELS.map(([id, label]) =>
     `<button class="tsel ${id === save.traffic ? 'on' : ''}" data-traffic="${id}">${label}</button>`).join('')}
-    <span class="thint">↑ / ↓${playMap('free') === 'sitges' ? ' · на Ситжесе трафика пока нет' : ''}</span>`;
+    <span class="thint">↑ / ↓</span>`;
 }
 function setTraffic(id) { save.traffic = id; persist(); renderTraffic(); }
 function stepTraffic(d) {

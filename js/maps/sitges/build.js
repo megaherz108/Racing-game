@@ -13,7 +13,7 @@
 //   sitgesBuildTrees             деревья по C.trees (js/maps/sitges/trees3d.js)
 //   sitgesBuildStreet            мелочи улиц, этап 7: группы A → G по C.street (js/maps/sitges/street3d.js, st/<группа>.js)
 //   sitgesBuildWorld (здесь)     склейка статики, теневые копии и объект мира: спавн, точки улиц, монеты
-// Определяет: SITGES_LANE, SITGES_LOOK, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
+// Определяет: SITGES_LANE, SITGES_LOOK, SITGES_TRAFFIC, SITGES_GREEN, buildSitges, sitgesBuildKit, sitgesBuildWorld.
 // Использует: rand (js/core.js); StaticGrid, optimizeStatic, buildShadowProxies (js/world.js); WATER_U
 //   (js/maps/city/textures.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); sitgesRaster
 //   (js/maps/sitges/terrain.js); sitgesBuildGround, SITGES_G (js/maps/sitges/ground.js); sitgesBuildRoads,
@@ -22,7 +22,8 @@
 //   (js/maps/sitges/facades3d.js); sitgesBuildSigns (js/maps/sitges/signs3d.js); sitgesBuildRail
 //   (js/maps/sitges/rail3d.js); sitgesBuildTrees (js/maps/sitges/trees3d.js); sitgesBuildStreet
 //   (js/maps/sitges/street3d.js); sitgesBuildBuildings (js/maps/sitges/buildings.js); sitgesBuildLandmarks
-//   (js/maps/sitges/landmarks3d.js); sitgesLabels (js/maps/sitges/labels.js).
+//   (js/maps/sitges/landmarks3d.js); sitgesLabels (js/maps/sitges/labels.js); sitgesTrafficGraph
+//   (js/maps/sitges/trafficnet.js); SITGES_TRAFFIC_TYPES (js/traffic/models.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -31,6 +32,13 @@ const SITGES_LANE = 1.6;
 // свет карты: экспозиция (1 — как у пресета времени суток)
 const SITGES_LOOK = { exposure: 0.85 };
 // площадные объекты с травой (покрытие под колёсами)
+// трафик: машин вокруг каждого игрока по уровню; кольцо появления (TRAFFIC_RING, js/traffic/traffic.js) — ближе, чем
+// у «Города» (170–380 м): дома закрывают вид, а дальние машины игрок почти не встретил бы. Появляются и исчезают
+// не на виду (hide: в кадре камеры без дома между ними — нельзя)
+const SITGES_TRAFFIC = {
+  count: { low: 6, mid: 12, high: 20 },
+  ring: { min: 80, max: 220, drop: 250, over: 200, hide: true },
+};
 const SITGES_GREEN = new Set(['park', 'garden', 'grass', 'golf', 'pitch', 'playground', 'cemetery', 'wood', 'scrub', 'farmland']);
 
 function buildSitges(D) {
@@ -114,6 +122,10 @@ function sitgesBuildWorld(K) {
     // суток, а look их заменяет, а не умножает
     look: { exposure: SITGES_LOOK.exposure, grade: true },
     coinCount: 80, spawns,
+    // трафик (этап 8, docs/sitges/stage-8.md): граф строится при первом заезде с трафиком (js/maps/sitges/trafficnet.js);
+    // машины — вокруг игроков (не на всю карту), число — на каждого игрока по уровню «Мало / Средне / Много»
+    trafficGraph: () => sitgesTrafficGraph(C, grid, D.ground),
+    traffic: { types: SITGES_TRAFFIC_TYPES, count: SITGES_TRAFFIC.count, ring: SITGES_TRAFFIC.ring },
     // сводки постройки (tools/sitges/check.js)
     stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats, street: K.stStats }, walkAt, roadLod, treeTune: K.treeTune,
     // ближайшая точка улицы; направление — вдоль улицы
