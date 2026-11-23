@@ -57,7 +57,7 @@ function sitgesBuildKit(K) {
 }
 
 function sitgesBuildWorld(K) {
-  const { D, group, grid, decks, landLod, rockLod, roadLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
+  const { D, group, grid, decks, landCull, rockLod, roadLod, seaMesh, walkAt, meshColliders } = K, C = D.C, T = C.terra;
   optimizeStatic(group);
   buildShadowProxies(group);
   // подписи адресов над домами (js/maps/sitges/labels.js): строятся при первом включении, после склейки статики
@@ -136,11 +136,7 @@ function sitgesBuildWorld(K) {
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
     cullView(x, z, p) {
       if (K.treeCull) K.treeCull(x, z, p);                 // деревья: ближний набор, дальние квадраты
-      for (const L of landLod) {
-        const d = Math.hypot(L.x - x, L.z - z) - L.r;
-        let on = 0; for (let q = 0; q < L.lods.length; q++) if (d > L.lods[q].from) on = q;
-        for (let q = 0; q < L.lods.length; q++) L.lods[q].mesh.visible = q === on;
-      }
+      landCull(x, z);                                       // земля: уровни подробности, дальние — склейкой (ground.js)
       for (const R of rockLod) R.mesh.visible = Math.hypot(R.x - x, R.z - z) - R.r < SITGES_G.rockFar;
       for (const L of roadLod) L.mesh.visible = Math.hypot(L.x - x, L.z - z) - L.r < L.far;   // заборы, балконы, мелочи улиц
     },

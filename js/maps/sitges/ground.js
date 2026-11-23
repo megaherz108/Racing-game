@@ -1,6 +1,7 @@
 // Ситжес — ПОСТРОЙКА: земля, море, волнорезы, понтоны марины.
 // sitgesBuildGround — рельеф игровой сетки (js/maps/sitges/terrain.js) чанками по SITGES_G.chunk клеток с тремя уровнями
-//   подробности (переключает cullView() мира по расстоянию до камеры) и «юбками» против щелей между уровнями.
+//   подробности (переключает cullView() мира по расстоянию до камеры через landCull) и «юбками» против щелей между
+//   уровнями; дальние уровни рисуются склейками соседних чанков (SITGES_G.merge) — меньше вызовов отрисовки.
 //   Цвет — текстура земли SITGES_G.ppm пикс/м (площадные объекты, пляжи, ж/д, улицы — sitgesPaint(), волнорезы — камнем),
 //   у берега без пляжа — каменная кромка; поверх — оттенок в вершинах: дно темнее с глубиной, мокрый песок у кромки, пятна камня на грядах.
 //   Фон за сеткой — плитки outer() (шаг 20 м рядом, дальше 40 и 80 м), цвет в вершинах (площадные объекты с мелкой
@@ -19,6 +20,7 @@ const SITGES_G = {
   ppm: 1,                                   // текстура земли, пикселей на метр
   chunk: 64,                                // клеток сетки в чанке земли (160 м)
   lod: [[1, 0], [2, 60], [4, 200], [8, 500]], // [шаг в клетках, с какого расстояния до края чанка, м]
+  merge: [[4, 3], [2, 2]],                  // дальние уровни склейкой: [чанков по стороне, с какого уровня lod] — крупные первыми
   rockCell: 160, rockFar: 300,              // валуны — по квадратам; дальше rockFar м от камеры не рисуются
   far: [5200, -3200, 4800],                 // фон: до |x|, от z (море), до z
   steps: [[500, 20], [2000, 40], [1e9, 80]], // фон: шаг клетки, м, у плиток ближе стольких метров к сетке
@@ -118,8 +120,67 @@ function sitgesBuildGround(K) {
       group.add(mesh);
       return { mesh, from };
     });
-    landLod.push({ lods, x: g.boundingSphere.center.x, z: g.boundingSphere.center.z, r: g.boundingSphere.radius });
+    landLod.push({ lods, x: g.boundingSphere.center.x, z: g.boundingSphere.center.z, r: g.boundingSphere.radius, ci: i0 / CH, cj: j0 / CH, V, A: { pos, nr, col, uv } });
   }
+  // склейка соседних чанков на дальних уровнях (меньше вызовов отрисовки): в склейке — те же вершины и треугольники,
+  // что у её чанков на этом уровне. Уровень склейки — самый подробный из уровней её чанков (вдали не грубее, чем было)
+  const mergeLod = (list, q) => {
+    let nv = 0, ni = 0;
+    const parts = list.map(L => {
+      const ix = L.lods[q].mesh.geometry.index.array, map = new Int32Array(L.V).fill(-1);
+      let c = 0; for (let k = 0; k < ix.length; k++) if (map[ix[k]] < 0) map[ix[k]] = c++;
+      nv += c; ni += ix.length;
+      return { L, ix, map, c };
+    });
+    const pos = new Float32Array(nv * 3), nr = new Int8Array(nv * 3), col = new Uint8Array(nv * 3), uv = new Float32Array(nv * 2);
+    const idx = new (nv > 65535 ? Uint32Array : Uint16Array)(ni);
+    let vo = 0, io = 0;
+    for (const { L, ix, map, c } of parts) {
+      const A = L.A;
+      for (let v = 0; v < map.length; v++) {
+        const t = map[v]; if (t < 0) continue;
+        const d = vo + t;
+        for (let e = 0; e < 3; e++) { pos[d * 3 + e] = A.pos[v * 3 + e]; nr[d * 3 + e] = A.nr[v * 3 + e]; col[d * 3 + e] = A.col[v * 3 + e]; }
+        uv[d * 2] = A.uv[v * 2]; uv[d * 2 + 1] = A.uv[v * 2 + 1];
+      }
+      for (let k = 0; k < ix.length; k++) idx[io++] = vo + map[ix[k]];
+      vo += c;
+    }
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    mg.setAttribute('normal', new THREE.BufferAttribute(nr, 3, true));
+    mg.setAttribute('color', new THREE.BufferAttribute(col, 3, true));
+    mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    mg.setIndex(new THREE.BufferAttribute(idx, 1));
+    mg.computeBoundingSphere();
+    const mesh = new THREE.Mesh(mg, landMat); mesh.receiveShadow = true; mesh.userData.keep = true; mesh.visible = false;
+    group.add(mesh);
+    return mesh;
+  };
+  const landMerge = G.merge.map(([M, q0]) => {
+    const groups = new Map();
+    for (const L of landLod) {
+      const k = Math.floor(L.ci / M) * 4096 + Math.floor(L.cj / M);
+      let a = groups.get(k); if (!a) groups.set(k, a = []); a.push(L);
+    }
+    return [...groups.values()].filter(list => list.length > 1).map(list => ({ list, meshes: G.lod.map((_, q) => q >= q0 ? mergeLod(list, q) : null) }));
+  });
+  // уровни подробности по расстоянию до камеры (cullView мира, перед каждой половиной экрана)
+  const landCull = (x, z) => {
+    for (const L of landLod) {
+      const d = Math.hypot(L.x - x, L.z - z) - L.r;
+      let on = 0; for (let q = 0; q < L.lods.length; q++) if (d > L.lods[q].from) on = q;
+      L.on = on; L.done = false;
+    }
+    for (const lv of landMerge) for (const g of lv) {
+      let m = Infinity, done = false;
+      for (const L of g.list) { if (L.done) done = true; if (L.on < m) m = L.on; }
+      const show = done ? null : g.meshes[m];
+      for (const mesh of g.meshes) if (mesh) mesh.visible = mesh === show;
+      if (show) for (const L of g.list) L.done = true;
+    }
+    for (const L of landLod) for (let q = 0; q < L.lods.length; q++) L.lods[q].mesh.visible = !L.done && q === L.on;
+  };
 
   /* ---------- фон за сеткой ---------- */
   // площадные объекты прямоугольника данных — мелкой картинкой (5 м/пикс), цвет вершин фона берётся из неё
@@ -232,5 +293,5 @@ function sitgesBuildGround(K) {
     mesh.position.copy(d.center); mesh.quaternion.copy(d.quat); mesh.castShadow = mesh.receiveShadow = true;
     group.add(mesh);
   }
-  Object.assign(K, { landLod, rockLod, seaMesh, decks, groundStats: { tex: [cv.width, cv.height], chunks: landLod.length, outerTris, rocks: rockN } });
+  Object.assign(K, { landLod, landCull, rockLod, seaMesh, decks, groundStats: { tex: [cv.width, cv.height], chunks: landLod.length, merged: landMerge.reduce((s, lv) => s + lv.length, 0), outerTris, rocks: rockN } });
 }
