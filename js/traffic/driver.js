@@ -11,6 +11,8 @@
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
+const TRAFFIC_SIG_SHORT = 15;         // полоса до светофора короче, м, — решать «ехать или стоять» у предыдущей стоп-линии
+
 Object.assign(Traffic, {
 
   // въезд на полосу: строим участок и сразу выбираем, куда повернём на следующем перекрёстке
@@ -21,7 +23,12 @@ Object.assign(Traffic, {
     // куда этой машине можно: не уже допустимой ширины (акведук) и не на брусчатку длинной машине (трактор)
     // и с прицепом — не в тупик: развернуться трактору с тележкой на узкой дороге негде
     const fits = o => tc.W <= (o.maxW || 99) && !(o.noLong && tc.type.long) && !(tc.trailer && o.B.dead);
-    let opts = e.B.out.filter(o => (e.rev ? o !== e.rev : o.B !== e.A) && fits(o));
+    // повороты графа «Ситжеса» (e.turns): разворот на другую проезжую часть, поворот, где кузов задевает дом или столб,
+    // и где их задевает автобус, — только если больше некуда
+    const turnOk = o => { const T = e.turns && e.turns.get(o); return !T || !(T.ban || T.obj || (T.noLong && tc.type.long)); };
+    const ahead = o => (e.rev ? o !== e.rev : o.B !== e.A) && fits(o);
+    let opts = e.B.out.filter(o => ahead(o) && turnOk(o));
+    if (!opts.length) opts = e.B.out.filter(ahead);
     if (!opts.length) opts = e.B.out.filter(fits);            // тупик или дальше не проехать — разворот
     if (!opts.length) opts = e.B.out;
     // автобусы и грузовики не заезжают на кольцевые развязки: длинный кузов задевает островок
@@ -36,10 +43,12 @@ Object.assign(Traffic, {
     tc.turnV = e.B.round ? (e.B.roundV || 6.5) : dot < -0.9 ? 4 : cr > 0.5 ? 5.5 : cr < -0.5 ? 7.5 : 99;
     // кривая дорога (Побережье): дороги сходятся под любым углом — скорость в повороте по его наименьшему радиусу;
     // сразу за перекрёстком может быть поворот дороги
+    // у графа «Ситжеса» кривая и радиус поворота выбраны заранее (e.turns: не задевает бордюр, без петли)
     tc.tp = null;
     if (ne.vprof) {
-      tc.tp = turnPiece(e, l, ne, tc.nl);
-      tc.turnV = Math.min(tc.turnV, ne.vprof[0], Math.sqrt(2.2 * tPieceMinR(tc.tp)));
+      const T = e.turns && e.turns.get(ne);
+      tc.tp = T ? T.p : turnPiece(e, l, ne, tc.nl);
+      tc.turnV = Math.min(tc.turnV, ne.vprof[0], Math.sqrt(2.2 * (T ? T.R : tPieceMinR(tc.tp))));
     }
     tc.isLeft = !e.B.round && cr < -0.5 && dot > -0.9;
   },
@@ -67,11 +76,13 @@ Object.assign(Traffic, {
   // перекрёсток Побережья (js/maps/coast/trafficnet.js): второстепенная дорога пропускает всех, кто уже на перекрёстке,
   // и тех, кто подъезжает по главной (≤ 4 с), в том числе игроков; главная уступает только въехавшим со второстепенной
   giveWay(tc, n) {
-    // застрявшего в повороте (стоит дольше 1,5 с) не ждём — иначе он ждёт нас, а мы его
-    for (const o of n.occ) if (o !== tc && !o.wreck && o.e !== tc.e && (!tc.e.major || !o.e.major) && !(o.stuckT > 1.5)) return true;
+    // застрявшего в повороте (стоит или упёрся дольше 1,5 с) не ждём — иначе он ждёт нас, а мы его
+    for (const o of n.occ) if (o !== tc && !o.wreck && o.e !== tc.e && (!tc.e.major || !o.e.major) && !(o.stuckT > 1.5) && !(o.pushT > 1.5)) return true;
     if (tc.e.major) return false;
+    // стоящий в пробке на главной (stuckT) — не «подъезжает»: на сходящихся «игреком» улицах он стоит из-за нас самих
+    // (наш нос у стоп-линии — на его полосе), и мы ждали бы друг друга вечно
     for (const o of this.nearby(n.x, n.z)) {
-      if (o === tc || o.dead || o.wreck || o.kind !== 'lane' || o.e.B !== n || !o.e.major) continue;
+      if (o === tc || o.dead || o.wreck || o.kind !== 'lane' || o.e.B !== n || !o.e.major || o.stuckT > 1.5) continue;
       if (o.piece.len - o.s < Math.max(10, o.v * 4)) return true;
     }
     for (const c of cars) {
@@ -86,7 +97,7 @@ Object.assign(Traffic, {
   roundYield(tc, n) {
     const P = tc.piece.pts[tc.piece.pts.length - 1], ae = Math.atan2(P[1] - n.z, P[0] - n.x);
     for (const o of n.occ) {
-      if (o === tc || o.wreck || o.e === tc.e || o.stuckT > 1.5) continue;
+      if (o === tc || o.wreck || o.e === tc.e || o.stuckT > 1.5 || o.pushT > 1.5) continue;
       const a = Math.atan2(o.z - n.z, o.x - n.x) - ae, d = Math.atan2(Math.sin(a), Math.cos(a));
       if (d < 1.5 && d > (o.kind === 'turn' ? -0.4 : 0.05)) return true;
     }
@@ -104,11 +115,12 @@ Object.assign(Traffic, {
     return (tc.e.B.sig ? o.e.grp !== tc.e.grp : o.e.axis !== tc.e.axis) || (opp && (o.isLeft || tc.isLeft));
   },
 
-  // поворот налево уступает встречным, которые едут прямо или направо
+  // поворот налево уступает встречным, которые едут прямо или направо (застрявшего — стоит или упёрся дольше 1,5 с — не
+  // ждём: он может стоять из-за нас)
   oncoming(tc) {
     const B = tc.e.B;
     for (const o of this.nearby(B.x, B.z, 2)) {
-      if (o === tc || o.dead || o.wreck || o.lead || o.isLeft || o.e.ex * tc.e.ex + o.e.ez * tc.e.ez > -0.9) continue;
+      if (o === tc || o.dead || o.wreck || o.lead || o.isLeft || o.e.ex * tc.e.ex + o.e.ez * tc.e.ez > -0.9 || o.stuckT > 1.5 || o.pushT > 1.5) continue;
       if (o.kind === 'lane' && o.e.B === B && o.piece.len - o.s < 45 && o.v > 0.5 && !o.waiting) return true;
       if (o.kind === 'turn' && o.node === B) return true;
     }
@@ -135,6 +147,8 @@ Object.assign(Traffic, {
     // стоящие у стоп-линий соседних полос, и бот замирает посреди перекрёстка
     // на кривых полосах Побережья — тоже вдоль полосы: луч на повороте видит встречных и стоящих на соседней дороге
     const P = tc.kind === 'turn' || tc.e.vprof ? tc.piece : null;
+    // на полосе с выбранной кривой поворота («Ситжес», e.turns) — смотрим и вдоль неё
+    const Q = tc.kind === 'lane' && tc.e.turns && tc.tp && tc.e.turns.has(tc.ne) ? tc.tp : null;
     let ex = 0, ez = 0, efx = 0, efz = 0;
     if (P) {
       const b = P.pts[P.pts.length - 1]; ex = b[0]; ez = b[1];
@@ -142,6 +156,7 @@ Object.assign(Traffic, {
     }
     const test = (o, ox, oz, ohw, ohl) => {
       if (Math.abs(o.y - tc.y) > 3) return;           // на другом уровне: под эстакадой или на ней
+      let ph = null;                                  // направление нашего пути у ближайшей к o точки
       const dx = ox - tc.x, dz = oz - tc.z;
       let fwd = dx * fx + dz * fz, lat;
       if (P ? dx * dx + dz * dz > 45 * 45 : fwd <= 0 || fwd > 40) return;
@@ -151,13 +166,29 @@ Object.assign(Traffic, {
           if (P.cum[k - 1] > tc.s + 45) break;
           const a = P.pts[k - 1], b = P.pts[k], sx = b[0] - a[0], sz = b[1] - a[1], L2 = sx * sx + sz * sz || 1;
           const u = clamp(((ox - a[0]) * sx + (oz - a[1]) * sz) / L2, 0, 1), d = (a[0] + sx * u - ox) ** 2 + (a[1] + sz * u - oz) ** 2;
-          if (d < bd) { bd = d; bs = P.cum[k - 1] + Math.sqrt(L2) * u; }
+          if (d < bd) { bd = d; bs = P.cum[k - 1] + Math.sqrt(L2) * u; ph = Math.atan2(sx, sz); }
         }
         if (bs < 0) return;
         const ax = ox - ex, az = oz - ez, past = ax * efx + az * efz;
-        if (bs >= P.len - 0.01 && past > 0) { fwd = P.len - tc.s + past; lat = ax * efz - az * efx; }   // за перекрёстком — по выездной полосе
+        if (bs >= P.len - 0.01 && past > 0 && Q) {
+          // за концом полосы — вдоль кривой поворота (на изломе улицы машина впереди уже повернула и стоит вбок от
+          // продолжения полосы), за ней — по выездной полосе
+          let qs = -1, qd = Infinity;
+          for (let k = 1; k < Q.pts.length; k++) {
+            const a = Q.pts[k - 1], b = Q.pts[k], sx = b[0] - a[0], sz = b[1] - a[1], L2 = sx * sx + sz * sz || 1;
+            const u = clamp(((ox - a[0]) * sx + (oz - a[1]) * sz) / L2, 0, 1), d = (a[0] + sx * u - ox) ** 2 + (a[1] + sz * u - oz) ** 2;
+            if (d < qd) { qd = d; qs = Q.cum[k - 1] + Math.sqrt(L2) * u; ph = Math.atan2(sx, sz); }
+          }
+          const qe = Q.pts[Q.pts.length - 1], bx = ox - qe[0], bz = oz - qe[1], past2 = bx * tc.ne.ix + bz * tc.ne.iz;
+          if (qs >= Q.len - 0.01 && past2 > 0) { fwd = P.len - tc.s + Q.len + past2; lat = bx * tc.ne.iz - bz * tc.ne.ix; }
+          else { fwd = P.len - tc.s + qs; lat = Math.sqrt(qd); }
+        }
+        else if (bs >= P.len - 0.01 && past > 0) { fwd = P.len - tc.s + past; lat = ax * efz - az * efx; }   // за перекрёстком — по выездной полосе
         else { fwd = bs - tc.s; lat = Math.sqrt(bd); if (fwd <= 0) return; }
       } else lat = dx * fz - dz * fx;
+      // длинная машина (автобус, грузовик) стоит под углом к нашему пути: вбок она занимает |sin| · L/2 + |cos| · W/2,
+      // а не W/2 (такси в повороте не видело автобус, ждущий у стоп-линии поперёк его пути)
+      if (ph !== null && o.type && o.type.long) { const a = o.h - ph; ohw = Math.max(ohw, Math.abs(Math.sin(a)) * o.L / 2 + Math.abs(Math.cos(a)) * o.W / 2); }
       if (Math.abs(lat) < tc.W / 2 + ohw + 0.4 && fwd - tc.L / 2 - ohl < best) { best = fwd - tc.L / 2 - ohl; by = o; }
     };
     if (!(tc.ghostT > 0)) for (const o of this.nearby(tc.x, tc.z)) if (o !== tc && o !== tc.trailer && !o.dead) test(o, o.x, o.z, o.W / 2, (o.L + o.W) / 4);
@@ -166,14 +197,15 @@ Object.assign(Traffic, {
     return best;
   },
 
-  // Ровный ли участок маршрута бота: высота поверхности через каждые 3 м вдоль участка (на уровне, где бот сейчас).
+  // Ровный ли участок маршрута бота: высота поверхности через каждые 1,5 м вдоль участка (на уровне, где бот сейчас;
+  // реже — пропускает «стол» перехода «Ситжеса»: бот ехал сквозь него).
   // Ровный — tc.flatY = высота, иначе null (мосты, пандусы эстакады, холмы). Проверяется раз на участок.
   checkFlat(tc) {
     const p = tc.piece, w = this.world;
     tc.flatOf = p; tc.flatY = null;
     if (tc.kind === 'lane' && tc.e.bridge) return;
     let lo = Infinity, hi = -Infinity;
-    for (let s = 0; ; s += 3) {
+    for (let s = 0; ; s += 1.5) {
       tPieceAt(p, Math.min(s, p.len), _tp);
       const y = w.surface(_tp[0], _tp[1], tc.y + 1.5);
       if (y < lo) lo = y; if (y > hi) hi = y;
@@ -191,7 +223,12 @@ Object.assign(Traffic, {
     for (const tc of this.list) {
       if (tc.lead || tc.dead || tc.wreck || (tc.tick ^= 1)) continue;
       const b = tc.body, far = tc.far;
-      if (!far) { const t = b.translation(); tc.x = t.x; tc.z = t.z; tc.y = t.y; }
+      if (!far) {
+        const t = b.translation(); tc.x = t.x; tc.z = t.z; tc.y = t.y;
+        // хочет ехать, а тело стоит — упёрся во что-то неподвижное (сколько секунд; Traffic.postStep переставит)
+        const lv = b.linvel();
+        tc.pushT = tc.v > 0.5 && lv.x * lv.x + lv.z * lv.z < 0.06 ? (tc.pushT || 0) + dt : 0;
+      }
       // продвижение по участку маршрута — по фактическому положению тела
       let [s, dev] = tPieceProject(tc.piece, tc.x, tc.z, tc.s);
       if (dev > 4.5 && !far) { this.wreck(tc, 'сошёл с полосы'); continue; }   // машину вытолкнули с полосы — потеряла управление
@@ -207,34 +244,41 @@ Object.assign(Traffic, {
       if (tc.kind === 'turn') vT = Math.min(vT, tc.turnV);
       else {
         if (tc.turnV < 99) vT = Math.min(vT, Math.sqrt(tc.turnV * tc.turnV + 2 * 2.5 * dEnd));
+        // до места остановки: машина встаёт центром у конца полосы (нос — в перекрёстке), длинная (автобус, грузовик) —
+        // раньше на stopOff, носом примерно там же, где легковая: иначе полкузова стоит поперёк чужих поворотов
+        const dS = dEnd - tc.stopOff;
         const B = tc.e.B, sig = B.sig && tc.e.grp >= 0;
+        // светофор сразу за следующим перекрёстком («Ситжес»: полоса до него короче TRAFFIC_SIG_SHORT — на ней не
+        // остановиться, машина въезжала на красный): ждём его зелёного у своей стоп-линии
+        const ne = tc.ne, sig2 = !sig && !B.lit && ne.B.sig && ne.grp >= 0 && ne.len < TRAFFIC_SIG_SHORT;
         let stop = false;
         // светофор: «Город» — по оси улицы (trafficLight), «Ситжес» — по группе рукава (n.sig.phase, e.grp)
-        if (B.lit || sig) {
-          const st = sig ? B.sig.phase(tc.e.grp, simTime) : trafficLight(B.x, B.z, tc.e.axis, simTime);
-          // на жёлтый едет, только если уже не успевает остановиться
+        if (B.lit || sig || sig2) {
+          const st = sig ? B.sig.phase(tc.e.grp, simTime) : sig2 ? ne.B.sig.phase(ne.grp, simTime) : trafficLight(B.x, B.z, tc.e.axis, simTime);
+          // на жёлтый едет, только если уже не успевает остановиться; на красный — только если не успевает и теперь
+          // (решил ехать на жёлтый, но задержался за машиной или перекрёстком — к красному у стоп-линии стоит)
           if (st === 'g') tc.goYellow = false;
-          else if (st === 'y' && !tc.goYellow && dEnd < tc.v * tc.v / 10 + 2) tc.goYellow = true;
-          stop = st === 'r' && !tc.goYellow || st === 'y' && !tc.goYellow;
+          else if (st === 'y' && !tc.goYellow && dS < tc.v * tc.v / 10 + 2) tc.goYellow = true;
+          stop = st === 'r' ? !(tc.goYellow && dS < tc.v * tc.v / 18 + 0.5) : st === 'y' && !tc.goYellow;
         }
         // знак STOP («Ситжес», e.sign): полная остановка у линии (стоим 0,8 с), дальше — как второстепенная (уступить)
         if (!stop && tc.e.sign === 'stop' && !tc.stopDone) {
           stop = true;
-          if (dEnd < 1.5 && tc.v < 0.3 && (tc.stopT += dt) > 0.8) tc.stopDone = true;
+          if (dS < 1.5 && tc.v < 0.3 && (tc.stopT += dt) > 0.8) tc.stopDone = true;
         }
         const deg = B.deg || B.out.length;
-        if (!stop && dEnd < 12) stop = this.blocked(tc) || (tc.isLeft && this.oncoming(tc)) || (deg > 2 && this.exitBlocked(tc));
+        if (!stop && dS < 12) stop = this.blocked(tc) || (tc.isLeft && this.oncoming(tc)) || (deg > 2 && this.exitBlocked(tc));
         // узкий участок впереди: занят встречными — ждём, свободен — занимаем заранее
-        const nr = tc.ne.narrow;
+        const nr = ne.narrow;
         if (!stop && nr && tc.hold !== nr && dEnd < 15) { if (nr.n && nr.dir !== tc.ne.dir) stop = true; else this.acquire(tc, tc.ne); }
         // кривая полоса: предельная скорость в повороте (с запасом на торможение — js/maps/coast/trafficnet.js)
         if (tc.e.vprof) vT = Math.min(vT, tc.e.vprof[tPieceIdx(tc.piece, tc.s + 1)]);
-        if (stop) vT = Math.min(vT, dEnd < 0.6 ? 0 : Math.sqrt(2 * 6 * (dEnd - 0.5)));
+        if (stop) vT = Math.min(vT, dS < 0.6 ? 0 : Math.sqrt(2 * 6 * (dS - 0.5)));
         tc.waiting = stop;
-        tc.waitT = stop && !B.lit && !sig && dEnd < 3 ? tc.waitT + dt : 0;    // сколько стоит первым у нерегулируемого перекрёстка
+        tc.waitT = stop && !B.lit && !sig && !sig2 && dS < 3 ? tc.waitT + dt : 0;    // сколько стоит первым у нерегулируемого перекрёстка
         // подъезжая, заранее занимаем перекрёсток — иначе две машины с разных сторон въедут одновременно
         if (deg > 2) {
-          if (!stop && dEnd < 9 && !tc.node) { tc.node = B; B.occ.add(tc); }
+          if (!stop && dS < 9 && !tc.node) { tc.node = B; B.occ.add(tc); }
           else if (stop && tc.node === B) { B.occ.delete(tc); tc.node = null; }
         }
       }

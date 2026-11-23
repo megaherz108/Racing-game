@@ -23,8 +23,12 @@
 //   Предметы на проезжей части (столбики, «столы», террасы, стволы, дома над проездами): где полоса их задевает
 //     (с запасом в полуширину самой широкой допущенной машины), ось участка плавно сдвигается вбок (до shift м,
 //     не за бордюр); что осталось — в отчёте (blocked). Проезд под домом или мостом ниже 4 м — длинным нельзя.
-// sitgesTrafficGraph(C, grid, ground) → { nodes, edges, report, dropped }; grid — сетка неподвижных препятствий
-//   построенного мира (world.grid), ground — world.ground. Подключение к трафику (world.trafficGraph) — шаг 8.1.
+//   Повороты (e.turns, шаг 8.2): у каждого въезда — кривая через перекрёсток, кузов вдоль которой не задевает бордюр
+//     и дома (иначе — лучшая из запасных), радиус для скорости, запрет разворота на другую проезжую часть и длинным.
+// sitgesTrafficGraph(C, grid, ground, walkAt, decks) → { nodes, edges, report, dropped }; grid — сетка неподвижных
+//   препятствий построенного мира (world.grid), ground — world.ground, walkAt — высота тротуара (world.walkAt; без неё
+//   бордюры не проверяются), decks — настилы мостов (world.decks; без них низкий просвет под мостом не виден).
+//   Подключение к трафику (world.trafficGraph) — шаг 8.1.
 // Отладка: tools/sitges/traffic-debug.js (сводка и схема сверху).
 // Определяет: SITGES_NET, sitgesNetSCC, sitgesTrafficGraph.
 // Использует: clamp (js/core.js); trafficGraphReport (js/maps/coast/trafficnet.js); sitgesInPoly, sitgesSeg
@@ -58,7 +62,15 @@ const SITGES_NET = {
   clearCar: 2.4, clearLong: 4,   // дом над проездом: низ выше полосы меньше — нельзя никому / длинным
   clearDeck: 2,       // перила моста над полосой: низ выше меньше — нельзя никому (Hummer — верх коллайдера 1,81 м)
   sign: 45,           // STOP / «уступи»: до конца полосы не дальше, м
+  stopGap: 2.4,       // конец полосы (там стоит центр ждущей машины) — не ближе к оси другого въезда в узел, м
   signal: 35,         // светофор OSM — узел не дальше, м
+  // повороты (e.turns): кузов W × L (X5) через step м вдоль кривой, тротуар — выше земли на curb м, до столба не ближе
+  // pole м (водитель срезает поворот, целясь вперёд); запасные кривые —
+  // кубические с касательными handles (доли хорды); R — наименьший радиус для скорости (√(2,2 · 3,5) ≈ 2,8 м/с);
+  // longW × longL — автобус (длинным нельзя, если задевает дом или столб)
+  turn: { W: 1.94, L: 4.9, step: 1, curb: 0.08, pole: 0.25, R: 3.5, longW: 2.5, longL: 11.2,
+    handles: [[0.4, 0.4], [0.25, 0.25], [0.55, 0.55], [0.55, 0.25], [0.25, 0.55], [0.15, 0.15], [0.7, 0.7]],
+    uturn: [3.5, 4.5, 6] },   // разворот: радиус полукруга, м
 };
 
 // Компоненты сильной связности графа «ребро → следующие рёбра» так, как выбирает водитель (js/traffic/driver.js,
@@ -99,7 +111,7 @@ function sitgesNetSCC(edges, ok, long) {
   return { comp: new Map(E.map((e, k) => [e, comp[k]])), big, n };
 }
 
-function sitgesTrafficGraph(C, grid, ground) {
+function sitgesTrafficGraph(C, grid, ground, walkAt, decks) {
   const N = SITGES_NET, T = N.trim;
   const use = C.streets.filter(st => st.drive && N.prio[st.cls] && !st.flat);
   const km = m => +(m / 1000).toFixed(2);
@@ -243,6 +255,16 @@ function sitgesTrafficGraph(C, grid, ground) {
     for (let i = 0, j = P.length - 1; i < P.length; j = i++) if (sitgesSeg(x, z, P[j][0], P[j][1], P[i][0], P[i][1]) < m) return true;
     return false;
   };
+  // настил моста над полосой (x, z, y) ниже clearLong: верх плиты выше полосы больше чем на 0,5 м, низ (верх − толщина)
+  // — ниже y + clearLong (Av. de Navarra под Passeig de Vilanova: просвет 2–3 м, автобус упирался в плиту)
+  const deckLow = (x, z, y) => {
+    if (!decks) return false;
+    for (const d of decks.grid.query(x, x, z, z)) {
+      const h = decks.top(d, x, z);
+      if (h > y + 0.5 && h - (d.t || 0) < y + N.clearLong) return true;
+    }
+    return false;
+  };
   // предмет ближе m к точке (x, z) полосы на высоте y: 1 — нельзя никому, 2 — только длинным (низкий проезд под домом)
   const hit = (x, z, m, y) => {
     if (!grid) return 0;
@@ -340,8 +362,11 @@ function sitgesTrafficGraph(C, grid, ground) {
       shifted++;
       for (let i = 0; i < n; i++) if (inLane(i) && !clear(P[i], s.shift[i])) { s.blocked = true; blocked.push([+P[i].x.toFixed(1), +P[i].z.toFixed(1), st.name || st.cls]); }
     }
-    // низкий проезд под домом — длинным нельзя
-    for (let i = 0; i < n; i++) if (inLane(i)) for (const o of offs(P[i])) if (hit(P[i].x - P[i].tz * o, P[i].z + P[i].tx * o, 0.1, P[i].y) === 2) { s.low = true; lowPts++; }
+    // низкий проезд под домом или настилом моста (низ плиты ниже clearLong над полосой) — длинным нельзя
+    for (let i = 0; i < n; i++) if (inLane(i)) for (const o of offs(P[i])) {
+      const x = P[i].x - P[i].tz * o, z = P[i].z + P[i].tx * o;
+      if (hit(x, z, 0.1, P[i].y) === 2 || deckLow(x, z, P[i].y)) { s.low = true; lowPts++; }
+    }
   }
 
   /* ---------- направленные рёбра ---------- */
@@ -456,6 +481,40 @@ function sitgesTrafficGraph(C, grid, ground) {
     lights.push({ x, z, kind: 'перекрёсток', node: [+n.x.toFixed(1), +n.z.toFixed(1)], in: inc.length, g0: inc.filter(e => e.grp === 0).length, g1: inc.filter(e => e.grp === 1).length });
   }
 
+  /* ---------- стоп-линия не на чужой полосе (улицы сходятся «игреком») ---------- */
+  // Машина у конца полосы стоит центром на её конце (js/traffic/driver.js), нос — в перекрёстке. Где улицы сходятся под
+  // острым углом, конец полосы — рядом с другим въездом в этот узел: машина на нём видит ждущую
+  // как препятствие (водитель смотрит вперёд в полосе W/2 + W/2 + 0,4 м от своей оси) и стоит, а та ждёт её — обе
+  // навсегда (Carrer de Joan Ramon Benaprès → Carretera de les Costes у (−749, 224)). Конец полосы отодвигается назад
+  // по точкам, пока до оси чужой полосы не станет stopGap м; на полосе остаётся не меньше trim.keep м.
+  const SG = N.stopGap;
+  const clash = (e, k) => {
+    const C = e.lp[0].pts[k];
+    for (const o of edges) {
+      if (o === e || o.B !== e.B) continue;
+      const Q = o.lp[0].pts;
+      for (let i = 1; i < Q.length; i++) if (sitgesSeg(C[0], C[1], Q[i - 1][0], Q[i - 1][1], Q[i][0], Q[i][1]) < SG) return o;
+    }
+    return null;
+  };
+  const stopMoved = [];
+  for (const e of edges) {
+    const P = e.lp[0].pts, cum = e.lp[0].cum;
+    let k = P.length - 1;
+    const o = clash(e, k);
+    if (!o) continue;
+    while (k > 2 && cum[k - 1] >= T.keep && clash(e, k - 1)) k--;
+    if (k > 2 && cum[k - 1] >= T.keep) k--;
+    const cut = e.len - cum[k];
+    if (cut < 0.1) continue;
+    e.lp[0] = tPiece(P.slice(0, k + 1)); e.hy = e.hy.slice(0, k + 1); e.vprof = e.vprof.slice(0, k + 1);
+    e.len = e.s1 = e.lp[0].len; e.sb -= e.dir * cut;
+    const Q = e.lp[0].pts, a = Q[Math.max(0, Q.length - 3)], b = Q[Q.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    e.ex = (b[0] - a[0]) / l; e.ez = (b[1] - a[1]) / l;
+    if (e.span) { e.span.s1 = Math.min(e.span.s1, e.len); if (e.span.s0 >= e.span.s1) delete e.span; }
+    stopMoved.push([Math.round(e.B.x), Math.round(e.B.z), `${e.name || e.cls} ← ${o.name || o.cls}`, +cut.toFixed(1)]);
+  }
+
   /* ---------- сильная связность: без «ловушек» ---------- */
   const unlink = gone => {
     for (const e of gone) { const o = e.A.out, i = o.indexOf(e); if (i >= 0) o.splice(i, 1); }
@@ -490,8 +549,105 @@ function sitgesTrafficGraph(C, grid, ground) {
   const hum = sub(e => e.maxW >= N.hummer.W, e => { e.maxW = N.hummer.maxW; }, false);
   const lng = sub(e => !e.noLong, e => { e.noLong = true; }, true);
 
+  /* ---------- повороты: кривая через перекрёсток, не задевающая бордюр и дома ---------- */
+  // У въезда e.turns: Map(выезд → { p, R, ban, noLong }) — водитель (js/traffic/driver.js, enterEdge) берёт кривую p
+  // вместо turnPiece. Квадратичная кривая turnPiece (как у «Побережья») остаётся, если кузов X5 вдоль неё не задевает
+  // бордюр тротуара (walkAt выше земли) и предметы сетки (дом, столб); иначе — лучшая из кубических с разной длиной
+  // касательных (меньше всего точек кузова на тротуаре, дом и столб — втрое хуже). Квадратичная с вершиной позади
+  // въезда или за выездом (полосы сходятся под тупым углом со сдвигом) — петля, у разворота — «иголка»: их не берём.
+  // R — радиус для скорости в повороте, не меньше turn.R: на изломе улицы в узле с двумя рукавами (концы полос в 1 м
+  // от узла) радиус кривой — доли метра, машины ползли 0,3 м/с. ban — разворот на другую проезжую часть той же улицы
+  // (не своё rev): водитель берёт его, только если больше некуда; так же — obj: кузов задевает дом или столб при любой
+  // кривой. noLong — автобус вдоль кривой задевает дом или столб.
+  const TN = N.turn, tq = [0, 0, 0, 0], corners = [[-1, -1], [-1, 1], [1, -1], [1, 1], [0, 1], [0, -1], [-1, 0], [1, 0]];
+  // столбы (круги сетки, в том числе сбиваемые с коллайдером — знак, фонарь, светофор у угла: машина в повороте едет
+  // медленнее, чем нужно, чтобы его сбить; лёгкие — стулья, лежаки — без коллайдера, их сбивает) — точно по прямоугольнику
+  // кузова с центром (x, z) и направлением (ux, uz): тонкий столб проскакивает между точками кузова
+  const poleIn = (x, z, ux, uz, W, L, y) => {
+    if (!grid) return false;
+    const R = L / 2 + 1;
+    for (const it of grid.query(x - R, x + R, z - R, z + R)) {
+      if (it.r == null || it.poly || it.obb || (it.brk && it.brk.owner.o.light)) continue;
+      if (it.y1 !== undefined ? it.y1 < y + 0.2 || it.y0 > y + 2 : y > ground(it.x, it.z) + it.h + 0.3) continue;
+      const dx = it.x - x, dz = it.z - z, a = clamp(dx * ux + dz * uz, -L / 2, L / 2), b = clamp(dx * uz - dz * ux, -W / 2, W / 2);
+      if (Math.hypot(dx - ux * a - uz * b, dz - uz * a + ux * b) < it.r + TN.pole) return true;
+    }
+    return false;
+  };
+  // точек кузова W × L на тротуаре (1) и на предметах (3; столб — 3 за положение) вдоль кривой p; objOnly — только
+  // предметы
+  const foot = (p, W, L, y0, y1, objOnly) => {
+    let n = 0;
+    for (let s = 0; s <= p.len + 0.01; s += TN.step) {
+      tPieceAt(p, s, tq);
+      const x = tq[0], z = tq[1], ux = tq[2], uz = tq[3], y = y0 + (y1 - y0) * s / (p.len || 1);
+      if (poleIn(x, z, ux, uz, W, L, y)) n += 3;
+      for (const [a, b] of corners) {
+        const px = x + uz * a * W / 2 + ux * b * L / 2, pz = z - ux * a * W / 2 + uz * b * L / 2, h = hit(px, pz, 0.05, y);
+        if (h === 1 || (objOnly && h === 2)) n += 3;
+        else if (!objOnly && walkAt) { const wy = walkAt(px, pz); if (wy > ground(px, pz) + TN.curb && wy < y + 1) n++; }
+      }
+    }
+    return n;
+  };
+  const bez = (P0, d0, P2, d2, a, b) => {
+    const c0 = [P0[0] + d0[0] * a, P0[1] + d0[1] * a], c1 = [P2[0] - d2[0] * b, P2[1] - d2[1] * b], pts = [];
+    for (let k = 0; k <= 12; k++) {
+      const t = k / 12, u = 1 - t, A = u * u * u, B = 3 * u * u * t, Cc = 3 * u * t * t, D = t * t * t;
+      pts.push([A * P0[0] + B * c0[0] + Cc * c1[0] + D * P2[0], A * P0[1] + B * c0[1] + Cc * c1[1] + D * P2[1]]);
+    }
+    return tPiece(pts);
+  };
+  // разворот: полукруг радиуса r влево (или вправо, если выезд правее) от конца въезда, затем кубическая к началу выезда
+  const uturn = (P0, fx, fz, P2, ix, iz, r) => {
+    const sd = (P2[0] - P0[0]) * fz - (P2[1] - P0[1]) * fx >= -0.5 ? 1 : -1, nx = fz * sd, nz = -fx * sd;   // к выезду
+    const cx = P0[0] + nx * r, cz = P0[1] + nz * r, pts = [];
+    for (let k = 0; k <= 12; k++) { const a = Math.PI * k / 12; pts.push([cx - nx * r * Math.cos(a) + fx * r * Math.sin(a), cz - nz * r * Math.cos(a) + fz * r * Math.sin(a)]); }
+    const A = pts[pts.length - 1], h = Math.max(1, Math.hypot(P2[0] - A[0], P2[1] - A[1]) / 3);
+    const tail = bez(A, [-fx, -fz], P2, [ix, iz], h, h).pts;
+    return tPiece(pts.concat(tail.slice(1)));
+  };
+  const TS = { n: 0, curved: 0, curb: 0, obj: 0, ban: 0, noLong: 0 };
+  for (const e of all) {
+    if (e.B.round) continue;
+    e.turns = new Map();
+    const P0 = e.lp[0].pts[e.lp[0].pts.length - 1], y0 = e.hy[e.hy.length - 1];
+    for (const ne of e.B.out) {
+      if (ne === e.rev) continue;
+      TS.n++;
+      const P2 = ne.lp[0].pts[0], y1 = ne.hy[0], d = Math.hypot(P2[0] - P0[0], P2[1] - P0[1]);
+      const dot = e.ex * ne.ix + e.ez * ne.iz, det = e.ex * ne.iz - e.ez * ne.ix;
+      const T = { p: turnPiece(e, 0, ne, 0), R: 0, ban: dot < -0.9, noLong: false };
+      if (T.ban) TS.ban++;
+      // петля квадратичной кривой: вершина (пересечение касательных) позади конца въезда или за началом выезда
+      let loop = false;
+      if (!T.ban && Math.abs(det) >= 0.1) {
+        const t = ((P2[0] - P0[0]) * ne.iz - (P2[1] - P0[1]) * ne.ix) / det, P1x = P0[0] + e.ex * t, P1z = P0[1] + e.ez * t;
+        loop = t <= 0 || (P2[0] - P1x) * ne.ix + (P2[1] - P1z) * ne.iz <= 0;
+      }
+      // квадратичная кривая разворота turnPiece — «иголка» туда и обратно по одной линии: тоже не берём
+      let best = loop || T.ban ? Infinity : foot(T.p, TN.W, TN.L, y0, y1);
+      // запасные: обычный поворот — кубические кривые; разворот (на другую проезжую часть, обе половины разделённой дороги
+      // обрезаны краем карты в одном узле) — полукруг радиуса r в сторону выезда и подход к нему
+      if (best > 0 || T.ban || tPieceMinR(T.p) < TN.R) {
+        const p0 = T.p, U = dot < -0.5;
+        for (const h of U ? TN.uturn : TN.handles) {
+          const p = U ? uturn(P0, e.ex, e.ez, P2, ne.ix, ne.iz, h) : bez(P0, [e.ex, e.ez], P2, [ne.ix, ne.iz], h[0] * d, h[1] * d), f = foot(p, TN.W, TN.L, y0, y1);
+          if (f < best || (f === best && tPieceMinR(p) > tPieceMinR(T.p))) { best = f; T.p = p; }
+        }
+        if (T.p !== p0) TS.curved++;
+      }
+      if (best > 0 && best < Infinity) { TS.curb++; if (foot(T.p, TN.W, TN.L, y0, y1, true)) { T.obj = true; TS.obj++; } }
+      T.R = Math.max(tPieceMinR(T.p), TN.R);
+      if (!e.noLong && !ne.noLong && foot(T.p, TN.longW, TN.longL, y0, y1, true)) { T.noLong = true; TS.noLong++; }
+      e.turns.set(ne, T);
+    }
+  }
+
   const nodes = [...nodeMap.values()].filter(n => n.out.length || all.some(e => e.B === n));
-  const G = { nodes, edges: all, dropped, sitges: true };
+  // stopFront — машина встаёт у конца полосы носом, а не центром (js/traffic/traffic.js, stopOff): конец полосы — в 1 м
+  // от края проезжей части другой улицы, нос в 2 м дальше был бы уже на её полосе
+  const G = { nodes, edges: all, dropped, sitges: true, stopFront: true };
 
   /* ---------- сводка ---------- */
   const sumKm = (list, f = () => true) => km(list.filter(f).reduce((a, e) => a + e.len, 0));
@@ -512,6 +668,7 @@ function sitgesTrafficGraph(C, grid, ground) {
     lights,
     major: { minor: all.filter(e => !e.major && (e.B.deg > 2)).length, signed: all.filter(e => e.sign).length },
     shifted, blocked: blocked.slice(0, 12), blockedN: blocked.length,
+    turns: TS, stopMoved,
   });
   return G;
 }

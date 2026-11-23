@@ -125,7 +125,11 @@ const Traffic = {
     const collider = rw.createCollider(R.ColliderDesc.roundCuboid(W / 2 - r, hh - r, L / 2 - r, r).setTranslation(0, hh + 0.03, 0)
       .setMass(type.mass).setFriction(0).setRestitution(0.1)
       .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(type.mass * 1.2 / FIXED), body);
-    const tc = { type, color, mat, body, collider, L, W, H, mass: type.mass, vmax: type.vmax * (0.9 + Math.random() * 0.2), accel: type.accel,
+    // stopOff — насколько раньше конца полосы машина встаёт центром (js/traffic/driver.js). Граф со стоп-линией у конца
+    // полосы (stopFront, «Ситжес»: конец полосы — в 1 м от края чужой проезжей части) — нос у линии; иначе («Город»,
+    // «Побережье») центр — у конца полосы, нос — на 2–2,5 м дальше, а длинная машина (автобус, грузовик) — носом там же
+    const front = this.graph && this.graph.stopFront;
+    const tc = { type, color, mat, body, collider, L, W, H, stopOff: front ? L / 2 - 0.3 : Math.max(0, L / 2 - 2.5), mass: type.mass, vmax: type.vmax * (0.9 + Math.random() * 0.2), accel: type.accel,
       v: 0, h: 0, x: 0, z: 0, y: 0, roll: 0, slope: 0, hold: null, dead: true, tick: Math.random() < 0.5 ? 1 : 0, wreck: false, wreckT: 0, flipCd: 0, stuckT: 0, ghostT: 0, obs: Infinity, scan: Math.floor(Math.random() * 3), far: false, q: new THREE.Quaternion(), waitT: 0 };
     PH.info.set(collider.handle, { kind: 'traffic', tc });
     this.list.push(tc);
@@ -293,7 +297,7 @@ const Traffic = {
     b.setLinvel({ x: 0, y: 0, z: 0 }, true); b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     // начальная скорость — не выше предела поворота в этом месте (кривые полосы Побережья)
     const v0 = Math.min(tc.vmax * 0.6, e.vprof ? e.vprof[tPieceIdx(piece, s)] : Infinity);
-    Object.assign(tc, { dead: false, wreck: false, wreckT: 0, v: v0, stuckT: 0, ghostT: 0, waitT: 0, obs: Infinity, far });
+    Object.assign(tc, { dead: false, wreck: false, wreckT: 0, v: v0, stuckT: 0, pushT: 0, ghostT: 0, waitT: 0, obs: Infinity, far });
     if (tc.far) { tc.q.copy(_tq); b.setEnabled(false); }
     tc.mat.compose(_tv.set(x, y + 0.05, z), _tq, _tone);
     if (tc.trailer) this.placeTrailer(tc.trailer);
@@ -327,7 +331,7 @@ const Traffic = {
     if (other.kind === 'ground' || other.kind === 'deck') return;
     if (other.kind === 'traffic' && (other.tc === tc.lead || other.tc === tc.trailer)) return;   // своя сцепка
     const th = other.kind === 'car' ? 1.8 : other.kind === 'traffic' ? 5.5 : 12;
-    if (!tc.wreck && dv > th) this.wreck(tc, 'удар: ' + (other.kind === 'traffic' ? other.tc.type.id : other.kind) + ' ' + dv.toFixed(1));
+    if (!tc.wreck && dv > th) { tc.whyBy = other.tc || null; this.wreck(tc, 'удар: ' + (other.kind === 'traffic' ? other.tc.type.id : other.kind) + ' ' + dv.toFixed(1)); }
     if (tc.wreck && dv > 3 && !(tc.flipCd > 0)) {
       const p = getPt();
       if (flipKick(tc.body, dv - 1.5, p[0], p[1], tc.W / 2, tc.L / 2)) tc.flipCd = 1;
@@ -368,7 +372,8 @@ const Traffic = {
       // на виду у игрока (ring.hide) — не исчезает, пока не уедет вдвое дальше
       const R = this.ring, hold = R.hide && dmin < R.drop * 2 && dmin > R.over && this.seen(tc.x, tc.y, tc.z);
       if (!this.global && alive > this.target && dmin > R.over && !hold) { this.kill(tc); alive--; }
-      else if ((!this.global && dmin > R.drop && !hold) || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || (tc.stuckT > 45 && dmin > 60))
+      // застрял (стоит в пробке или упёрся в неподвижное) дольше 45 с вдали от игроков — тоже
+      else if ((!this.global && dmin > R.drop && !hold) || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || ((tc.stuckT > 45 || tc.pushT > 45) && dmin > 60))
         this.respawn(tc, this.global ? 150 : R.min, R.max);
     }
   },

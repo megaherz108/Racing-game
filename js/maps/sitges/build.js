@@ -124,7 +124,7 @@ function sitgesBuildWorld(K) {
     coinCount: 80, spawns,
     // трафик (этап 8, docs/sitges/stage-8.md): граф строится при первом заезде с трафиком (js/maps/sitges/trafficnet.js);
     // машины — вокруг игроков (не на всю карту), число — на каждого игрока по уровню «Мало / Средне / Много»
-    trafficGraph: () => sitgesTrafficGraph(C, grid, D.ground),
+    trafficGraph: () => sitgesTrafficGraph(C, grid, D.ground, walkAt, decks),
     traffic: { types: SITGES_TRAFFIC_TYPES, count: SITGES_TRAFFIC.count, ring: SITGES_TRAFFIC.ring },
     // сводки постройки (tools/sitges/check.js)
     stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats, street: K.stStats }, walkAt, roadLod, treeTune: K.treeTune,

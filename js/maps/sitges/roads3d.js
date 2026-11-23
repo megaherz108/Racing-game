@@ -363,7 +363,8 @@ function sitgesBuildRoadMeshes(K) {
     im.castShadow = im.receiveShadow = true; im.userData.keep = true; im.computeBoundingSphere();
     group.add(im);
   }
-  const meshColliders = [...cmesh.values()].map(m => ({ v: new Float32Array(m.v), i: new Uint32Array(m.i) }));
+  // walk — тротуар: машины трафика за его бордюр не цепляются (js/physics.js), как за рельеф — высоту им задаёт водитель
+  const meshColliders = [...cmesh.values()].map(m => ({ v: new Float32Array(m.v), i: new Uint32Array(m.i), walk: true }));
 
   // тротуар под точкой: высота верха или −∞. Кусок — два треугольника (0, 1, 2) и (0, 2, 3), как у меша и сетки
   // столкновений: у острых углов четырёхугольник бывает невыпуклым, проверка «все стороны с одного боку» его теряла
