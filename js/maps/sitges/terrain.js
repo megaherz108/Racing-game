@@ -11,7 +11,7 @@
 // берега), за краем рельефа — продолжение края с подъёмом в холмы.
 // Определяет: SITGES_T, sitgesDepth, sitgesRaster, sitgesChamfer, sitgesPlanTerrain.
 // Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js); stPromTerrain
-//   (js/maps/sitges/st/promenade.js).
+//   (js/maps/sitges/st/promenade.js); stSlopeTerrain (js/maps/sitges/st/slopes.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -238,4 +238,6 @@ function sitgesPlanTerrain(C) {
   });
   // набережная (этап 7, группа D): подпорная стена — пляж у неё ниже, променад за ней ровный (js/maps/sitges/st/promenade.js)
   stPromTerrain(C);
+  // склоны (этап 7, группа G): откос перед стеной бастиона у церкви — до нижней площади (js/maps/sitges/st/slopes.js)
+  stSlopeTerrain(C);
 }
