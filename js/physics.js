@@ -1,6 +1,6 @@
 // Физика на Rapier: класс Car, cars, stepWorld, readInput, FIXED, accum, simTime.
 // Движение считает 3D-движок Rapier с raycast-подвеской. Библиотека загружается в index.html и лежит в window.RAPIER.
-// Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics,
+// Определяет: GRAV, RT, simTime, PH, qrot, GROUND_GROUPS, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, buildPhysics, brkSolid,
 //   resetPhysicsObjects, ensurePhysics, surfaceAt, Car, cars, BRK_FX, breakAgents, knockBreakables, DMG_SCALE,
 //   FLIP_DV, FRONT_DMG, FLIP_LIE, FLIP_WINDOW, FLIP_ROOF, FLIP_SIDE, FLIP_WALL, PUSH, hitZone, flipKick,
 //   contactPoint, rivalKnock, pushContacts, handleContacts, NO_INPUT, readInput, FIXED, accum, brkTick, stepWorld.
@@ -110,6 +110,10 @@ function buildPhysics() {
   const seen = new Set();
   for (const cell of world.grid.cells.values()) for (const o of cell) {
     if (seen.has(o)) continue; seen.add(o);
+    // лёгкий сбиваемый предмет (лежак, зонт, стул) — без коллайдера Rapier: его сбивает knockBreakables до контакта,
+    // а выключение статического коллайдера при ударе стоит шагу Rapier десятки мс на большой карте («Ситжес»: 41 тыс.
+    // статических — ≈ 35 мс на шаг, где что-то сбито; ряды лежаков на скорости — пики кадра до 0,4 с)
+    if (o.brk && o.brk.owner.o.light) continue;
     if (o.poly) {
       // контур здания (реальная карта): выпуклый — выпуклая оболочка призмы; невыпуклый — призма из треугольников
       // (стены и обе крышки). Начало коллайдера — в первой вершине: float32 на краю карты в 2 км точнее.
@@ -156,7 +160,7 @@ function buildPhysics() {
     } else {
       const g = world.ground(o.x, o.z), y0 = g - 1.5, y1 = g + Math.min(o.h, 300);
       const c = addStatic(R.ColliderDesc.cylinder((y1 - y0) / 2, o.r).setTranslation(o.x, (y0 + y1) / 2, o.z), o.brk ? 'brk' : 'static');
-      if (o.brk) { o.col = c; PH.brk.push({ o, c }); c.setEnabled(!o.brk.broken); }
+      if (o.brk) { o.col = c; PH.brk.push({ o, c }); brkSolid(c, !o.brk.broken); }
     }
   }
 
@@ -176,8 +180,13 @@ function buildPhysics() {
     w.__rapierReset = true;
   }
 }
+// Коллайдер сбиваемого: целый — стена, сбитый — датчик (сквозь него едут). Не setEnabled / removeCollider: все
+// статические коллайдеры висят на одном неподвижном теле, и выключение любого из них заставляет Rapier перебрать
+// их все — на «Ситжесе» (36 тыс.) ≈ 40 мс на шаг. Смена групп столкновений — ≈ 1,2 мс, датчик — даром. Датчики
+// не дают ни контактов, ни событий (у машин только CONTACT_FORCE_EVENTS); запросы к миру их пропускают (EXCLUDE_SENSORS).
+function brkSolid(c, solid) { if (c.isSensor() === solid) c.setSensor(!solid); }
 function resetPhysicsObjects() {
-  for (const { o, c } of PH.brk) c.setEnabled(!o.brk.broken);
+  for (const { o, c } of PH.brk) brkSolid(c, !o.brk.broken);
   for (const { b, body } of PH.barrels) {
     body.setTranslation({ x: b.x, y: world.ground(b.x, b.z) + 0.5, z: b.z }, true);
     body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
@@ -420,7 +429,7 @@ class Car {
     if (Math.abs(this.upY) > FLIP_SIDE) return false;
     const b = this.body, t = b.translation(), [ux, uy, uz] = qrot(b.rotation(), 0, 1, 0), c = this.roofC;
     const ray = new RAPIER.Ray({ x: t.x + ux * c, y: t.y + uy * c, z: t.z + uz * c }, { x: ux, y: uy, z: uz });
-    return !!PH.rw.castRay(ray, this.roofR + FLIP_WALL, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC);
+    return !!PH.rw.castRay(ray, this.roofR + FLIP_WALL, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC | RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
   }
 
   // dir — направление силы удара (необязательно, см. hitZone())
@@ -591,7 +600,7 @@ function knockBreakables(dt) {
         const loss = Math.min(vn * 0.85, vn * it.mass / (a.mass + it.mass) + Math.min(it.anchor, vn * 0.6));
         lv.x -= nx * loss; lv.z -= nz * loss; changed = true;
         B.knock(it, nx, nz, vn, lv.x, lv.z);
-        if (it.cell && it.cell.col) it.cell.col.setEnabled(false);
+        if (it.cell && it.cell.col) brkSolid(it.cell.col, false);
         const c = a.car;
         if (!c) continue;
         c.shake = Math.min(1, c.shake + Math.min(0.6, 0.05 + loss / 14));
