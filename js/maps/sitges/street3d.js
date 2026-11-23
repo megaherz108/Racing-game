@@ -17,8 +17,9 @@
 //     list — [{ x, y, z, gx, gz, r, it }] (ореол в x, y, z; пятно в gx, gz радиусом r; it — элемент Breakables: у сбитого
 //     гаснет); o — { color, size, pool, poolColor, far }. Видны вечером и ночью (setNight), квадратами со скрытием.
 //   S.circle(x, z, r, h), S.box(x, z, w, d, rot, h) — неподвижное в сетке столкновений (K.grid).
-//   S.collider(v, i) — «неровность» на полотне и т. п. (7.1): своя сетка столкновений из треугольников (v — x, y, z
-//     подряд, i — индексы) → K.meshColliders (world.meshColliders); пустая не добавляется.
+//   S.collider(v, i, walk) — «неровность» на полотне и т. п. (7.1): своя сетка столкновений из треугольников (v — x, y, z
+//     подряд, i — индексы) → K.meshColliders (world.meshColliders); пустая не добавляется. walk — поверхность на проезжей
+//     части (у неё есть и S.walk): машины трафика за неё не цепляются, высоту им задаёт водитель.
 //   S.walk(pts, ys) — поверхность (7.1): четырёхугольник [[x, z] × 4] с высотой ys (число) или высотами углов [y × 4]
 //     → walkAt (S.y, world.surface, покрытие); рисовать и ставить столкновения — самой группе (S.collider).
 //   S.hash(x, z, k) — число 0…1 по месту (7.2; то же, что S.hash раскладки — sitgesStHash, js/maps/sitges/street.js).
@@ -154,9 +155,10 @@ function sitgesBuildStreet(K) {
     },
     circle: (x, z, r, h = 2) => grid.addCircle(x, z, r, h),
     box: (x, z, w, d, rot = 0, h = 2) => grid.addOBB(x, z, w, d, rot, h),
-    // своя сетка столкновений Rapier: треугольники, v — x, y, z подряд, i — индексы (массивы или типизированные)
-    collider(v, i) {
-      if (i.length) K.meshColliders.push({ v: v instanceof Float32Array ? v : new Float32Array(v), i: i instanceof Uint32Array ? i : new Uint32Array(i) });
+    // своя сетка столкновений Rapier: треугольники, v — x, y, z подряд, i — индексы (массивы или типизированные);
+    // walk — поверхность на проезжей части («стол» перехода): трафик за неё не цепляется (js/physics.js)
+    collider(v, i, walk = false) {
+      if (i.length) K.meshColliders.push({ v: v instanceof Float32Array ? v : new Float32Array(v), i: i instanceof Uint32Array ? i : new Uint32Array(i), walk });
     },
     // поверхность для walkAt (S.y, world.surface): четырёхугольник pts — [[x, z] × 4], ys — высота на весь кусок или
     // высоты углов [y × 4] (тогда под точкой — по треугольникам (0, 1, 2) и (0, 2, 3))

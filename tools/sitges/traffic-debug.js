@@ -18,7 +18,7 @@
   const NET_DBG_DROP = { 'узкая': '#ff9a2e', 'тупик': '#9a9a9a', 'петля': '#c040c0', 'ловушка': '#e00000' };
   let G = null;
   const W = () => getWorld('sitges');
-  window.__netGraph = () => G || (G = sitgesTrafficGraph(getData('sitges').C, W().grid, W().ground));
+  window.__netGraph = () => G || (G = sitgesTrafficGraph(getData('sitges').C, W().grid, W().ground, W().walkAt, W().decks));
 
   window.__netInfo = async function () {
     const t0 = performance.now(), g = __netGraph(), ms = Math.round(performance.now() - t0), w = W();

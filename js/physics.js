@@ -99,8 +99,14 @@ function buildPhysics() {
       .setTranslation(d.center.x, d.center.y, d.center.z).setRotation({ x: d.quat.x, y: d.quat.y, z: d.quat.z, w: d.quat.w }), kind);
   }
 
-  // сетки треугольников карты (тротуары с бордюрами «Ситжеса»): { v: Float32Array xyz, i: Uint32Array }
-  if (world.meshColliders) for (const m of world.meshColliders) addStatic(R.ColliderDesc.trimesh(m.v, m.i), 'deck');
+  // сетки треугольников карты (тротуары с бордюрами «Ситжеса», «столы» переходов): { v: Float32Array xyz, i: Uint32Array,
+  // walk }. Поверхность (walk) — в группе рельефа: машина трафика, срезая угол на повороте или въезжая на «стол», не
+  // упирается в бордюр или скат (высоту ей задаёт водитель по world.surface), игроки и разбитые машины сталкиваются
+  // с ней как прежде
+  if (world.meshColliders) for (const m of world.meshColliders) {
+    const c = addStatic(R.ColliderDesc.trimesh(m.v, m.i), 'deck');
+    if (m.walk) c.setCollisionGroups(GROUND_GROUPS);
+  }
 
   // невидимые стены по краю карты
   for (const [x, z, hx, hz] of [[BX + 2, 0, 2, BZ + 4], [-BX - 2, 0, 2, BZ + 4], [0, BZ + 2, BX + 4, 2], [0, -BZ - 2, BX + 4, 2]])
@@ -595,7 +601,9 @@ function knockBreakables(dt) {
         if (a.y > it.y + o.h) continue;                         // перелетели сверху
         const dx = o.x - cx, dz = o.z - cz, d = Math.hypot(dx, dz);
         if (d >= reach + o.r || d < 1e-6) continue;
-        const nx = dx / d, nz = dz / d, vn = lv.x * nx + lv.z * nz, B = it.owner, O = B.o;
+        const nx = dx / d, nz = dz / d, B = it.owner, O = B.o;
+        // машина трафика упёрлась в столб дольше 1,5 с (тесный поворот, медленно) — сбивает его, как с разгона
+        const vn = a.tc && a.tc.pushT > 1.5 ? Math.max(lv.x * nx + lv.z * nz, it.minSpeed + 0.5) : lv.x * nx + lv.z * nz;
         if (vn <= Math.max(it.minSpeed, 0.3)) continue;
         // потеря скорости: импульс (доля массы) + вырвать из земли; не больше 85% скорости удара
         const loss = Math.min(vn * 0.85, vn * it.mass / (a.mass + it.mass) + Math.min(it.anchor, vn * 0.6));

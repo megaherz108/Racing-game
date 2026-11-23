@@ -382,7 +382,7 @@ const SITGES_ST_B = {
         quad4(B, q, uv, [rx * sb, 0, rz * sb]);
       }
     }
-    S.collider(cv, ci);
+    S.collider(cv, ci, true);                                // «столы» на проезжей части: трафик по ним едет (S.walk)
 
     S.flush();                                               // меши копилок — до знаков (порядок в группе прежний)
 
