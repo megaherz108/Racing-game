@@ -10,7 +10,8 @@
 // Определяет: SITGES_G, sitgesBuildGround.
 // Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01, Decks (js/world.js); Weather (js/weather.js);
 //   waterMaterial (js/maps/city/textures.js); SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_T
-//   (js/maps/sitges/terrain.js); sitgesPaint (js/maps/sitges/minimap.js).
+//   (js/maps/sitges/terrain.js); sitgesPaint (js/maps/sitges/minimap.js); stSlopeGroundPaint
+//   (js/maps/sitges/st/slopes.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -47,6 +48,8 @@ function sitgesBuildGround(K) {
     ctx.fillStyle = `rgb(${rr * f | 0},${rg * f | 0},${rb * f | 0})`;
     ctx.fillRect(X(X0 + (i - 1.2) * S), Z(Z0 + (j - 1.2) * S), 2.4 * S * G.ppm, 2.4 * S * G.ppm);   // с краем — на склон к воде
   }
+  // обрывы (этап 7, группа G): цвет скалы под скальной «кожей» — вдали, где кожи нет (js/maps/sitges/st/slopes.js)
+  stSlopeGroundPaint(ctx, X, Z, C);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.anisotropy = 8;
   tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
