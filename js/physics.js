@@ -138,10 +138,11 @@ function buildPhysics() {
       }
       addStatic(desc.setTranslation(ox, 0, oz));
     } else if (o.obb) {
-      // повёрнутый прямоугольник (дома деревни на побережье): кубоид, повёрнутый вокруг вертикали
+      // повёрнутый прямоугольник (дома деревни на побережье): кубоид, повёрнутый вокруг вертикали. Высоты низа и верха —
+      // o.y0 / o.y1, если карта их задала (перила моста «Ситжеса» — только на высоте настила), иначе от земли
       const { x, z, w, d, rot } = o.obb, c = Math.cos(rot), s = Math.sin(rot);
-      const gs = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => world.ground(x + a * w / 2 * c + b * d / 2 * s, z - a * w / 2 * s + b * d / 2 * c));
-      const y0 = Math.min(...gs) - 1.5, y1 = world.ground(x, z) + Math.min(o.h, 300);
+      const gs = o.y1 === undefined ? [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => world.ground(x + a * w / 2 * c + b * d / 2 * s, z - a * w / 2 * s + b * d / 2 * c)) : null;
+      const y0 = gs ? Math.min(...gs) - 1.5 : o.y0, y1 = gs ? world.ground(x, z) + Math.min(o.h, 300) : o.y1;
       addStatic(R.ColliderDesc.cuboid(w / 2, (y1 - y0) / 2, d / 2).setTranslation(x, (y0 + y1) / 2, z).setRotation({ x: 0, y: Math.sin(rot / 2), z: 0, w: Math.cos(rot / 2) }));
     } else if (o.box) {
       const cx = (o.minX + o.maxX) / 2, cz = (o.minZ + o.maxZ) / 2;

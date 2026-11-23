@@ -18,11 +18,11 @@
 //     n.lit не ставится: водитель пока знает только оси x / z «Города» (группы — шаг 8.1).
 //   Запреты: Hummer (W 2,2) — не на самые узкие улицы (hummer: двусторонние уже two, односторонки уже one; maxW);
 //     автобусам и грузовикам — только широкие дороги (wide: классы cls, двусторонние не уже minW, односторонки не уже
-//     minW1, без поворотов круче minR; иначе noLong). Мост, перила которого задевают полосу, — e.blocked. Подграф каждой машины
+//     minW1, без поворотов круче minR; иначе noLong). Перила моста над полосой (коллайдер — от низа настила, js/maps/sitges/roads3d.js) — ниже clearDeck — e.blocked. Подграф каждой машины
 //     (Hummer, длинные) тоже сильно связный — рёбра вне его самой большой части ей запрещаются.
 //   Предметы на проезжей части (столбики, «столы», террасы, стволы, дома над проездами): где полоса их задевает
 //     (с запасом в полуширину самой широкой допущенной машины), ось участка плавно сдвигается вбок (до shift м,
-//     не за бордюр); что осталось — в отчёте (blocked). Проезд под домом ниже 4 м — длинным нельзя.
+//     не за бордюр); что осталось — в отчёте (blocked). Проезд под домом или мостом ниже 4 м — длинным нельзя.
 // sitgesTrafficGraph(C, grid, ground) → { nodes, edges, report, dropped }; grid — сетка неподвижных препятствий
 //   построенного мира (world.grid), ground — world.ground. Подключение к трафику (world.trafficGraph) — шаг 8.1.
 // Отладка: tools/sitges/traffic-debug.js (сводка и схема сверху).
@@ -56,6 +56,7 @@ const SITGES_NET = {
   margin: 0.1,        // запас до предмета сверх полуширины машины, м
   shift: 2,           // объезд предметов: сдвиг оси не больше, м
   clearCar: 2.4, clearLong: 4,   // дом над проездом: низ выше полосы меньше — нельзя никому / длинным
+  clearDeck: 2,       // перила моста над полосой: низ выше меньше — нельзя никому (Hummer — верх коллайдера 1,81 м)
   sign: 45,           // STOP / «уступи»: до конца полосы не дальше, м
   signal: 35,         // светофор OSM — узел не дальше, м
 };
@@ -249,10 +250,12 @@ function sitgesTrafficGraph(C, grid, ground) {
     for (const it of grid.query(x - m - 1, x + m + 1, z - m - 1, z + m + 1)) {
       if (it.brk) continue;                                       // сбиваемое сносят
       if (x < it.minX - m || x > it.maxX + m || z < it.minZ - m || z > it.maxZ + m) { if (it.box) continue; }
+      // предмет с высотами низа и верха (дом над проездом, перила моста): полоса над ним или далеко под ним — мимо
+      if (it.y1 !== undefined && (it.y1 < y + 0.2 || it.y0 > y + N.clearLong)) continue;
+      const low = it.y0 !== undefined && it.y0 > y + (it.poly ? N.clearCar : N.clearDeck);   // проезд под ним — только не длинным
       if (it.poly) {
-        if (it.y1 !== undefined && (it.y1 < y + 0.2 || it.y0 > y + N.clearLong)) continue;
         if (!inside(x, z, it.poly, m)) continue;
-        if (it.y0 !== undefined && it.y0 > y + N.clearCar) { res = 2; continue; }
+        if (low) { res = 2; continue; }
         return 1;
       }
       // столб, ящик, ствол: от земли на h (как коллайдер, js/physics.js); полоса выше его верха (настил) — мимо
@@ -260,7 +263,7 @@ function sitgesTrafficGraph(C, grid, ground) {
       if (ground && y > ground(cx, cz) + it.h + 0.3) continue;
       if (it.obb) {
         const o = it.obb, c = Math.cos(o.rot), s = Math.sin(o.rot), dx = x - o.x, dz = z - o.z;
-        if (Math.abs(dx * c - dz * s) < o.w / 2 + m && Math.abs(dx * s + dz * c) < o.d / 2 + m) return 1;
+        if (Math.abs(dx * c - dz * s) < o.w / 2 + m && Math.abs(dx * s + dz * c) < o.d / 2 + m) { if (low) { res = 2; continue; } return 1; }
       } else if (!it.box && it.r != null) { if (Math.hypot(x - it.x, z - it.z) < it.r + m) return 1; }
       else return 1;
     }
