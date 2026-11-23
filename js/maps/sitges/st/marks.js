@@ -21,9 +21,9 @@
 // Помощники каркаса: S.axis / S.project — ось улицы (раскладка), S.walk / S.collider — поверхность и столкновения
 //   «столов» (постройка); свой — stMarkAtlas() — атлас надписей и лиц знаков (canvas).
 // Свои глобальные имена — с префиксом stMark… (после — node tools/deps.js --headers).
-// Определяет: stMarkCfg, stMarkKind, stMarkAtlas, SITGES_ST_B.
+// Определяет: stMarkCfg, stMarkKind, stMarkSignal, stMarkAtlas, SITGES_ST_B.
 // Использует: renderer (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_RB (js/maps/sitges/roads3d.js);
-//   SITGES_ST3D (js/maps/sitges/street3d.js).
+//   SITGES_ST3D (js/maps/sitges/street3d.js); simTime (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -43,6 +43,15 @@ const stMarkCfg = {
   cycle: [17, 3, 20],               // светофор: зелёный, жёлтый, красный, с
 };
 const stMarkKind = { line: 0, stop: 2, gw: 3, n30: 4, zebra: 5 };
+// фаза светофора (визуал — здесь, водитель трафика — js/traffic/driver.js через n.sig.phase графа trafficnet.js):
+// grp 0 — машины улицы, где стоит голова светофора, и встречные им: зелёный, жёлтый, красный (cycle); grp 1 —
+// поперечные: зелёный, пока у группы 0 красный (секунда «все красные» с обеих сторон), жёлтый перед её зелёным.
+// t — время симуляции (simTime), с → 'g' / 'y' / 'r'
+function stMarkSignal(grp, t) {
+  const [g, y, r] = stMarkCfg.cycle, per = g + y + r, c = (t % per + per) % per;
+  if (!grp) return c < g ? 'g' : c < g + y ? 'y' : 'r';
+  return c < g + y + 1 ? 'r' : c < per - y - 1 ? 'g' : c < per - 1 ? 'y' : 'r';
+}
 
 // атлас 1024 × 512: верхний ряд — надписи на асфальте (STOP, «30» в овале, белое), нижний — лица знаков (STOP,
 // «уступи», «въезд запрещён»), серый (столб, оборот), тёмный (светофор). → { tex, cell: { имя: { u0, u1, v0, v1 } } }
@@ -420,8 +429,10 @@ const SITGES_ST_B = {
       const L3 = [lamp(0xff2a18, 0x3a0c08), lamp(0xffb000, 0x3a2a06), lamp(0x22e070, 0x06301a), lamp(0xff2a18, 0x3a0c08), lamp(0x22e070, 0x06301a)];
       const [cg, ca, cr] = P.cycle, per = cg + ca + cr;
       let state = -1;
-      const tick = () => {                                   // зелёный → жёлтый → красный; пешеходам зелёный при красном
-        const t = (performance.now() / 1000) % per, s = t < cg ? 2 : t < cg + ca ? 1 : 0, ped = s === 0 && t > cg + ca + 1 && t < per - 2 ? 4 : 3;
+      // зелёный → жёлтый → красный (группа 0 — машины этой улицы, как у водителей трафика: stMarkSignal, simTime);
+      // пешеходам зелёный при красном
+      const tick = () => {
+        const t = (simTime % per + per) % per, f = stMarkSignal(0, t), s = f === 'g' ? 2 : f === 'y' ? 1 : 0, ped = s === 0 && t > cg + ca + 1 && t < per - 2 ? 4 : 3;
         const k = s * 8 + ped;
         if (k === state) return;
         state = k;

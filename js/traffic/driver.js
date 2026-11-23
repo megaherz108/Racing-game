@@ -15,7 +15,7 @@ Object.assign(Traffic, {
 
   // въезд на полосу: строим участок и сразу выбираем, куда повернём на следующем перекрёстке
   enterEdge(tc, e, l, s) {
-    tc.e = e; tc.l = l; tc.kind = 'lane'; tc.s = s; tc.goYellow = false;
+    tc.e = e; tc.l = l; tc.kind = 'lane'; tc.s = s; tc.goYellow = false; tc.stopT = 0; tc.stopDone = false;
     tc.piece = e.lp[l];
     if (e.narrow && tc.hold !== e.narrow) this.acquire(tc, e);
     // куда этой машине можно: не уже допустимой ширины (акведук) и не на брусчатку длинной машине (трактор)
@@ -51,15 +51,16 @@ Object.assign(Traffic, {
     tc.node = node; node.occ.add(tc);
   },
 
-  // перекрёсток без светофора занят поперечным потоком (на кольце — любым другим въездом)
+  // перекрёсток без светофора занят поперечным потоком (на кольце — любым другим въездом). Светофор «Ситжеса» (n.sig):
+  // главной и второстепенной там нет — на зелёный ждём только тех, чей путь пересекает наш (conflicts)
   blocked(tc) {
     const n = tc.e.B;
     if ((n.deg || n.out.length) <= 2) return false;
-    if (n.major) return n.round ? this.roundYield(tc, n) : this.giveWay(tc, n);
+    if (n.major && !n.sig) return n.round ? this.roundYield(tc, n) : this.giveWay(tc, n);
     for (const o of n.occ) if (o !== tc && !o.wreck && this.conflicts(tc, o)) return true;
     // очерёдность: кто долго ждёт на поперечном въезде, того пропускаем (иначе плотный поток
     // по главной навсегда запирает второстепенную дорогу)
-    if (!n.lit) for (const o of this.nearby(n.x, n.z))
+    if (!n.lit && !n.sig) for (const o of this.nearby(n.x, n.z))
       if (o.waitT > 5 && o.waitT > tc.waitT && o !== tc && !o.dead && !o.wreck && o.kind === 'lane' && o.e.B === n && this.conflicts(tc, o)) return true;
     return false;
   },
@@ -95,12 +96,12 @@ Object.assign(Traffic, {
   acquire(tc, e) { const m = e.narrow; m.n++; m.dir = e.dir; tc.hold = m; },
   release(tc) { if (tc.hold) { tc.hold.n--; tc.hold = null; } },
 
-  // пути двух машин через перекрёсток пересекаются: поперечный поток; встречный, если кто-то
-  // из двоих поворачивает налево; на кольце — любые разные въезды
+  // пути двух машин через перекрёсток пересекаются: поперечный поток (у светофора «Ситжеса» — другая группа фаз
+  // e.grp); встречный, если кто-то из двоих поворачивает налево; на кольце — любые разные въезды
   conflicts(tc, o) {
     if (tc.e.B.round) return o.e !== tc.e;
     const opp = o.e.ex * tc.e.ex + o.e.ez * tc.e.ez < -0.9;
-    return o.e.axis !== tc.e.axis || (opp && (o.isLeft || tc.isLeft));
+    return (tc.e.B.sig ? o.e.grp !== tc.e.grp : o.e.axis !== tc.e.axis) || (opp && (o.isLeft || tc.isLeft));
   },
 
   // поворот налево уступает встречным, которые едут прямо или направо
@@ -206,14 +207,20 @@ Object.assign(Traffic, {
       if (tc.kind === 'turn') vT = Math.min(vT, tc.turnV);
       else {
         if (tc.turnV < 99) vT = Math.min(vT, Math.sqrt(tc.turnV * tc.turnV + 2 * 2.5 * dEnd));
-        const B = tc.e.B;
+        const B = tc.e.B, sig = B.sig && tc.e.grp >= 0;
         let stop = false;
-        if (B.lit) {
-          const st = trafficLight(B.x, B.z, tc.e.axis, simTime);
+        // светофор: «Город» — по оси улицы (trafficLight), «Ситжес» — по группе рукава (n.sig.phase, e.grp)
+        if (B.lit || sig) {
+          const st = sig ? B.sig.phase(tc.e.grp, simTime) : trafficLight(B.x, B.z, tc.e.axis, simTime);
           // на жёлтый едет, только если уже не успевает остановиться
           if (st === 'g') tc.goYellow = false;
           else if (st === 'y' && !tc.goYellow && dEnd < tc.v * tc.v / 10 + 2) tc.goYellow = true;
           stop = st === 'r' && !tc.goYellow || st === 'y' && !tc.goYellow;
+        }
+        // знак STOP («Ситжес», e.sign): полная остановка у линии (стоим 0,8 с), дальше — как второстепенная (уступить)
+        if (!stop && tc.e.sign === 'stop' && !tc.stopDone) {
+          stop = true;
+          if (dEnd < 1.5 && tc.v < 0.3 && (tc.stopT += dt) > 0.8) tc.stopDone = true;
         }
         const deg = B.deg || B.out.length;
         if (!stop && dEnd < 12) stop = this.blocked(tc) || (tc.isLeft && this.oncoming(tc)) || (deg > 2 && this.exitBlocked(tc));
@@ -224,7 +231,7 @@ Object.assign(Traffic, {
         if (tc.e.vprof) vT = Math.min(vT, tc.e.vprof[tPieceIdx(tc.piece, tc.s + 1)]);
         if (stop) vT = Math.min(vT, dEnd < 0.6 ? 0 : Math.sqrt(2 * 6 * (dEnd - 0.5)));
         tc.waiting = stop;
-        tc.waitT = stop && !B.lit && dEnd < 3 ? tc.waitT + dt : 0;    // сколько стоит первым у нерегулируемого перекрёстка
+        tc.waitT = stop && !B.lit && !sig && dEnd < 3 ? tc.waitT + dt : 0;    // сколько стоит первым у нерегулируемого перекрёстка
         // подъезжая, заранее занимаем перекрёсток — иначе две машины с разных сторон въедут одновременно
         if (deg > 2) {
           if (!stop && dEnd < 9 && !tc.node) { tc.node = B; B.occ.add(tc); }

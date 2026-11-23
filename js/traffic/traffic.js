@@ -5,20 +5,21 @@
 // Каждый бот — динамическое тело Rapier: пока он «в строю», скорость и поворот задаёт водитель-бот,
 // поэтому удары по-честному передают импульс игрокам. После сильного удара бот теряет управление
 // (становится обычным телом — может закрутиться и перевернуться) и через несколько секунд исчезает.
-// Машины всегда держатся вокруг игроков: далёкие исчезают и появляются снова в 170–380 м от игроков.
-// Карта может задать свой трафик (world.traffic: типы, число машин по уровням, global): на «Побережье» немного
-// машин на всю карту — они не исчезают вдали, а заново появляются только разбитыми или застрявшими.
+// Машины всегда держатся вокруг игроков: далёкие исчезают и появляются снова в 170–380 м от игроков (TRAFFIC_RING).
+// Карта может задать свой трафик (world.traffic: типы, число машин по уровням, global, кольцо появления ring): на «Побережье» немного
+// машин на всю карту — они не исчезают вдали, а заново появляются только разбитыми или застрявшими. На «Ситжесе» дома
+// закрывают вид — кольцо ближе, а машина не появляется и не исчезает на виду у игрока (ring.hide, Traffic.seen).
 // Прицеп (type.trailer, тележка трактора) — отдельное тело в общем списке (tc.lead — тягач, tc.trailer — прицеп):
 // водитель им не управляет, тележка тянется за сцепкой (Traffic.follow, js/traffic/driver.js), появляется,
 // исчезает и разбивается вместе с тягачом.
 //
 // Этот файл — объект Traffic: запуск, появление и исчезновение машин, удары, отрисовка (InstancedMesh по типам).
 // Вождение ботов (полосы, уступить дорогу, светофоры, дистанция, preStep) — js/traffic/driver.js.
-// Определяет: TRAFFIC_FAR, TRAFFIC_NEAR, TRAFFIC_SHADOW_R, shadowBefore, shadowAfter, Traffic.
+// Определяет: TRAFFIC_FAR, TRAFFIC_NEAR, TRAFFIC_SHADOW_R, TRAFFIC_RING, shadowBefore, shadowAfter, Traffic.
 // Использует: CARS (js/data.js); clamp, QUAL (js/core.js); buildCarModel (js/car-models.js); scene (js/world.js); PH,
 //   FIXED, cars, TRAFFIC_DRIVEN_GROUPS, ALL_GROUPS, flipKick (js/physics.js); buildTrafficGraph, tPieceAt, tPieceIdx
 //   (js/traffic/graph.js); TRAFFIC_TYPES, buildTaxiModel, buildBusModel, buildTruckModel, mergeBakedParts, bakeModel
-//   (js/traffic/models.js).
+//   (js/traffic/models.js); cams (js/match.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -27,6 +28,10 @@
    ===================================================================== */
 const TRAFFIC_FAR = 170, TRAFFIC_NEAR = 140;              // дальше FAR от обоих игроков — без физики, ближе NEAR — снова с физикой
 const TRAFFIC_SHADOW_R = 105;                              // в карту теней попадают машины ближе этого к игроку (она 140 × 140 м вокруг него)
+// кольцо появления вокруг игроков (карта может задать своё — world.traffic.ring): появляются в min…max м от игроков,
+// дальше drop — исчезают (и появляются снова), лишние (игроки съехались) уходят в запас дальше over; hide — не
+// появляться и не исчезать на виду у камеры игрока (дома между ними — world.occludes)
+const TRAFFIC_RING = { min: 170, max: 380, drop: 400, over: 300, hide: false };
 // меш «только для теней»: в обычном проходе у него 0 экземпляров, в проходе теней — машины вокруг игрока
 const _shadowOnlyMat = new THREE.MeshBasicMaterial();
 function shadowBefore() { this.count = this.userData.n; }
@@ -34,7 +39,7 @@ function shadowAfter() { this.count = 0; }
 const _tq = new THREE.Quaternion(), _te = new THREE.Euler(0, 0, 0, 'YXZ'), _tp = [0, 0, 0, 0];
 const _tv = new THREE.Vector3(), _tone = new THREE.Vector3(1, 1, 1), _tfr = new THREE.Frustum(), _tpm = new THREE.Matrix4(), _tsph = new THREE.Sphere();
 const Traffic = {
-  list: [], trailers: [], graph: null, templates: {}, world: null, timer: 0, count: 0, target: 0, _cand: [], _cw: [], hash: new Map(), _near: [],
+  list: [], trailers: [], graph: null, templates: {}, world: null, ring: TRAFFIC_RING, timer: 0, count: 0, target: 0, _cand: [], _cw: [], hash: new Map(), _near: [],
   // отрисовка: на каждый тип машины — InstancedMesh кузова и остального (2 вызова отрисовки на тип вместо ≈11 на машину)
   // с общим буфером матриц, цвет кузова — цвет экземпляра; плюс отдельный меш для карты теней (см. cullView)
   batches: [],
@@ -62,6 +67,7 @@ const Traffic = {
     if (cfg) count = cfg.count[level] || 0;
     if (!count || !(w.trafficData || w.trafficGraph)) return;
     this.world = w; this.global = !!(cfg && cfg.global); this.types = cfg ? cfg.types : TRAFFIC_TYPES;
+    this.ring = Object.assign({}, TRAFFIC_RING, cfg && cfg.ring);
     if (!w.__trafficGraph) w.__trafficGraph = w.trafficGraph ? w.trafficGraph() : buildTrafficGraph(w.trafficData);
     this.graph = w.__trafficGraph;
     for (const n of this.graph.nodes) n.occ.clear();
@@ -78,7 +84,7 @@ const Traffic = {
       const tc = this.create(type);
       if (type.trailer) this.attach(tc);
       if (i >= count) this.kill(tc);
-      else if (!this.respawn(tc, this.global ? 60 : 30, 380)) this.respawn(tc, 30, 1e9);
+      else if (!this.respawn(tc, this.global ? 60 : 30, this.ring.max)) this.respawn(tc, 30, 1e9);
     }
     this.buildBatches();
   },
@@ -164,7 +170,7 @@ const Traffic = {
     let best = cars[0], bn = Infinity;
     for (const c of cars) {
       let n = Math.random() * 0.5;                            // случайный выбор при равенстве
-      for (const o of this.list) if (!o.dead && (o.x - c.x) ** 2 + (o.z - c.z) ** 2 < 400 * 400) n++;
+      for (const o of this.list) if (!o.dead && (o.x - c.x) ** 2 + (o.z - c.z) ** 2 < this.ring.drop ** 2) n++;
       if (n < bn) { bn = n; best = c; }
     }
     return best;
@@ -207,10 +213,30 @@ const Traffic = {
       let dmin = Infinity; for (const c of cars) dmin = Math.min(dmin, Math.hypot(c.x - x, c.z - z));
       if (dmin < minD) continue;
       if (this.list.some(o => o !== tc && !o.dead && (o.x - x) ** 2 + (o.z - z) ** 2 < 13 * 13)) continue;
+      if (this.ring.hide && this.seen(x, e.hy ? e.hy[tPieceIdx(piece, s)] : this.world.ground(x, z), z)) continue;
       this.place(tc, e, l, s, dmin > TRAFFIC_FAR);
       return true;
     }
     this.kill(tc);
+    return false;
+  },
+
+  // точку (x, y, z) видит камера какого-нибудь игрока: она в кадре и между ними нет дома (world.occludes — через 3 м
+  // на отрезке от камеры до крыши машины)
+  seen(x, y, z) {
+    const w = this.world;
+    if (!w.occludes) return false;
+    for (let i = 0; i < cars.length; i++) {
+      const cam = cams[i];
+      cam.updateMatrixWorld();
+      _tfr.setFromProjectionMatrix(_tpm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+      _tsph.center.set(x, y + 1, z); _tsph.radius = 3;
+      if (!_tfr.intersectsSphere(_tsph)) continue;
+      const p = cam.position, dx = x - p.x, dy = y + 1.4 - p.y, dz = z - p.z, n = Math.ceil(Math.hypot(dx, dz) / 3);
+      let hid = false;
+      for (let k = 1; k < n && !hid; k++) hid = w.occludes(p.x + dx * k / n, p.y + dy * k / n, p.z + dz * k / n);
+      if (!hid) return true;
+    }
     return false;
   },
 
@@ -328,7 +354,7 @@ const Traffic = {
       }
       if (tc.dead) {
         // не больше 12 появлений за проверку, чтобы не было рывков
-        if (check && alive < this.target && spawned++ < 12 && this.respawn(tc, this.global ? 150 : 170, 380)) alive++;
+        if (check && alive < this.target && spawned++ < 12 && this.respawn(tc, this.global ? 150 : this.ring.min, this.ring.max)) alive++;
         continue;
       }
       if (tc.wreck) {
@@ -339,9 +365,11 @@ const Traffic = {
       let dmin = Infinity; for (const c of cars) dmin = Math.min(dmin, Math.hypot(c.x - tc.x, c.z - tc.z));
       // далеко от игроков, разбит или утонул — появляется снова в другом месте
       // машин больше нормы (игроки съехались) — лишние дальние уходят в запас
-      if (!this.global && alive > this.target && dmin > 300) { this.kill(tc); alive--; }
-      else if ((!this.global && dmin > 400) || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || (tc.stuckT > 45 && dmin > 60))
-        this.respawn(tc, this.global ? 150 : 170, 380);
+      // на виду у игрока (ring.hide) — не исчезает, пока не уедет вдвое дальше
+      const R = this.ring, hold = R.hide && dmin < R.drop * 2 && dmin > R.over && this.seen(tc.x, tc.y, tc.z);
+      if (!this.global && alive > this.target && dmin > R.over && !hold) { this.kill(tc); alive--; }
+      else if ((!this.global && dmin > R.drop && !hold) || (tc.wreck && (tc.wreckT > 25 || (tc.wreckT > 9 && dmin > 40) || tc.y < -3)) || (tc.stuckT > 45 && dmin > 60))
+        this.respawn(tc, this.global ? 150 : R.min, R.max);
     }
   },
 
