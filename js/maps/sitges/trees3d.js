@@ -11,8 +11,8 @@
 //   • верх ствола — top (доли h): у наклонных стволов крона едет вместе с ним.
 // Матрицы считает sitgesTreeMats(); дальний упрощённый вариант (sitgesTreeFar) — икосаэдр по габаритам кроны (у пальм —
 // звезда листьев) и трёхгранный ствол в тех же координатах, матрицы те же.
-// Определяет: SITGES_TREE_KINDS, sitgesTreeKit, sitgesTreeMats, SITGES_TREE3D, SITGES_TREE_U, sitgesTreeCut,
-//   SITGES_ICO, sitgesTreeFar, sitgesBuildTrees.
+// Определяет: SITGES_TREE_KINDS, sitgesTreeKit, sitgesTreeMats, SITGES_TREE3D, sitgesTreeBrk, SITGES_TREE_U,
+//   sitgesTreeCut, SITGES_ICO, sitgesTreeFar, sitgesBuildTrees.
 // Использует: clamp, QUAL (js/core.js); Breeze (js/breeze.js); stdMat, Breakables (js/world.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -314,14 +314,25 @@ function sitgesTreeMats(f, x, y, z, h, r, ry, mT, mC) {
 //   точек экрана (TREE_FADE, discard); ближе полосы дальние схлопываются, дальше — ближние. Ближние, которые до
 //   пересборки не могут попасть в полосу, — в слое «ядро» без discard (ранняя отбраковка по глубине работает).
 //   Пороги по качеству — QUAL.trees = [near, far].
-//   Столкновения: крупные — неподвижные круги ствола в сетке (радиус tr·h); мелкие (породы brk.kinds и все ниже
-//   brk.h м) — сбиваемые (Breakables): матрицы пишутся в общие массивы, ближний набор берёт их оттуда, дальний
-//   вариант сбитого дерева прячется (дальность в aTree = −1).
+//   Столкновения: все деревья сбиваемые (Breakables), круг ствола в сетке — радиус tr·h. Масса — по объёму ствола
+//   (sitgesTreeBrk): тонкий ствол сбивается легко, толстый гасит почти всю скорость и держит как стена до порога
+//   скорости, который растёт с толщиной. Матрицы сбитых пишутся в общие массивы, ближний набор берёт их оттуда,
+//   дальний вариант сбитого дерева прячется (дальность в aTree = −1).
 // Группа помечена userData.dynamic: optimizeStatic и теневые копии её не трогают.
 const SITGES_TREE3D = {
   near: 120, band: 1 / 6, margin: 15, far: 1000, farSmall: 400, small: 7, cell: 40, chunk: 320,
-  brk: { h: 6.5, kinds: ['orange', 'garden'] },
+  // сбиваемость: rho — плотность сырой древесины, кг/м³; taper — доля объёма конуса-обрубка от цилиндра (ствол
+  // сужается кверху); mass0 — не легче, кг; speed — порог скорости v0 + kv · r м/с (r — радиус ствола у земли, м),
+  // не больше vMax; anchor — a0 + ka · r м/с скорости уходит на то, чтобы вырвать корни
+  brk: { rho: 750, taper: 0.5, mass0: 30, v0: 2, kv: 30, vMax: 26, a0: 1, ka: 12 },
 };
+// параметры сбиваемости дерева t формы f: ствол — конус-обрубок радиуса tr·h у земли длиной до середины кроны
+function sitgesTreeBrk(f, t) {
+  const B = SITGES_TREE3D.brk, h = t.h, r = Math.max(0.05, f.tr * h);
+  const d = Math.min(f.dmax * h, Math.max(f.dmin * h, f.cd * t.r)), len = h - 0.5 * d;
+  return { r, mass: Math.max(B.mass0, B.rho * B.taper * Math.PI * r * r * len),
+    minSpeed: Math.min(B.vMax, B.v0 + B.kv * r), anchor: B.a0 + B.ka * r, cy: 0.44 * h };
+}
 const SITGES_TREE_U = { uView: { value: new THREE.Vector2() }, uNear: { value: 1e9 }, uBand: { value: 1 } };
 // граница ближних и дальних (far — склеенные дальние с атрибутом aTree = x, z положения части дерева, дальность).
 // На полосе uNear − uBand … uNear рисуются обе модели и растворяются друг в друге узором точек экрана (шум IGN со
@@ -536,21 +547,18 @@ function sitgesBuildTrees(K) {
     a.needsUpdate = true;
   };
 
-  /* ---------- столкновения: крупные — столбы, мелкие — сбиваемые ---------- */
-  const brkKinds = new Set(P.brk.kinds), itemTree = [], moved = new Set(), hidden = new Set();
+  /* ---------- столкновения: все деревья сбиваемые, масса — по объёму ствола ---------- */
+  const itemTree = [], moved = new Set(), hidden = new Set();
   const proxy = A => ({ mesh: { setMatrixAt(k, m) { const i = itemTree[k]; m.toArray(A, i * 16); moved.add(i); }, instanceMatrix: {}, boundingSphere: null }, per: 1, loc: null });
   const B = new Breakables([proxy(MT), proxy(MC)], { mass: 180, anchor: 2, minSpeed: 4, dmg: 0.3, cy: 2.2, lie: 1.35, kind: 'wood',
     onBreak: it => { const i = itemTree[it.i]; hidden.add(i); farLim(i, -1); } });
   const base = new THREE.Matrix4(), inv = new THREE.Matrix4(), qI = new THREE.Quaternion(), vP = new THREE.Vector3(), vS = new THREE.Vector3();
-  let nStat = 0;
   list.forEach((t, i) => {
-    const r = Math.max(0.12, kit.forms[t.f].tr * t.h) + 0.03;
-    if (brkKinds.has(t.k) || t.h < P.brk.h) {
-      const s = t.h / 5;
-      inv.copy(base.compose(vP.set(t.x, Y[i], t.z), qI, vS.setScalar(s))).invert();
-      itemTree.push(i);
-      B.add(grid, t.x, Y[i], t.z, 0, r, t.h, { s, loc: [inv.clone().multiply(mT.fromArray(MT, i * 16)), inv.clone().multiply(mC.fromArray(MC, i * 16))] });
-    } else { grid.addCircle(t.x, t.z, r, t.h); nStat++; }
+    const s = t.h / 5, e = sitgesTreeBrk(kit.forms[t.f], t);
+    inv.copy(base.compose(vP.set(t.x, Y[i], t.z), qI, vS.setScalar(s))).invert();
+    itemTree.push(i);
+    B.add(grid, t.x, Y[i], t.z, 0, Math.max(0.12, e.r) + 0.03, t.h, { s, mass: e.mass, minSpeed: e.minSpeed, anchor: e.anchor, cy: e.cy,
+      loc: [inv.clone().multiply(mT.fromArray(MT, i * 16)), inv.clone().multiply(mC.fromArray(MC, i * 16))] });
   });
   moved.clear();
 
@@ -580,5 +588,5 @@ function sitgesBuildTrees(K) {
   K.treeBrk = B;
   group.add(root);
   let nearTris = 0; for (let i = 0; i < N; i++) { const f = forms[form[i]]; nearTris += f.tris.trunk + f.tris.crown; }
-  K.treeStats = { n: N, near: near0, far, farMeshes: farMeshes.length, farTris, tris: nearTris, brk: B.items.length, posts: nStat };
+  K.treeStats = { n: N, near: near0, far, farMeshes: farMeshes.length, farTris, tris: nearTris, brk: B.items.length };
 }

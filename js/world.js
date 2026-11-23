@@ -171,11 +171,13 @@ class Breakables {
     this.o = Object.assign({ mass: 100, anchor: 0, minSpeed: 0, dmg: 0, cy: 1, lie: 1.5, light: false, kind: 'metal', onBreak: null }, o);
     this.items = []; this.active = []; this.debris = [];
   }
-  // e: { s — масштаб, rx/rz — наклон (как в setInst), loc — локальные матрицы по индексу меша (или null) }
+  // e: { s — масштаб, rx/rz — наклон (как в setInst), loc — локальные матрицы по индексу меша (или null),
+  //   mass, anchor, minSpeed, cy — свои значения объекта (как есть, без умножения на масштаб) вместо общих }
   add(grid, x, y, z, ry = 0, r = 0.2, h = 2, e = {}) {
     const O = this.o, s = e.s || 1;
     const it = { i: this.items.length, owner: this, x, y, z, ry, rx: e.rx || 0, rz: e.rz || 0, s, loc: e.loc || null,
-      mass: O.mass * s ** 3, anchor: O.anchor * s * s, minSpeed: O.minSpeed * s, cy: O.cy * s, cLie: Math.cos(O.lie),
+      mass: e.mass ?? O.mass * s ** 3, anchor: e.anchor ?? O.anchor * s * s, minSpeed: e.minSpeed ?? O.minSpeed * s,
+      cy: e.cy ?? O.cy * s, cLie: Math.cos(O.lie),
       broken: false, mode: 0, act: false, kick: 0, p: null, v: null, q: null, w: null, pv: null };
     this.items.push(it);
     if (grid) it.cell = grid.addCircle(x, z, r, h); if (it.cell) it.cell.brk = it;
