@@ -91,8 +91,10 @@ const SITGES_ST_E = {
 
     /* ---------- бары у стел пляжных заведений ---------- */
     const B = E.bar, bars = [];
-    for (const s of C.signs) {
-      if (s.form !== 'totem' || !B.cats.includes(s.cat)) continue;
+    // сначала пляжные клубы и чирингито по названию (рядом бывает стела кафе того же места — она уступает)
+    const rank = s => s.cat === 'club' || /beach\s*club|beso/i.test(s.text || '') ? 0 : /x?chiringuito|xiringuito|beach|platja|playa/i.test(s.text || '') ? 1 : 2;
+    const cand = C.signs.filter(s => s.form === 'totem' && B.cats.includes(s.cat)).sort((a, b) => rank(a) - rank(b));
+    for (const s of cand) {
       // от стелы в сторону заведения (против нормали стелы) до первого песка; нет — от стелы к морю (стела стоит
       // у тротуара по одному из 16 направлений от заведения — не всегда со стороны пляжа)
       let hit = null;
@@ -104,7 +106,7 @@ const SITGES_ST_E = {
         if (hit) break;
       }
       if (!hit || bars.some(b => Math.hypot(b.x - hit[0], b.z - hit[1]) < B.dedupe)) { st.barSkip++; continue; }
-      const club = s.cat === 'club' || /beach\s*club|beso/i.test(s.text || '') ? 1 : 0, K = B.kiosk[club], Dk = B.deck[club];
+      const club = rank(s) === 0 ? 1 : 0, K = B.kiosk[club], Dk = B.deck[club];
       const [sx, sz] = wallD(hit[0], hit[1], 12) < 12 ? (() => { const w = nearestWall(hit[0], hit[1]); return w ? [-w.nx, -w.nz] : seaDir(...hit); })() : seaDir(...hit);
       const tx = -sz, tz = sx, depth = K.d + Dk.d, wid = Math.max(K.w, Dk.w);
       let placed = null;
