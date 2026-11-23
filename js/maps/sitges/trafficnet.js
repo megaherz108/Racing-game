@@ -176,7 +176,8 @@ function sitgesTrafficGraph(C, grid, ground, walkAt, decks) {
   /* ---------- пересечения без общей вершины OSM ---------- */
   // Оси двух улиц пересекаются на одном уровне (высоты оси расходятся меньше cross.dy), но общей вершины OSM там нет —
   // без узла полосы проходили друг сквозь друга и машины сталкивались на полном ходу (Carrer del Camí del Coll ×
-  // Carrer d'en Pepe de Garraf у (1214, 592)). Обеим улицам — общий узел (ключ X…) в ближайшей к пересечению точке оси;
+  // Carrer d'en Pepe de Garraf у (1214, 592)). Обеим улицам — общий узел в ближайшей к пересечению точке оси (вершина
+  // OSM одной из них или новый ключ);
   // у концов улиц (ближе cross.end) не ищем: там примыкание, а не пересечение. Раскладку не меняет.
   const xKey = new Map(), crossings = [];             // улица → Map(индекс точки оси → ключ узла пересечения)
   {
@@ -209,7 +210,8 @@ function sitgesTrafficGraph(C, grid, ground, walkAt, decks) {
       const A = L[a], B = L[b], ia = nearest(A, x, z), ib = nearest(B, x, z), qa = A.v[ia], qb = B.v[ib];
       // общий узел: вершина OSM одной из улиц (если есть), иначе новый ключ; уже общая вершина — пересечение учтено
       if (qa.nd && qb.nd) continue;
-      const k = qa.nd ? qa.k : qb.nd ? qb.k : 'X' + crossings.length;
+      // новый ключ — отрицательное число: строковые ключи узлов — кольца ('R…', idOf / nodeOf)
+      const k = qa.nd ? qa.k : qb.nd ? qb.k : -1 - crossings.length;
       if (!at.has(k)) at.set(k, []);
       for (const [st, i, q] of [[A, ia, qa], [B, ib, qb]]) {
         if (q.nd) continue;
