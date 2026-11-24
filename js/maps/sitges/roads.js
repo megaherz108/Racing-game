@@ -45,7 +45,9 @@ const SITGES_R = {
   // нормы sw и у классов без тротуара) — набережная Pg. de la Ribera: living_street 5 м и residential с тротуаром 2,4 м,
   // дома в 5–9 м от края, между ними — тротуар с террасами (без этого — пустая полоса и забор у кромки)
   face: { secondary: 12, tertiary: 12, unclassified: 12, residential: 12, living_street: 12 }, faceLot: 1,
-  shift: { max: 1.5, taper: 12 },   // ось к середине между границами: не дальше max м, у концов улицы — на taper м
+  // ось к середине между границами: не дальше max м, у концов улицы — на taper м; одна сторона открыта, другая ближе
+  // половины нормы cw — от неё, не дальше open м
+  shift: { max: 1.5, open: 2.5, taper: 12 },
   // скруглённые углы: r — радиус бордюра по классу, м; касание не дальше dMax м от K и не дальше доли share рукава
   // до соседнего узла; look — направление рукава по точке не ближе стольких метров; угол между рукавами — в пределах
   // [minAng, maxAng] (рад); far — K дальше от узла — не угол
@@ -63,6 +65,10 @@ const SITGES_R = {
   // подходы к мостам OSM: плечо — пока рельеф к краю моста поднимается круче rise м на м, не дальше ext м;
   // насыпь под подходом — откос fillBank м на м
   approach: { rise: 0.04, ext: 25, fillBank: 0.35 },
+  // гребни под проезжей частью (sitgesRoadRidges, levels.js): узел не выше среднего соседей напротив больше чем на
+  // eps м, но не ниже исходного больше чем на cap м; узлы — до pad м за краем проезжей части (и асфальта углов);
+  // passes — сколько раз
+  ridge: { eps: 0.02, cap: 0.5, pad: 0.5, passes: 12 },
   // ровное полотно: рельеф под улицами (проезжая часть и тротуары) и путями сглажен — в лидаре 10 м горбы 0,2–1,4 м
   // на 10–20 м, настоящий асфальт ровный. Среднее по узлам полотна в круге rad·sigma м (вес — Гаусс sigma м,
   // соседи выше / ниже на range м и больше не берутся: улица уровнем выше на склоне не тянет к себе); за краем
@@ -186,7 +192,7 @@ function sitgesPlanStreets(C) {
     return w.length ? w[w.length >> 1] : Infinity;
   };
   const fin = Number.isFinite;
-  const wst = { pts: 0, lot: 0, inLot: 0, fallback: 0, shifted: 0, face: 0, faceFill: 0 };
+  const wst = { pts: 0, lot: 0, inLot: 0, fallback: 0, shifted: 0, open: 0, face: 0, faceFill: 0 };
   for (const st of streets) {
     const { K, v, oneway } = st;
     if (st.flat) { for (const q of v) { q.hw = K.w / 2; q.sw = [0, 0]; } continue; }
@@ -203,8 +209,19 @@ function sitgesPlanStreets(C) {
     if (K.cw) {
       const S = P.shift, narrow = (oneway ? K.lane + K.park : 2 * K.lane) + 2 * P.swMin, raw = d.map((e, i) => {
         const bl = Math.min(e.l, e.pl), br = Math.min(e.r, e.pr), q = v[i];
-        if (!fin(bl) || !fin(br) || bl + br < narrow || q.br || q.tn || (i && (v[i - 1].br || v[i - 1].tn))) return 0;
-        return clamp((bl - br) / 2, -S.max, S.max) * clamp(Math.min(q.s, st.len - q.s) / S.taper, 0, 1);
+        if ((!fin(bl) && !fin(br)) || q.br || q.tn || (i && (v[i - 1].br || v[i - 1].tn))) return 0;
+        const taper = clamp(Math.min(q.s, st.len - q.s) / S.taper, 0, 1);
+        // одна сторона открыта (ни стен, ни участков на ray м), другая ближе половины нормы cw — ось от неё в открытую
+        // сторону (Av. de Sofia у (177, 465): край участка разделительной полосы в 1,1 м от оси OSM — иначе проезжая
+        // часть сжималась до minHalf)
+        if (!fin(bl) || !fin(br)) {
+          const need = K.cw[oneway ? 0 : 1] / 2, b = fin(bl) ? bl : br;
+          if (b >= need) return 0;
+          wst.open++;
+          return (fin(bl) ? -1 : 1) * Math.min(need - b, S.open) * taper;
+        }
+        if (bl + br < narrow) return 0;
+        return clamp((bl - br) / 2, -S.max, S.max) * taper;
       });
       const off = raw.map((_, i) => { let s = 0, n = 0; for (let k = Math.max(0, i - 2); k <= Math.min(v.length - 1, i + 2); k++) { s += raw[k]; n++; } return s / n; });
       off[0] = off[v.length - 1] = 0;

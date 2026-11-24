@@ -9,14 +9,16 @@
 //   3. Порода: улица — по таблице (вторая порода — доля mix), без строки — по классу улицы; сады — доли по районам
 //      с подсказкой формы кроны (узкая высокая → кипарис, небольшая высоко → пальма, широкая → сосна); парки — доли.
 //   4. Лунки с шагом fill на улицах таблицы, где лидар молодых деревьев не нашёл.
-//   Не на проезжей части, не в частях домов (C.partCells), не в бассейнах и воде, не в проёмах калиток (C.gates).
+//   Не на проезжей части, не в частях домов (C.partCells), не в бассейнах и воде, не в проёмах калиток (C.gates),
+//   не кроной сквозь настил моста (ж/д и улиц).
 // Без R(): выбор — по хешу координат (sitgesTreeHash), раскладка остального города не меняется.
 // C.trees — [{ x, z, y, f, k, h, r, ry, c, p }]: основание ствола, форма (id из SITGES_TREE_KINDS), порода, высота,
 //   радиус кроны, поворот, оттенок 0…1, место (street / fill / garden / park / sea / old). C.treeStats — счёт.
 // Определяет: SITGES_TREE, sitgesTreeHash, sitgesPlanTrees.
-// Использует: clamp (js/core.js); SITGES_TREES (js/maps/sitges/data-trees.js); sitgesCells, sitgesInPoly, sitgesBBox
-//   (js/maps/sitges/geom.js); sitgesDec (js/maps/sitges/plan.js); SITGES_OLDTOWN (js/maps/sitges/styles.js);
-//   SITGES_FSTYLE (js/maps/sitges/fencestyle.js).
+// Использует: clamp (js/core.js); SITGES_TREES (js/maps/sitges/data-trees.js); sitgesCells, sitgesInPoly, sitgesBBox,
+//   sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); sitgesDec (js/maps/sitges/plan.js); SITGES_R
+//   (js/maps/sitges/roads.js); SITGES_OLDTOWN (js/maps/sitges/styles.js); SITGES_FSTYLE
+//   (js/maps/sitges/fencestyle.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -26,6 +28,7 @@ const SITGES_TREE = {
   kerb: 0.75,          // ствол уличного дерева — от бордюра, м (не дальше половины тротуара)
   behind: 1.3,         // ствол садового дерева над улицей — за краем тротуара / проезжей части, м
   seaNear: 35,         // пляж ближе — первая линия у моря
+  underDeck: 1.5,      // верх дерева выше «низ настила моста − столько» — дерева нет (крона сквозь мост), м
   // улица → { k: [порода, вторая], mix: доля второй, form: форма по породе, young: молодые (размер по месту),
   //   size: [h0, h1, r0, r1] — размер по месту (4б.1), fill: шаг лунок, м; none: уличных нет (сады)
   streets: {
@@ -343,8 +346,36 @@ function sitgesPlanTrees(C) {
     }
   }
 
+  /* ---------- под мостами ---------- */
+  // крона над настилом моста (ж/д или улицы) и достаёт до его низа — дерева нет: лидар видит крону рядом с мостом,
+  // а в игре она торчит сквозь настил (Av. de Sofia под ж/д у (185, 485), 2026-11-24). Под высоким мостом низкое
+  // дерево остаётся
+  {
+    const decks = sitgesCells(32), RH = SITGES_R.railHalf, gap = SITGES_TREE.underDeck;
+    for (const line of [...C.streets, ...C.tracks]) {
+      const v = line.v;
+      for (let i = 0; i + 1 < v.length; i++) {
+        const a = v[i], b = v[i + 1];
+        if (!a.deck) continue;
+        const half = a.hw ? Math.max(a.hw, b.hw) + Math.max(...a.sw, ...b.sw) : RH;
+        decks.add(Math.min(a.x, b.x) - half, Math.max(a.x, b.x) + half, Math.min(a.z, b.z) - half, Math.max(a.z, b.z) + half, [a, b, half]);
+      }
+    }
+    const under = t => {
+      for (const [a, b, half] of decks.at(t.x, t.z).concat(decks.at(t.x + t.r, t.z), decks.at(t.x - t.r, t.z), decks.at(t.x, t.z + t.r), decks.at(t.x, t.z - t.r))) {
+        if (sitgesSeg(t.x, t.z, a.x, a.z, b.x, b.z) > half + t.r) continue;
+        const y = a.y + (b.y - a.y) * SITGES_SEG.t;
+        if (t.y < y && t.y + t.h > y - gap) return true;
+      }
+      return false;
+    };
+    const keep = trees.filter(t => !under(t));
+    cnt.deck = trees.length - keep.length;
+    trees.length = 0; trees.push(...keep);
+  }
+
   /* ---------- счёт ---------- */
-  const treeStats = { n: trees.length, src: src.length, rows: stat.rows, groves: stat.groves, drop: cnt.drop, moved: cnt.moved, merged: cnt.merged || 0, kind: {}, place: {}, form: {} };
+  const treeStats = { n: trees.length, src: src.length, rows: stat.rows, groves: stat.groves, drop: cnt.drop, moved: cnt.moved, merged: cnt.merged || 0, deck: cnt.deck, kind: {}, place: {}, form: {} };
   for (const t of trees) {
     treeStats.kind[t.k] = (treeStats.kind[t.k] || 0) + 1;
     treeStats.place[t.p] = (treeStats.place[t.p] || 0) + 1;

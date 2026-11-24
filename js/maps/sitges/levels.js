@@ -5,8 +5,8 @@
 //   Пересечения с ж/д: в одном уровне — переезд (C.xings); мост / тоннель (по OSM) — путепровод (C.unders): верхняя
 //     линия на пролёте — настил по прямой между высотами краёв, нижняя опускается под него (просвет clear) с уклоном
 //     grade; в рельефе под ней — выемка с откосами (bank). Рельеф игровой сетки меняется здесь, до домов.
-// Определяет: sitgesPlanLevels, sitgesEvenRoads.
-// Использует: clamp (js/core.js); smooth01 (js/world.js); sitgesCells, sitgesSeg, SITGES_SEG
+// Определяет: sitgesPlanLevels, sitgesEvenRoads, sitgesRoadRidges.
+// Использует: clamp (js/core.js); smooth01 (js/world.js); sitgesSeg, SITGES_SEG, sitgesCells
 //   (js/maps/sitges/geom.js); SITGES_T (js/maps/sitges/terrain.js); SITGES_R (js/maps/sitges/roads.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -18,9 +18,11 @@ function sitgesPlanLevels(C) {
   // Плечо — от конца моста наружу, пока рельеф поднимается круче approach.rise (не дальше approach.ext м); настил —
   // по прямой между плечами, подходы ниже этой прямой — насыпь (q.fill, рельеф поднимается ниже, после выемок)
   const { ground } = C, AP = P.approach;
-  const profile = line => {
+  // ends — высоты концов, заданные извне ({ 0: y, [v.length − 1]: y }): такой конец (q.joint) — часть настила
+  const profile = (line, ends) => {
     const v = line.v;
     for (const q of v) { q.y = ground(q.x, q.z); q.deck = false; q.fill = false; }
+    if (ends) for (const k in ends) { v[k].y = ends[k]; v[k].deck = v[k].joint = true; }
     for (let i = 0; i < v.length - 1;) {
       if (!v[i].br) { i++; continue; }
       let j = i; while (j < v.length - 1 && v[j].br) j++;
@@ -39,6 +41,27 @@ function sitgesPlanLevels(C) {
     }
   };
   streets.forEach(profile); tracks.forEach(profile);
+  // путь, у которого мост доходит до самого конца (съезд-crossover OSM кончается узлом на мостовом пути): высота
+  // конца — высота того пути в этой точке, иначе конец ложится на рельеф под мостом — рельсы спускаются с моста
+  // на улицу «лестницей», а улицу под этим ложным пролётом опускает выемка путепровода
+  const onDeck = (self, x, z) => {
+    for (const tr of tracks) {
+      if (tr === self) continue;
+      const v = tr.v;
+      for (let i = 0; i + 1 < v.length; i++) {
+        if (!v[i].deck && !v[i + 1].deck) continue;
+        if (sitgesSeg(x, z, v[i].x, v[i].z, v[i + 1].x, v[i + 1].z) > 0.5) continue;
+        return v[i].y + (v[i + 1].y - v[i].y) * SITGES_SEG.t;
+      }
+    }
+    return null;
+  };
+  for (const tr of tracks) {
+    const v = tr.v, n = v.length - 1, ends = {};
+    if (v[0].br) { const y = onDeck(tr, v[0].x, v[0].z); if (y !== null) ends[0] = y; }
+    if (v[n - 1].br) { const y = onDeck(tr, v[n].x, v[n].z); if (y !== null) ends[n] = y; }
+    if (Object.keys(ends).length) profile(tr, ends);
+  }
 
   /* ---------- пересечения улиц с путями ---------- */
   // точка пересечения отрезков (a0 a1) и (b0 b1): параметры t, u
@@ -116,7 +139,7 @@ function sitgesPlanLevels(C) {
       let b = v.length - 1; while (b > 0 && v[b - 1].s >= g.s1) b--;
       g.s0 = v[a].s; g.s1 = v[b].s;
       const y0 = v[a].y, y1 = v[b].y;
-      for (let k = a; k <= b; k++) { v[k].y = y0 + (y1 - y0) * (v[k].s - g.s0) / Math.max(1e-6, g.s1 - g.s0); v[k].deck = k < b; }
+      for (let k = a; k <= b; k++) { v[k].y = y0 + (y1 - y0) * (v[k].s - g.s0) / Math.max(1e-6, g.s1 - g.s0); v[k].deck = k < b || !!v[k].joint; }
       for (const U of g.list) { U.s0 = g.s0; U.s1 = g.s1; U.yUp = yAt(up, U.sUp); }
     }
   }
@@ -242,4 +265,40 @@ function sitgesEvenRoads(C) {
   }
   for (const k of list) H[k] = Math.max(H[k], Math.min(T.shoreMax, T.shore0 + T.shoreRise * dSea[k]));
   C.evenStats = { ms: Math.round(performance.now() - t0), nodes: list.length, core: core.reduce((s, c) => s + c, 0), taps: gw.length };
+}
+
+// Гребни под проезжей частью (после sitgesPlanCarriage — маска вместе с асфальтом скруглённых углов): лента полотна
+// (roads3d.js) берёт высоту рельефа в своих точках — не в узлах сетки, и узел, торчащий над соседями (край выемки
+// путепровода, стык откосов двух улиц), проступает сквозь асфальт пятном (Av. de Sofia у (185, 470), 2026-11-24).
+// Узел под проезжей частью (не под настилом) — не выше среднего двух соседей напротив (по любому из четырёх
+// направлений) больше чем на ridge.eps, но опускается не больше чем на ridge.cap: крупный уступ (стенка набережной,
+// скала под бастионом) — настоящий рельеф, его не стёсываем. Ровный склон и пологий горб не меняются. Точки улиц
+// у изменённых узлов — на рельеф заново.
+function sitgesRoadRidges(C) {
+  const { X0, Z0, NX, NZ, S, H } = C.terra, RG = SITGES_R.ridge, under = new Uint8Array(NX * NZ);
+  for (let jj = 1; jj < NZ - 1; jj++) for (let ii = 1; ii < NX - 1; ii++) {
+    const c = C.carriageAt(X0 + ii * S, Z0 + jj * S, null, RG.pad);
+    if (c && !c.st.v[c.i].deck) under[jj * NX + ii] = 1;
+  }
+  const D4 = [1, NX, NX + 1, NX - 1], moved = new Uint8Array(NX * NZ), H0 = H.slice();
+  let lowered = 0;
+  for (let pass = 0; pass < RG.passes; pass++) {
+    for (let k = 0; k < under.length; k++) {
+      if (!under[k]) continue;
+      let m = Infinity;
+      for (const o of D4) m = Math.min(m, (H[k - o] + H[k + o]) / 2);
+      const y = Math.max(m + RG.eps, H0[k] - RG.cap);
+      if (H[k] > y + 1e-4) { H[k] = y; if (!moved[k]) { moved[k] = 1; lowered++; } }
+    }
+  }
+  const touched = (x, z) => {
+    const i = Math.floor((x - X0) / S), j = Math.floor((z - Z0) / S);
+    if (i < 0 || j < 0 || i >= NX - 1 || j >= NZ - 1) return false;
+    const k = j * NX + i;
+    return moved[k] || moved[k + 1] || moved[k + NX] || moved[k + NX + 1];
+  };
+  for (const st of C.streets) for (const q of st.v) if (!q.deck && touched(q.x, q.z)) q.y = C.ground(q.x, q.z);
+  let drop = 0, at = null;
+  for (let k = 0; k < H.length; k++) if (moved[k] && H0[k] - H[k] > drop) { drop = H0[k] - H[k]; at = [Math.round(X0 + (k % NX) * S), Math.round(Z0 + Math.floor(k / NX) * S)]; }
+  C.roadStats.ridges = { nodes: lowered, maxDrop: +drop.toFixed(2), at };
 }

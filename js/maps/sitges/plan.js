@@ -20,8 +20,8 @@
 //   (js/maps/sitges/data-parcels.js); SITGES_ROOF (js/maps/sitges/data-roofs.js); SITGES_PTS
 //   (js/maps/sitges/data-points.js); SITGES_GATES (js/maps/sitges/data-gates.js); sitgesCells, sitgesBBox
 //   (js/maps/sitges/geom.js); sitgesPlanTerrain (js/maps/sitges/terrain.js); sitgesPlanStreets
-//   (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels (js/maps/sitges/levels.js); sitgesPlanCorners
-//   (js/maps/sitges/corners.js); sitgesPlanCarriage (js/maps/sitges/carriage.js); sitgesPlanWalks
+//   (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels, sitgesRoadRidges (js/maps/sitges/levels.js);
+//   sitgesPlanCorners (js/maps/sitges/corners.js); sitgesPlanCarriage (js/maps/sitges/carriage.js); sitgesPlanWalks
 //   (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
 //   (js/maps/sitges/houses.js); lmCanRobertTrees (js/maps/sitges/lm/canrobert.js); sitgesPlanLandmarks
 //   (js/maps/sitges/landmarks.js); sitgesPlanFences (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades
@@ -77,6 +77,7 @@ function sitgesData() {
   sitgesPlanLevels(C);
   sitgesPlanCorners(C);
   sitgesPlanCarriage(C);
+  sitgesRoadRidges(C);            // гребни рельефа под проезжей частью (levels.js) — после углов и проезжей части
   sitgesPlanWalks(C);
   sitgesPlanHouses(C);
   sitgesPlanLandmarks(C);

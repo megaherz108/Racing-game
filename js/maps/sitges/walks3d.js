@@ -8,8 +8,8 @@
 //     тротуара на концах, нормаль к кварталу; концы A, B — те же массивы, что в раскладке (O0 / O1 полос, Ou колец
 //     C.cornerWalks): по ним fences3d.js находит высоту для отрезков C.fenceLine.
 // Определяет: SITGES_DROP, sitgesBuildWalks.
-// Использует: MAT, clamp (js/core.js); sitgesCells (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js);
-//   SITGES_RB (js/maps/sitges/roads3d.js).
+// Использует: MAT, clamp (js/core.js); sitgesCells, sitgesSeg, SITGES_SEG (js/maps/sitges/geom.js); SITGES_R
+//   (js/maps/sitges/roads.js); SITGES_RB (js/maps/sitges/roads3d.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -159,8 +159,18 @@ function sitgesBuildWalks(K) {
     const [mat, tint] = surfOf(c.a.st), lift = mat === 'asphalt' ? P.lift.drive : P.lift.paved, lw = P.lift.drive;
     // точки колец (бордюр, наружный край), концы и вершина острого угла — из раскладки (js/maps/sitges/walks.js)
     const { N, EA, EB, Q, ring: RG } = C.cornerWalks[ci];
-    // асфальт угла заходит на 0,4 м внутрь проезжих частей (лента улицы у узла не точно по бордюрной линии)
-    const m = 0.4, Kx = [c.K[0] - (c.a.n[0] + c.b.n[0]) * m, c.K[1] - (c.a.n[1] + c.b.n[1]) * m];
+    // асфальт угла заходит внутрь проезжих частей (лента улицы у узла не точно по бордюрной линии): на 0,4 м, а если
+    // K лежит дальше от края проезжей части рукава (рукав у узла изгибается — Montornés Pino × Av. de Sofia у (191, 472),
+    // 0,85 м), — на эту щель с запасом, иначе между лентами и асфальтом угла видна земля
+    const gapTo = X => {
+      const v = X.st.v; let d = Infinity;
+      for (let i = Math.max(0, X.i - 3); i < Math.min(v.length - 1, X.i + 4); i++) {
+        const a = v[i], b = v[i + 1], s = sitgesSeg(c.K[0], c.K[1], a.x, a.z, b.x, b.z);
+        d = Math.min(d, s - (a.hw + (b.hw - a.hw) * SITGES_SEG.t));
+      }
+      return d;
+    };
+    const m = clamp(Math.max(gapTo(c.a), gapTo(c.b)) + 0.5, 0.4, 2.5), Kx =[c.K[0] - (c.a.n[0] + c.b.n[0]) * m, c.K[1] - (c.a.n[1] + c.b.n[1]) * m];
     const yK = g(Kx[0], Kx[1]) + lift, nn = gn(c.K[0], c.K[1]);
     const v3a = p => [p[0], g(p[0], p[1]) + lift, p[1]];
     const TA_ = X => [X.T[0] - X.n[0] * m, X.T[1] - X.n[1] * m];
