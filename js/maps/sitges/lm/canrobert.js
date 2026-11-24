@@ -16,10 +16,10 @@
 //   Материалы (≤ 6): белый бетон (lmMat), окраска и дерево (цвет вершин), оцинковка (цвет вершин, металл), атлас
 //     (canvas: прутья перил, сварная сетка, штакетник, доски настила, табличка, «корова»; alphaTest).
 // Старый мостик этапа 2 на месте подвесного не строит roads3d.js (lmCanRobertOldDeck).
-// Определяет: SITGES_LM_CANROBERT, lmCanRobertAmphi, lmCanRobertMats, LM_CR_ATLAS, lmCanRobertAtlas, lmCanRobertGeo,
-//   lmCanRobertBatch, lmCanRobertOldDeck.
+// Определяет: SITGES_LM_CANROBERT, lmCanRobertAmphi, lmCanRobertDrape, lmCanRobertMats, LM_CR_ATLAS,
+//   lmCanRobertAtlas, lmCanRobertGeo, lmCanRobertBatch, lmCanRobertOldDeck.
 // Использует: Breakables (js/world.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); lmCollideBox, lmFrame,
-//   lmPrism, lmBox, lmMat (js/maps/sitges/landmarks3d.js); brkSolid (js/physics.js).
+//   lmPrism, lmBox, LMK, lmMat (js/maps/sitges/landmarks3d.js); brkSolid (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -51,6 +51,7 @@ const SITGES_LM_CANROBERT = {
     const am = L.spot('amphi');
     if (am) {
       L.amphi = lmCanRobertAmphi(am.ring, this.amphi);
+      L.amphiRamps = L.amphi.ramps;
       // узел в части или ближе 0,3 м к ней — ниже её верха на cut (у ступеней и площадки — с запасом: между узлами
       // через 2,5 м рельеф поднимается круче ступеней 0,3 / 0,75 м и иначе прикрыл бы их задний край)
       const T = C.terra, { NX, NZ, S, X0, Z0, H } = T, target = new Map();
@@ -367,19 +368,23 @@ const SITGES_LM_CANROBERT = {
     }
 
     /* ---------- амфитеатр: белый бетон — сцена, ступени, площадка, уступ (лидар 50 см, ортофото) ---------- */
+    // Столкновения: подступёнок 0,3 м кузов не переезжает — для колёс и кузова ступени — пандус по их передним кромкам
+    // (машина взбирается и съезжает, как по бордюрам); сцена, площадка, уступ — ровные поверхности; стенка — только
+    // восточная грань уступа (0,8 м: с него можно спрыгнуть, въехать — нет)
     if (L.amphi) {
       const v = [], idx = [];
+      const face = (pts, ys) => { const o = v.length / 3; pts.forEach(([x, z], k) => v.push(x, ys[k], z)); idx.push(o, o + 1, o + 2, o, o + 2, o + 3); };
       for (const part of L.amphi) {
         lmPrism(group, M.white, part.ring, part.top - 1.0, part.top);
-        // колёса: верх — поверхность (четырёхугольники), кузов — сетка столкновений (стенки и верх), как тротуары
-        for (const q of part.quads) K.rk.addWalk(q, part.top);
-        const r = part.ring, o = v.length / 3, m = r.length;
-        for (const [x, z] of r) v.push(x, part.top - 1.0, z, x, part.top, z);
-        for (let i = 0; i < m; i++) { const a = o + 2 * i, b = o + 2 * ((i + 1) % m); idx.push(a, b, b + 1, a, b + 1, a + 1); }
-        for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(r.map(([x, z]) => new THREE.Vector2(x, z)), [])) idx.push(o + 2 * i + 1, o + 2 * j + 1, o + 2 * k + 1);
+        if (part.ramp) continue;
+        for (const q of part.quads) { K.rk.addWalk(q, part.top); face(q, [part.top, part.top, part.top, part.top]); }
       }
+      for (const q of L.amphiRamps) { K.rk.addWalk(q.pts, Math.max(...q.ys), q.ys); face(q.pts, q.ys); }
+      const ledge = L.amphi.filter(p => p.ledge), z0 = Math.min(...ledge.flatMap(p => p.ring.map(q => q[1]))), z1 = Math.max(...ledge.flatMap(p => p.ring.map(q => q[1])));
+      const lx = P.amphi.ledgeX, y0 = P.amphi.y;
+      for (const p of ledge) { const za = Math.min(...p.ring.map(q => q[1])), zb = Math.max(...p.ring.map(q => q[1])); face([[lx, za], [lx, zb], [lx, zb], [lx, za]], [y0 - 0.3, y0 - 0.3, p.top, p.top]); }
       K.meshColliders.push({ v: new Float32Array(v), i: new Uint32Array(idx), walk: true });
-      stats.amphi = { parts: L.amphi.length, nodes: L.amphiNodes };
+      stats.amphi = { parts: L.amphi.length, nodes: L.amphiNodes, ledge: [z0, z1].map(Math.round) };
     }
 
     /* ---------- спортплощадка (OSM 1573463516, кадр 13): сетчатая клетка, борта, ворота и щиты ---------- */
@@ -438,11 +443,11 @@ const SITGES_LM_CANROBERT = {
     /* ---------- калистеника (≈ (150, 580), ортофото: белая площадка с перекладинами) ---------- */
     const cal = sp('calis');
     if (cal) {
-      const F = frame(cal.ring), top = groundMax(cal.ring) + 0.08, gmin = Math.min(...cal.ring.map(([x, z]) => gr(x, z)));
-      lmPrism(group, M.white, cal.ring, gmin - 0.3, top);
-      K.rk.addWalk(cal.ring, top);
-      const mc = 0x5f6a74, post = (u, v, h) => { const [x, z] = ptF(F, u, v); cyl(M.met, mc, 0.05, h + 0.3, x, top - 0.3, z, 8); coll(x, z, 0.22, 0.22, 0, top - 0.5, top + h); return [x, z]; };
-      const bar = (u0, v0, u1, v1, h) => { const [ax, az] = ptF(F, u0, v0), [bx, bz] = ptF(F, u1, v1); beam(M.met, mc, [ax, top + h, az], [bx, top + h, bz], 0.035, 0.035); };
+      // плита по рельефу (на склоне ≈ 1 м — ровный блок торчал бы стеной), 8 см над землёй
+      const F = frame(cal.ring), lift = 0.08, yy = (x, z) => gr(x, z) + lift;
+      B.put(M.white, lmCanRobertDrape(cal.ring, yy, 1), null, null);
+      const mc = 0x5f6a74, post = (u, v, h) => { const [x, z] = ptF(F, u, v), y0 = yy(x, z); cyl(M.met, mc, 0.05, h + 0.3, x, y0 - 0.3, z, 8); coll(x, z, 0.22, 0.22, 0, y0 - 0.5, y0 + h); return [x, z]; };
+      const bar = (u0, v0, u1, v1, h) => { const [ax, az] = ptF(F, u0, v0), [bx, bz] = ptF(F, u1, v1), y0 = Math.max(yy(ax, az), yy(bx, bz)); beam(M.met, mc, [ax, y0 + h, az], [bx, y0 + h, bz], 0.035, 0.035); };
       // турник: три стойки поперёк, перекладины 2,3 и 1,9 м
       post(-5.5, -1.3, 2.4); post(-5.5, 0, 2.4); post(-5.5, 1.3, 2.4);
       bar(-5.5, -1.3, -5.5, 0, 2.3); bar(-5.5, 0, -5.5, 1.3, 1.9);
@@ -455,9 +460,9 @@ const SITGES_LM_CANROBERT = {
       post(6.2, -0.5, 2.4); post(6.2, 0.5, 2.4);
       for (let h = 0.3; h < 2.4; h += 0.27) bar(6.2, -0.5, 6.2, 0.5, h);
       // скамья для пресса: наклонная доска
-      { const [ax, az] = ptF(F, 3.0, 3.0), [bx, bz] = ptF(F, 4.6, 3.0);
+      { const [ax, az] = ptF(F, 3.0, 3.0), [bx, bz] = ptF(F, 4.6, 3.0), top = Math.max(yy(ax, az), yy(bx, bz));
         beam(M.col, 0x3e4650, [ax, top + 0.3, az], [bx, top + 0.75, bz], 0.35, 0.06);
-        for (const q of [[ax, az, 0.3], [bx, bz, 0.75]]) box(M.met, mc, 0.06, q[2], 0.3, q[0], top, q[1], F.rot);
+        for (const q of [[ax, az, 0.3], [bx, bz, 0.75]]) box(M.met, mc, 0.06, q[2] + 0.2, 0.3, q[0], top - 0.2, q[1], F.rot);
         coll((ax + bx) / 2, (az + bz) / 2, 1.8, 0.45, F.rot, top - 0.3, top + 0.8); }
     }
 
@@ -580,17 +585,56 @@ function lmCanRobertAmphi(ring, A) {
     return { ring: [west(d0), c0, south(d0), south(d1), c1, west(d1)], quads: [[west(d0), c0, c1, west(d1)], [c0, south(d0), south(d1), c1]] };
   };
   const parts = [{ ring: ring.map(q => q.slice()), top: A.y, cut: 0.12, quads: [ring.map(q => q.slice())] }];
-  for (let k = 1; k <= A.n; k++) parts.push(Object.assign(band((k - 1) * A.run, k * A.run), { top: A.y + A.rise * k, cut: 0.57 }));
+  for (let k = 1; k <= A.n; k++) parts.push(Object.assign(band((k - 1) * A.run, k * A.run), { top: A.y + A.rise * k, cut: 0.57, ramp: true }));
   const dN = A.n * A.run;
-  parts.push(Object.assign(band(dN, dN + A.land), { top: A.y + A.rise * A.n, cut: 0.57 }));
+  parts.push(Object.assign(band(dN, dN + A.land), { top: A.y + A.rise * A.n, cut: 0.12 }));
+  // пандус ступеней для колёс и кузова: от кромки сцены (A.y) до верха последней ступени
+  const yT = A.y + A.rise * A.n, R0 = band(0, dN).quads;
+  parts.ramps = R0.map(q => ({ pts: q, ys: [A.y, A.y, yT, yT] }));
   // уступ с запада: от x = ledgeX на ledgeW м (x игры растёт на запад) по всей длине сцены и ступеней
   // южная часть — у сцены (верх ledgeY), северная — у ступеней и площадки (верх как у площадки)
   const z0 = Math.min(p3[1], p0[1]) - 0.5, zm = p0[1] + dN / 2, z1 = p0[1] + dN + A.land, wx = A.ledgeX + A.ledgeW;
   for (const [za, zb, top] of [[z0, zm, A.ledgeY], [zm, z1, A.y + A.rise * A.n]]) {
     const led = [[A.ledgeX, za], [wx, za], [wx, zb], [A.ledgeX, zb]];
-    parts.push({ ring: led, top, cut: 0.12, quads: [led] });
+    parts.push({ ring: led, top, cut: 0.12, quads: [led], ledge: true });
   }
   return parts;
+}
+
+/* ---------- плита по рельефу ---------- */
+// четырёхугольник ring (4 точки) сеткой ≈ step м: верх на высоте yAt(x, z), бока до yAt − 0,3 (uv — метры / LMK.uv)
+function lmCanRobertDrape(ring, yAt, step = 1) {
+  const [a, b, c, d] = ring, nu = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)), nv = Math.max(1, Math.ceil(Math.hypot(d[0] - a[0], d[1] - a[1]) / step));
+  const P = (u, v) => { const x = (a[0] * (1 - u) + b[0] * u) * (1 - v) + (d[0] * (1 - u) + c[0] * u) * v, z = (a[1] * (1 - u) + b[1] * u) * (1 - v) + (d[1] * (1 - u) + c[1] * u) * v; return [x, yAt(x, z), z]; };
+  const pos = [], uv = [], U = LMK.uv;
+  const tri = (A, B2, C2, up) => {
+    const nx = (B2[1] - A[1]) * (C2[2] - A[2]) - (B2[2] - A[2]) * (C2[1] - A[1]), ny = (B2[2] - A[2]) * (C2[0] - A[0]) - (B2[0] - A[0]) * (C2[2] - A[2]);
+    const flip = up ? ny < 0 : false;
+    for (const q of flip ? [A, C2, B2] : [A, B2, C2]) { pos.push(...q); uv.push((q[0] + q[1] * 0.3) / U, (q[2] + q[1] * 0.3) / U); }
+    return nx;
+  };
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const p00 = P(i / nu, j / nv), p10 = P((i + 1) / nu, j / nv), p11 = P((i + 1) / nu, (j + 1) / nv), p01 = P(i / nu, (j + 1) / nv);
+    tri(p00, p10, p11, true); tri(p00, p11, p01, true);
+  }
+  // бока: наружу от середины
+  const cx = (a[0] + b[0] + c[0] + d[0]) / 4, cz = (a[1] + b[1] + c[1] + d[1]) / 4;
+  const edge = (u0, v0, u1, v1, n) => {
+    for (let k = 0; k < n; k++) {
+      const A = P(u0 + (u1 - u0) * k / n, v0 + (v1 - v0) * k / n), B2 = P(u0 + (u1 - u0) * (k + 1) / n, v0 + (v1 - v0) * (k + 1) / n);
+      const A2 = [A[0], A[1] - 0.3, A[2]], B3 = [B2[0], B2[1] - 0.3, B2[2]];
+      const ox = (A[0] + B2[0]) / 2 - cx, oz = (A[2] + B2[2]) / 2 - cz, ex = B2[0] - A[0], ez = B2[2] - A[2];
+      const out = (ez * ox - ex * oz) > 0;     // нормаль (ez, −ex) смотрит наружу
+      const quad = out ? [A, B2, B3, A2] : [A, A2, B3, B2];
+      for (const q of [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]) { pos.push(...q); uv.push((q[0] + q[2]) / U, q[1] / U); }
+    }
+  };
+  edge(0, 0, 1, 0, nu); edge(1, 0, 1, 1, nv); edge(1, 1, 0, 1, nu); edge(0, 1, 0, 0, nv);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
 }
 
 /* ---------- материалы ---------- */
