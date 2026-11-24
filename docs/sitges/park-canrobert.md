@@ -458,7 +458,7 @@ OSM — не дальше 3 м от оси настила парка), пров�
 **Прогоны.**
 - `selfTest` — «ошибок нет»; `node tools/deps.js --check` — шапки актуальны.
 - `fingerprint('city')` — прежний (34d1ea5d / 14fcd7f0). `fingerprint('sitges')` против `main`: данные — `C.trees`,
-  `C.parkTreeFix`, `C.landmarks` (места скамей и фонарей сдвинулись вслед за деревьями); мир — `meshes`, `meshHash`,
+  `C.parkTreeFix`, `C.landmarks` (запись строения парка); мир — `meshes`, `meshHash`,
   `gridItems`, `gridHash` (`decks`, `breakables`, `colliders` — прежние).
 - `__sitgesCheck()` с `--compare tools/sitges/check-base.json` — только `counts.roadTris` 1323152 → 1319180 (П2–П3);
   эталон пересохранён (`git diff` — `roadTris` и время; время постройки как у `main` на той же машине: данные ≈ 5,9 с).
