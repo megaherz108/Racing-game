@@ -23,11 +23,11 @@
 //   (js/maps/sitges/roads.js); sitgesEvenRoads, sitgesPlanLevels (js/maps/sitges/levels.js); sitgesPlanCorners
 //   (js/maps/sitges/corners.js); sitgesPlanCarriage (js/maps/sitges/carriage.js); sitgesPlanWalks
 //   (js/maps/sitges/walks.js); sitgesPlanMinimap, SITGES_DRIVE (js/maps/sitges/minimap.js); sitgesPlanHouses
-//   (js/maps/sitges/houses.js); sitgesPlanLandmarks (js/maps/sitges/landmarks.js); sitgesPlanFences
-//   (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades (js/maps/sitges/styles.js); sitgesPlanFenceStyles
-//   (js/maps/sitges/fencestyle.js); sitgesPlanGates (js/maps/sitges/gates.js); sitgesPlanTrees
-//   (js/maps/sitges/trees.js); sitgesPlanSigns (js/maps/sitges/signs.js); sitgesPlanDoors (js/maps/sitges/doors.js);
-//   sitgesPlanStreet (js/maps/sitges/street.js).
+//   (js/maps/sitges/houses.js); lmCanRobertTrees (js/maps/sitges/lm/canrobert.js); sitgesPlanLandmarks
+//   (js/maps/sitges/landmarks.js); sitgesPlanFences (js/maps/sitges/fences.js); sitgesPlanStyles, sitgesPlanFacades
+//   (js/maps/sitges/styles.js); sitgesPlanFenceStyles (js/maps/sitges/fencestyle.js); sitgesPlanGates
+//   (js/maps/sitges/gates.js); sitgesPlanTrees (js/maps/sitges/trees.js); sitgesPlanSigns (js/maps/sitges/signs.js);
+//   sitgesPlanDoors (js/maps/sitges/doors.js); sitgesPlanStreet (js/maps/sitges/street.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -85,6 +85,7 @@ function sitgesData() {
   sitgesPlanFenceStyles(C);
   sitgesPlanGates(C);
   sitgesPlanTrees(C);
+  lmCanRobertTrees(C);            // парк Can Robert: деревья не в настиле мостика и не на бетоне амфитеатра
   sitgesPlanFacades(C);
   sitgesPlanSigns(C);
   sitgesPlanDoors(C);

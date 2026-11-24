@@ -35,7 +35,8 @@
     `C.fences`, `C.fenceLine`, `C.fenceLots`, `C.fenceStats`; настройки `SITGES_FENCE`.
 12. `fencestyle.js` — стиль забора участка по году дома и району (`f.style`, доли `SITGES_FSTYLE`); отладка — `?fences`.
 13. `gates.js` — места калиток и ворот `C.gates` по `data-gates.js` и воротам OSM; `SITGES_GATE`.
-14. `trees.js` — деревья: место, порода по таблице улиц `SITGES_TREE`, размер → `C.trees`.
+14. `trees.js` — деревья: место, порода по таблице улиц `SITGES_TREE`, размер → `C.trees`. Сразу после —
+    `lmCanRobertTrees` (`lm/canrobert.js`, П4): деревья парка не в настиле мостика и не на бетоне амфитеатра.
 15. `styles.js`, `sitgesPlanFacades` — балконы и карнизы (`C.balconies`, `C.cornices`); балкон — по `sitgesBalcony()`,
     то же правило в шейдере.
 16. `signs.js` — вывески: `C.signs` по `data-venues.js` и вывески строений `SITGES_SIGNS.lm` (договор — `stage-6a.md`).
@@ -62,6 +63,8 @@
   пороги `QUAL.trees`; все деревья сбиваемые, масса — по объёму ствола (`sitgesTreeBrk`).
 - `landmarks3d.js` — постройка достопримечательностей и помощники `lm*`; модели — `lm/<id>.js`.
   Сбиваемое строений (заборы, фонари, скамьи парка Can Robert) — `K.lmBrks` → `world.breakables` (`build.js`).
+  Строению нужны помощники этапа 7 (огни фонарей парка — `S.glow`, `S.lights`) — `K.lmAfterStreet` (`build.js` зовёт
+  после `sitgesBuildStreet`).
 - `signtex.js` — атлас надписей; `signs3d.js` — постройка вывесок и дверей.
 - `street3d.js` — постройка мелочей улиц (`S.place`, `S.lights`).
 - `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground)`, настройки `SITGES_NET`; строится при
