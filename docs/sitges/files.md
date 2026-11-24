@@ -6,7 +6,7 @@
 ## Данные и общая геометрия
 
 - `data-*.js` — данные, их пишет `tools/sitges/build.js`. **Не читать и не искать по ним** (формат — в шапке файла
-  и в скрипте-генераторе).
+  и в скрипте-генераторе). `data-parks.js` (`SITGES_PARKS`) пока никто не читает — раскладка парка будет на шаге П1.
 - `geom.js` — общая геометрия: `sitgesCells` (сетка по клеткам), `sitgesInPoly`, `sitgesArea` (площадь со знаком), `sitgesBBox`,
   `sitgesSeg`. Новый общий расчёт по контурам — сюда, а не копией в этап.
 
@@ -61,15 +61,19 @@
 
 Конвейер данных:
 - `download.js` — OSM и точки OSM, кадастр (здания, участки, адреса), рельеф ICGC, плитки ортофото и лидара
-  «рельеф + здания» в `raw/` (не в git). `SITGES_RAW` — папка сырых данных для git worktree.
+  «рельеф + здания» в `raw/` (не в git); для парков — плитки 128 м `dtm/`, `srf/`, `orto25/` только у их рамок.
+  `SITGES_RAW` — папка сырых данных для git worktree.
 - `overture.py` — места Overture Maps по прямоугольнику → JSON (вызывает `download.js` интерпретатором `raw/.venv`).
 - `read-*.js` — разбор: `read-osm.js` (OSM в UTM), `read-catastro.js` (GML кадастра), `read-dtm.js` (рельеф 5 м),
   `read-venues.js` (заведения сверх OSM: Overture, реестр туризма, `venues-extra.json`), `read-roofs.js` (тип и цвет крыш → `data-roofs.js`), `read-gates.js` (входы, окна
   съездов по ортофото, служебные проезды → `data-gates.js`), `read-trees.js` (деревья из лидара «поверхность» −
-  «рельеф + здания», маска ИК, запасной лидар за ж/д → `data-trees.js`).
+  «рельеф + здания», маска ИК, запасной лидар за ж/д → `data-trees.js`), `read-parks.js` (парки из списка `PARKS`:
+  сетка высот 2,5 м по лидару 50 см, покрытие 1 м по ортофото, настил мостика, места объектов → `data-parks.js`;
+  план — `park-canrobert.md`).
 - `build.js` — `raw/` → `js/maps/sitges/data-*.js`; `geo.js` (UTM, поворот), `util.js` (упаковка, упрощение), `png.js`.
 - `streetview.js` — фото-образцы Street View в `raw/photos/sv/`, ключ `raw/gmaps-key.txt` (как добывать — `photos.md`).
-- Листы проверки: `roofs-sheet.js` (крыши), `trees-sheet.js` (деревья), `sheets.py` (обзоры кадров).
+- Листы проверки: `roofs-sheet.js` (крыши), `trees-sheet.js` (деревья), `parks-sheet.js` (парки: отмывка, покрытие,
+  `srf − dtm`, места объектов), `sheets.py` (обзоры кадров).
 
 Проверка и отладка (подключаются через `node tools/cdp.js --inject …`):
 - `check.js` — `__sitgesCheck()`, `__sitgesShots()`, эталон `check-base.json`.
