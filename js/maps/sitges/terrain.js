@@ -10,8 +10,9 @@
 // За сеткой — фон outer(x, z): рельеф ICGC на 10 м (море — по «нет данных» и полигону sea, дно — по расстоянию от
 // берега), за краем рельефа — продолжение края с подъёмом в холмы.
 // Определяет: SITGES_T, sitgesDepth, sitgesRaster, sitgesChamfer, sitgesPlanTerrain.
-// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js); stPromTerrain
-//   (js/maps/sitges/st/promenade.js); stSlopeTerrain (js/maps/sitges/st/slopes.js).
+// Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01 (js/world.js); sitgesParkTerrain
+//   (js/maps/sitges/parks.js); stPromTerrain (js/maps/sitges/st/promenade.js); stSlopeTerrain
+//   (js/maps/sitges/st/slopes.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -240,4 +241,6 @@ function sitgesPlanTerrain(C) {
   stPromTerrain(C);
   // склоны (этап 7, группа G): откос перед стеной бастиона у церкви — до нижней площади (js/maps/sitges/st/slopes.js)
   stSlopeTerrain(C);
+  // парки (план Can Robert, шаг П1): рельеф по лидару 50 см внутри контура со сшивкой; C.parks (js/maps/sitges/parks.js)
+  sitgesParkTerrain(C);
 }
