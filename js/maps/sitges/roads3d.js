@@ -10,7 +10,8 @@
 // Определяет: SITGES_RB, sitgesRoadTextures, SITGES_RB_TILE, sitgesBuildRoads, sitgesBuildMarks,
 //   sitgesBuildRoadMeshes.
 // Использует: mulberry32 (js/world.js); Weather (js/weather.js); canvasTex (js/maps/city/textures.js); cobbleTexture
-//   (js/maps/city/landmarks.js); sitgesCells (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js).
+//   (js/maps/city/landmarks.js); sitgesCells (js/maps/sitges/geom.js); SITGES_R (js/maps/sitges/roads.js);
+//   lmCanRobertOldDeck (js/maps/sitges/lm/canrobert.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -196,13 +197,14 @@ function sitgesBuildRoads(K) {
 
   /* ---------- полотно улиц ---------- */
   // дорожки внутри парков нарисованы на земле (сауло, бетон — js/maps/sitges/parkcover.js): там ленты нет
-  const parkSkip = K.parkSkip;
+  const parkSkip = K.parkSkip, oldDeck = lmCanRobertOldDeck(C);   // старый мостик парка Can Robert — строит lm/canrobert.js
   for (const st of C.streets) {
     const [mat, tint] = surfOf(st), v = st.v;
     const lift = st.drive ? (mat === 'asphalt' ? P.lift.drive : P.lift.paved) : st.cls === 'pedestrian' ? P.lift.ped : P.lift.flat;
     const c0 = st.cls === 'cycleway' && mat === 'asphalt' ? 0xc07060 : tint;
     for (let i = 0; i + 1 < v.length; i++) {
       const a = v[i], b = v[i + 1], deck = a.deck;
+      if (deck && oldDeck(a, b)) continue;
       // вдоль — куски не длиннее шага сетки рельефа, поперёк — через ≤ 2,5 м: лента не проваливается под рельеф
       const n = Math.max(1, Math.ceil((b.s - a.s) / 2.5)), hwm = Math.max(a.hw, b.hw), m = hwm > 2.6 ? 4 : 2;
       const at = f => {
@@ -274,10 +276,10 @@ function sitgesBuildMarks(K) {
   };
   // улицы под перилами: наибольший просвет под настилом над проезжей частью каждой (мост × улица). Меньше under —
   // стык моста с улицей в одном уровне (конец моста на перекрёстке, мостик у дороги): перила там стояли бы поперёк улицы
-  const under = new Map();
+  const under = new Map(), oldDeck = lmCanRobertOldDeck(C);   // старый мостик парка Can Robert — строит lm/canrobert.js
   for (const st of C.streets) {
     const v = st.v;
-    for (let i = 0; i + 1 < v.length; i++) if (v[i].deck) for (const sg of [1, -1]) railPts(rail(v[i], v[i + 1], sg), st, (k, n, c, cl) => {
+    for (let i = 0; i + 1 < v.length; i++) if (v[i].deck && !oldDeck(v[i], v[i + 1])) for (const sg of [1, -1]) railPts(rail(v[i], v[i + 1], sg), st, (k, n, c, cl) => {
       if (!c) return;
       let m = under.get(st); if (!m) under.set(st, m = new Map());
       m.set(c.st, Math.max(m.get(c.st) ?? -Infinity, cl));
@@ -288,7 +290,7 @@ function sitgesBuildMarks(K) {
     const v = st.v, U = under.get(st);
     for (let i = 0; i + 1 < v.length; i++) {
       const a = v[i], b = v[i + 1];
-      if (!a.deck) continue;
+      if (!a.deck || oldDeck(a, b)) continue;
       const wa = a.hw + Math.max(a.sw[0], a.sw[1]) + 0.3, wb = b.hw + Math.max(b.sw[0], b.sw[1]) + 0.3;
       // перила — кусками, без мест над улицей в одном уровне с настилом (cut); над улицей, проходящей под мостом, —
       // настил тоньше (thin): просвет под ним — по рельефу, а он в выемках у мостов не глубже ≈ 2,5 м
