@@ -6,7 +6,7 @@
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
 //   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); Jumps
-//   (js/jumps.js); Bomb (js/bomb.js); resize (js/main.js).
+//   (js/jumps.js); Bomb (js/bomb.js); Fly (js/flycam.js); resize (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -154,6 +154,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
   }, 40);
 }
 function endMatch(to) {
+  Fly.stop();
   Race.stop();
   Capture.stop();
   Bomb.stop();

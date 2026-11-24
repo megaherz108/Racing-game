@@ -9,7 +9,7 @@
 //   fitBadges (js/badges.js); scene, shadowProxyOf, smooth01, waterLevel, dropShadowProxy (js/world.js); world
 //   (js/maps/registry.js); smoke, sparks, wheelFx (js/effects.js); CarFx (js/carfx.js); Sound (js/audio.js); Traffic
 //   (js/traffic/traffic.js); countdown (js/match.js); addCoins, notify, keys (js/ui.js); Feel (js/feel.js); Stunts
-//   (js/stunts.js).
+//   (js/stunts.js); Fly (js/flycam.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
 /* =====================================================================
@@ -762,6 +762,7 @@ function handleContacts() {
 const NO_INPUT = { up: false, down: false, left: false, right: false, hb: false, nitro: false };
 function readInput(p) {
   // Ctrl не используем: Ctrl + W (газ Игрока 1) закрывает вкладку браузера
+  if (Fly.on) return Fly.input();      // свободный полёт камеры: машина стоит на ручнике (js/flycam.js)
   if (cars.length === 1) return {      // одиночная езда: WASD и стрелки управляют одной машиной
     up: keys.has('KeyW') || keys.has('ArrowUp'), down: keys.has('KeyS') || keys.has('ArrowDown'),
     left: keys.has('KeyA') || keys.has('ArrowLeft'), right: keys.has('KeyD') || keys.has('ArrowRight'),

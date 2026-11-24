@@ -1,13 +1,13 @@
 // Главный цикл и старт игры
 // Определяет: showLook, resize, Perf, SHADOW_SHARE, shadowShared, last, gameT, frame, frameBody, cheatCoins.
 // Использует: save, CARS, browse (js/data.js); renderer, clamp, lerp (js/core.js); Breeze (js/breeze.js); showCam,
-//   PODIUM_SPAN, viewShift, podiums, show, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky
+//   show, PODIUM_SPAN, viewShift, podiums, updatePodium (js/showroom.js); aimSun, scene (js/world.js); Sky
 //   (js/sky.js); Weather (js/weather.js); world, getData (js/maps/registry.js); updateCoins3D, smoke, sparks,
 //   updateSkids (js/effects.js); Wrecks (js/carfx.js); Sound (js/audio.js); cars, accum, FIXED, stepWorld
 //   (js/physics.js); Traffic (js/traffic/traffic.js); Blobs (js/blobs.js); cams, state, paused, countdown, placeCam,
 //   updateStreaks, startMatch (js/match.js); drawMinimap, updateHUD, $, setState, hideLoading, openMaps, addCoins,
 //   keys, renderGarage (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts
-//   (js/stunts.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
+//   (js/stunts.js); Jumps (js/jumps.js); Bomb (js/bomb.js); Fly (js/flycam.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -35,19 +35,33 @@ const Perf = (() => {
     'background:rgba(0,0,0,.6);color:#9f9;font:12px/1.35 monospace;white-space:pre;pointer-events:none;display:none';
   document.body.appendChild(el);
   let on = /[?&]fps\b/.test(location.search), n = 0, acc = 0, jsAcc = 0, jsMax = 0, t0 = performance.now(), calls = 0, tris = 0;
+  let stats = '', tPos = 0;
   el.style.display = on ? 'block' : 'none';
   renderer.info.autoReset = false;                  // считаем вызовы за весь кадр, а не за последний render()
+  const _d = new THREE.Vector3(), deg = r => Math.round(THREE.MathUtils.radToDeg(r));
+  // вторая строка в заезде: камера Игрока 1 — x y z (м) и направление взгляда в тех же числах, что у __game.flyTo():
+  // курс 0° — вдоль +Z, 90° — вдоль +X; наклон > 0 — вверх
+  function where() {
+    if (state !== 'play' || !cars.length) return '';
+    const c = cams[0], p = c.position, d = c.getWorldDirection(_d);
+    let yaw = deg(Math.atan2(d.x, d.z)); if (yaw < 0) yaw += 360;
+    return `\nx ${p.x.toFixed(1)}   y ${p.y.toFixed(1)}   z ${p.z.toFixed(1)}   курс ${yaw}°   наклон ${deg(Math.asin(clamp(d.y, -1, 1)))}°` +
+      (Fly.on ? `   ПОЛЁТ ${Math.round(Fly.speed)} м/с` : '');
+  }
   return {
     toggle() { on = !on; el.style.display = on ? 'block' : 'none'; },
+    show() { on = true; el.style.display = 'block'; },
     begin() { renderer.info.reset(); return performance.now(); },
     end(start, now) {
       const js = performance.now() - start;
       n++; jsAcc += js; jsMax = Math.max(jsMax, js);
       calls += renderer.info.render.calls; tris += renderer.info.render.triangles;
-      if (now - t0 < 500) return;
-      if (on) el.textContent = `FPS ${Math.round(n * 1000 / (now - t0))}   JS ${(jsAcc / n).toFixed(1)} мс (макс ${jsMax.toFixed(1)})   ` +
-        `вызовы ${Math.round(calls / n)}   треуг. ${Math.round(tris / n / 1000)}k`;
-      n = jsAcc = jsMax = calls = tris = 0; t0 = now;
+      if (now - t0 >= 500) {
+        stats = `FPS ${Math.round(n * 1000 / (now - t0))}   JS ${(jsAcc / n).toFixed(1)} мс (макс ${jsMax.toFixed(1)})   ` +
+          `вызовы ${Math.round(calls / n)}   треуг. ${Math.round(tris / n / 1000)}k`;
+        n = jsAcc = jsMax = calls = tris = 0; t0 = now;
+      }
+      if (on && now - tPos >= 100) { el.textContent = stats + where(); tPos = now; }   // координаты — 10 раз в секунду
     },
   };
 })();
@@ -90,7 +104,9 @@ function frameBody(now) {
       Sky.update(t);
       for (let p = 0; p < 2; p++) {
         if (p >= N) { Sound.update(p, null, false); continue; }
-        placeCam(p, dt, false); updateStreaks(p); Weather.update(p, t); drawMinimap(p); Sound.update(p, cars[p], countdown < 3);
+        if (Fly.on) Fly.update(dt);          // свободный полёт камеры (одиночная езда, js/flycam.js)
+        else { placeCam(p, dt, false); updateStreaks(p); }
+        Weather.update(p, t); drawMinimap(p); Sound.update(p, cars[p], countdown < 3);
       }
       updateHUD();
     }
@@ -103,7 +119,7 @@ function frameBody(now) {
       shadowShared = d < (shadowShared ? SHADOW_SHARE + 8 : SHADOW_SHARE);
     } else shadowShared = false;
     for (let p = 0; p < N; p++) {
-      const c = cars[p];
+      const c = Fly.on ? cams[p].position : cars[p];   // в полёте тени и отсечение трафика — вокруг камеры
       if (!shadowShared) aimSun(c.x, c.y, c.z);
       else if (p === 0) aimSun((c.x + cars[1].x) / 2, (c.y + cars[1].y) / 2, (c.z + cars[1].z) / 2);
       Traffic.cullView(cams[p], c.x, c.z);
@@ -166,4 +182,5 @@ function cheatCoins(...args) {
   return save.players.map(pl => pl.coins);
 }
 window.__game = { CARS, cars: () => cars, save: () => save, addCoins: cheatCoins, renderer, keys, show, showCam, scene, cams, podiums, browse,
-  renderGarage, startMatch, world: () => world, getData, debugCam: false };
+  renderGarage, startMatch, world: () => world, getData, debugCam: false,
+  flyTo: (...a) => Fly.to(...a) };       // __game.flyTo(x, y, z, курс°, наклон°) — камера в точку из строки счётчика FPS

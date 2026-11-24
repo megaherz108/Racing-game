@@ -12,8 +12,8 @@
 //   lerp, clamp (js/core.js); badgeSVG (js/badges.js); updatePodium (js/showroom.js); smooth01, mulberry32
 //   (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars
 //   (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch, matchMode
-//   (js/match.js); Race (js/race.js); Capture (js/capture.js); jumpTable (js/jumps.js); Bomb (js/bomb.js); Perf
-//   (js/main.js).
+//   (js/match.js); Race (js/race.js); Capture (js/capture.js); jumpTable (js/jumps.js); Bomb (js/bomb.js); Fly
+//   (js/flycam.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -516,6 +516,9 @@ addEventListener('keydown', e => {
     else if (e.code === 'Escape') $('reMenu').click();
   } else if (state === 'play') {
     if (e.code === 'Escape') setPaused(!paused);
+    else if (!paused && e.code === 'KeyF' && Fly.available()) Fly.toggle();      // свободный полёт (js/flycam.js)
+    else if (Fly.on && e.code === 'KeyH') Fly.toggleHud();
+    else if (Fly.on && (e.code === 'KeyR' || e.code === 'Enter' || e.code === 'NumpadEnter')) return;   // в полёте машину не трогаем
     else if (!paused && e.code === 'KeyR' && cars[0].drown <= 0) cars[0].toRoad();
     else if (e.code === 'KeyL' && world && world.id === 'sitges') { setAddr(!save.addr); toast(save.addr ? 'Адреса домов: вкл (L)' : 'Адреса домов: выкл (L)'); }
     else if (!paused && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
