@@ -1,6 +1,6 @@
 // Ситжес — этап 7, группа G: склоны и площади (план — docs/sitges/stage-7.md, архив группы — docs/sitges/st-g.md).
 // Что входит (виды — по фото sv/slope, sv/steep, landmarks/church, landmarks/sebastia; числа — st-g.md):
-//   • подпорные стены из бута на склонах: у наружного края тротуара (C.street.fronts) и у края полотна без тротуара
+//   • подпорные стены из бута на склонах: у наружного края тротуара (C.street.fronts, дуги углов — cornerFronts) и у края полотна без тротуара
 //     (edges), где участок за линией выше тротуара на 0,6–5 м (рельеф 10 м сгладил террасы садов в откос 25–30 %).
 //     Лицо стены — на out м ближе к улице, чем линия забора (забор стоит за ним, виден выше стены), верх — рельеф
 //     в at м за линией, сглаженный; за стеной — терраса (настил на высоте верха до места, где рельеф выше, не дальше
@@ -129,7 +129,7 @@ const SITGES_ST_G = {
       return [x, z, lx, lz, foot, Math.min(top, foot + W.max)];
     };
     const runs = [];
-    for (const [list, sg] of [['fronts', -1], ['edges', 1]]) {
+    for (const [list, sg] of [['fronts', -1], ['cornerFronts', -1], ['edges', 1]]) {
       let run = [], end = null;
       const flush = () => { if (run.length) runs.push(run); run = []; };
       for (const s of S[list]) {

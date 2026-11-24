@@ -205,7 +205,7 @@ function sitgesPlanStreet(C) {
   };
 
   /* ---------- линии мест ---------- */
-  const curbs = [], fronts = [], corners = [], edges = [], walls = [];
+  const curbs = [], fronts = [], corners = [], edges = [], walls = [], cornerFronts = [];
   C.walks.forEach((w, wi) => {
     const si = sIdx.get(w.st), w0 = Math.hypot(w.O0[0] - w.I0[0], w.O0[1] - w.I0[1]), w1 = Math.hypot(w.O1[0] - w.I1[0], w.O1[1] - w.I1[1]);
     const mx = (w.O0[0] + w.O1[0]) / 2, mz = (w.O0[1] + w.O1[1]) / 2, ix = (w.I0[0] + w.I1[0]) / 2, iz = (w.I0[1] + w.I1[1]) / 2;
@@ -218,6 +218,8 @@ function sitgesPlanStreet(C) {
       const A = cw.ring[k], B = cw.ring[k + 1];
       if (A.w < 0.3 || B.w < 0.3) continue;
       corners.push(seg(A.I[0], A.I[1], B.I[0], B.I[1], (A.Ou[0] + B.Ou[0]) / 2, (A.Ou[1] + B.Ou[1]) / 2, { w0: A.w, w1: B.w, si, side: c.a.side, wi: -1 - ci }));
+      // наружная дуга тротуара угла — как fronts (нормаль к бордюру); только для подпорных стен G (st/slopes.js)
+      cornerFronts.push(seg(A.Ou[0], A.Ou[1], B.Ou[0], B.Ou[1], (A.I[0] + B.I[0]) / 2, (A.I[1] + B.I[1]) / 2, { w0: A.w, w1: B.w, si, side: c.a.side, wi: -1 - ci }));
     }
   });
   C.streets.forEach((st, si) => {
@@ -489,7 +491,7 @@ function sitgesPlanStreet(C) {
 
   /* ---------- группы A → G ---------- */
   const S = C.street = {
-    curbs, corners, fronts, edges, walls, zebras, occ, groups: {}, stats: null,
+    curbs, corners, fronts, cornerFronts, edges, walls, zebras, occ, groups: {}, stats: null,
     at, along, reserve, hits, free, onWalk, nearest,
     carriage: (x, z) => C.carriageAt(x, z),
     oldTown: (x, z) => SITGES_OLDTOWN.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r),
