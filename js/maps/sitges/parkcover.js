@@ -8,8 +8,8 @@
 //     с шумом и мягкими границами — сдвиг шумом и билинейка по клеткам; дорожки — маской), подмешивается в шейдер земли
 //     mat по мировым координатам (uv земли → x, z); K.parkSkip — куски улиц, которые лента не рисует (их нарисовала
 //     земля), K.parkKind — вид покрытия под колёсами (surfaceKind в build.js, js/effects.js, js/audio-env.js).
-//   sitgesParkMinimap(C, ctx, X, Z) — из sitgesPlanMinimap (minimap.js, после площадных объектов sitgesPaint): классы цветом с отмывкой рельефа парка
-//     по сетке лидара (рельеф мини-карты — ICGC 5 м, низин парка на нём нет).
+//   sitgesParkMinimap(C, ctx, X, Z) — из sitgesPlanMinimap (minimap.js, после площадных объектов sitgesPaint):
+//     классы цветом с отмывкой рельефа парка по сетке лидара (рельеф мини-карты — ICGC 5 м, низин парка на нём нет).
 // Определяет: SITGES_PARK_COVER, SITGES_PC, sitgesParkCoverCache, sitgesParkCover, sitgesParkGround,
 //   sitgesParkMinimap.
 // Использует: clamp (js/core.js); makeNoise, mulberry32 (js/world.js); sitgesInPoly, sitgesSeg
