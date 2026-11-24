@@ -29,7 +29,7 @@
 | `tools/sitges/` | конвейер данных «Ситжеса» (`download.js` → `read-*.js` → `build.js`) и отладка (`check.js`, `*-debug.js`) — список в `docs/sitges/files.md` |
 | `tools/cdp.js` | игра в безголовом Edge из командной строки: свой сервер, `--inject` / `--eval` / `--save` / `--compare` / `--dir` (ключи — в шапке) |
 | `js/physics.js` | Rapier, класс `Car`, `cars`, урон, `stepWorld()`, `readInput()`, настройки `RT` |
-| `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `models-rural.js` типы «Побережья» (мотороллер, фургончик, трактор с тележкой), `traffic.js` объект `Traffic`, `driver.js` вождение ботов (и прицеп `follow`), `test.js` проверка поведения `__game.trafficTest()` |
+| `js/traffic/` | `graph.js` светофоры и граф, `models.js` модели и `TRAFFIC_TYPES`, `models-rural.js` типы «Побережья» (мотороллер, фургончик, трактор с тележкой), `traffic.js` объект `Traffic`, `driver.js` вождение ботов (и прицеп `follow`), `test.js` проверка поведения `__game.trafficTest()`; трафик «Ситжеса» — как устроен и как чинить: `docs/sitges/traffic.md` |
 | `js/blobs.js` | пятна под машинами вместо теней на качестве «Минимум» (`QUAL.blobs`) |
 | `js/effects.js`, `js/carfx.js` | частицы, следы, монеты; фары, повреждения, обломки |
 | `js/audio.js` | процедурный звук: ядро, мотор (профили `ENGINE`), эхо, разовые звуки `Sound` |

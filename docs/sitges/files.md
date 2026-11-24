@@ -67,8 +67,9 @@
   после `sitgesBuildStreet`).
 - `signtex.js` — атлас надписей; `signs3d.js` — постройка вывесок и дверей.
 - `street3d.js` — постройка мелочей улиц (`S.place`, `S.lights`).
-- `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground)`, настройки `SITGES_NET`; строится при
-  заезде, раскладку не меняет.
+- `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground, walkAt, decks)`, настройки `SITGES_NET`;
+  строится при заезде, раскладку не меняет. Число машин и кольцо появления — `SITGES_TRAFFIC` в `build.js`, типы —
+  `SITGES_TRAFFIC_TYPES` в `js/traffic/models.js`. Как чинить — `docs/sitges/traffic.md`.
 - `labels.js` — подписи адресов над домами для отладки (`save.addr`, клавиша L, данные `data-addr.js`).
 
 ## Инструменты `tools/sitges/`
