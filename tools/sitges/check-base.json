@@ -1,8 +1,8 @@
 {
  "time": {
-  "data": 2938,
-  "world": 3608,
-  "even": 135,
+  "data": 5941,
+  "world": 4313,
+  "even": 146,
   "fresh": true
  },
  "counts": {
@@ -19,7 +19,7 @@
   "blind": 14519,
   "streetWalls": 5794,
   "passes": 5,
-  "roadTris": 1323152,
+  "roadTris": 1319180,
   "roadMeshes": 549,
   "walkColliderTris": 246182,
   "walkPieces": 21914,
