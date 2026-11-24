@@ -11,8 +11,8 @@
 // Определяет: SITGES_G, sitgesBuildGround.
 // Использует: clamp (js/core.js); makeNoise, mulberry32, smooth01, Decks (js/world.js); Weather (js/weather.js);
 //   waterMaterial (js/maps/city/textures.js); SITGES_GEO (js/maps/sitges/data-geo.js); SITGES_T
-//   (js/maps/sitges/terrain.js); sitgesPaint (js/maps/sitges/minimap.js); stSlopeGroundPaint
-//   (js/maps/sitges/st/slopes.js).
+//   (js/maps/sitges/terrain.js); sitgesParkGround (js/maps/sitges/parkcover.js); sitgesPaint
+//   (js/maps/sitges/minimap.js); stSlopeGroundPaint (js/maps/sitges/st/slopes.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -78,7 +78,8 @@ function sitgesBuildGround(K) {
   }
 
   /* ---------- чанки земли с уровнями подробности ---------- */
-  const landMat = Weather.wet(new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95 }), 0.35);
+  // покрытие парков — своя текстура поверх в шейдере (js/maps/sitges/parkcover.js); там же K.parkSkip, K.parkKind
+  const landMat = Weather.wet(sitgesParkGround(K, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95 })), 0.35);
   const landLod = [], SK = 8, CH = G.chunk;          // SK — глубина «юбки», м (на крутых склонах у края сетки фон расходится с ней на метры)
   for (let j0 = 0; j0 < NZ - 1; j0 += CH) for (let i0 = 0; i0 < NX - 1; i0 += CH) {
     const ni = Math.min(CH, NX - 1 - i0), nj = Math.min(CH, NZ - 1 - j0), w = ni + 1, n = (ni + 1) * (nj + 1);
