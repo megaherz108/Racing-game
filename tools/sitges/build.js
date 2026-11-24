@@ -16,8 +16,10 @@
 //   5д. деревья: кроны из лидара ICGC — место, высота, радиус, признаки формы (tools/sitges/read-trees.js);
 //   5е. заведения OSM (этап 6а): точки и середины контуров — вид, название, бренд, терраса, кухня; сверх OSM —
 //       Overture Maps, реестр туризма Каталонии и свой список venues-extra.json (tools/sitges/read-venues.js, 6а.7);
+//   5ж. парки (план парка Can Robert, П0): контур, рельеф 2,5 м по лидару 50 см, покрытие 1 м по ортофото, настил
+//       мостика (tools/sitges/read-parks.js);
 //   6. запись data-geo.js (границы, ориентиры), data-osm.js, data-buildings.js, data-terrain.js, data-parcels.js,
-//      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js, data-venues.js.
+//      data-addr.js, data-roofs.js, data-points.js, data-gates.js, data-trees.js, data-venues.js, data-parks.js.
 const fs = require('fs');
 const path = require('path');
 const G = require('./geo');
@@ -29,6 +31,7 @@ const { readRoofs, ROOF_TYPES, ROOF } = require('./read-roofs');
 const { readGates, GATE } = require('./read-gates');
 const { readTrees, TREE } = require('./read-trees');
 const { mergeVenues, VENUE_SRC } = require('./read-venues');
+const { readParks, haveParkTiles, PARK, CLS: PARK_CLS } = require('./read-parks');
 
 const CFG = {
   north: 400,        // граница на севере: ж/д + 400 м…
@@ -486,6 +489,29 @@ const vStream = venues.flatMap(v => [VENUE_CATS.indexOf(v.cat), vNames.id(v.name
   (v.terrace ? 1 : 0) | (v.contour ? 2 : 0), vCuis.id(v.cuisine), VENUE_SRC.indexOf(v.src)]);
 
 /* =====================================================================
+   5ж. ПАРКИ (tools/sitges/read-parks.js): контур OSM, сетка высот 2,5 м по рамке, растр покрытия 1 м, настил мостика
+   ===================================================================== */
+const parks = haveParkTiles() ? readParks() : null;
+const parkData = (parks || []).map(pk => {
+  const [x0, z0, nx, nz] = pk.frame, hq = Array.from(pk.h, v => Math.round(v / PARK.q)), res = [];
+  // как у SITGES_DTM: остатки от плоскости по трём соседям, на краях — от одного соседа
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    res.push(hq[k] - (i && j ? hq[k - 1] + hq[k - nx] - hq[k - nx - 1] : i ? hq[k - 1] : j ? hq[k - nx] : 0));
+  }
+  // покрытие — серии [класс, длина − 1] по всему растру подряд (строки по z, в строке по x)
+  const c = pk.cover.c, runs = [];
+  for (let k = 0; k < c.length;) { let n = 1; while (k + n < c.length && c[k + n] === c[k]) n++; runs.push(c[k], n - 1); k += n; }
+  // настил: каждая вторая станция (через 2 м) и последняя; высота, дм; источник: 1 — замер, 0 — по соседям, 2 — конец на земле
+  const decks = pk.decks.map(d => {
+    const q = d.prof.filter((_, i) => i % 2 === 0 || i === d.prof.length - 1);
+    return { osm: d.id, len: d.len, found: d.found, n: d.prof.length, q,
+      p: U.encPoints([q.map(v => [r1(v.x), r1(v.z)])]), h: U.enc(q.map(v => Math.round(v.deck * 10))), m: U.enc(q.map(v => v.end ? 2 : v.filled ? 0 : 1)) };
+  });
+  return { pk, x0, z0, nx, nz, res, runs, decks };
+});
+
+/* =====================================================================
    6. ЗАПИСЬ
    ===================================================================== */
 const date = f => fs.statSync(path.join(G.RAW, f)).mtime.toISOString().slice(0, 10);
@@ -693,6 +719,43 @@ write('data-venues.js', [
 };
 `);
 
+if (parks) write('data-parks.js', [
+  '// Карта «Ситжес» — ДАННЫЕ: парки (план парка Can Robert, шаг П0) — контур, рельеф и покрытие внутри рамки парка,',
+  '//   настил подвесного мостика. Пока в игре не используется (раскладка — шаг П1, js/maps/sitges/parks.js).',
+  `// Источник: ICGC — рельеф без зданий и деревьев территориального лидара 50 см 2021–2023 и поверхность 1 м того же`,
+  `//   лидара (WMS elevacions-territorial), ортофото 25 см 2024 (WMS orto-territorial), высоты растительности 1 м`,
+  `//   (маска крон), скачано ${date('dtm')}; OpenStreetMap (контур, линия мостика; скачано ${dOSM}). Разбор — tools/sitges/read-parks.js.`,
+  LIC_ICGC, LIC_OSM,
+  `// SITGES_PARKS: classes — классы покрытия ${J(PARK_CLS)} (out — вне контура, sand — песок-сауло, lawn — газон`,
+  '//   поливной или искусственный (зелёный летом), dry — сухая трава (оливковая), pine — земля с хвоей под кронами,',
+  '//   paved — бетон, асфальт, плитка); list — парки: { id, name, osm (way контура), ring — контур (поток точек),',
+  '//   grid — сетка высот { x0, z0 — угол, step, nx × nz узлов (строки по z, в строке по x), q — квант, м; h — остатки',
+  '//     от плоскости по трём соседям в квантах, как у SITGES_DTM (на краях — от одного соседа) };',
+  '//   cover — растр покрытия { x0, z0 — угол, cell — клетка, м; w × d клеток (строки по z, в строке по x); c — серии',
+  '//     [класс, длина − 1] подряд по всему растру };',
+  '//   decks — настилы мостиков { osm (way), p — ось через 2 м (поток точек), h — высота настила над уровнем моря, дм,',
+  '//     m — источник высоты точки: 1 — замер лидара, 0 — по соседям (крона над настилом), 2 — конец на земле };',
+  '//   spots — места объектов { k — вид (dog, shelter, amphi, play, play2, pitch, calis, letters, figure), ring — контур',
+  '//     или p — точка, м игры; src — orto / lidar / osm; q — 1 уверенно, 0 — оценка ±3 м } (tools/sitges/read-parks.js) }.',
+], 'SITGES_PARKS', `const SITGES_PARKS = {
+  classes: ${J(PARK_CLS)},
+  list: [
+${parkData.map(d => `    {
+      id: '${d.pk.id}', name: ${J(d.pk.name)}, osm: ${d.pk.way},
+      ring: '${U.encPoints([d.pk.ring.map(q => [r1(q[0]), r1(q[1])])])}',
+      grid: { x0: ${d.x0}, z0: ${d.z0}, step: ${PARK.step}, nx: ${d.nx}, nz: ${d.nz}, q: ${PARK.q},
+        h: '${U.enc(d.res)}' },
+      cover: { x0: ${d.pk.cover.x0}, z0: ${d.pk.cover.z0}, cell: ${PARK.cell}, w: ${d.pk.cover.w}, d: ${d.pk.cover.d},
+        c: '${U.enc(d.runs)}' },
+      decks: [${d.decks.map(k => `{ osm: ${k.osm}, p: '${k.p}', h: '${k.h}', m: '${k.m}' }`).join(', ')}],
+      spots: [
+${d.pk.spots.map(q => `        ${J(q)},`).join('\n')}
+      ],
+    },`).join('\n')}
+  ],
+};
+`);
+
 /* =====================================================================
    СВОДКА
    ===================================================================== */
@@ -734,6 +797,16 @@ if (treesAll) {
   console.log(`  высота: 10 % ${q(hs, 0.1).toFixed(1)}, медиана ${q(hs, 0.5).toFixed(1)}, 90 % ${q(hs, 0.9).toFixed(1)}, макс ${q(hs, 1).toFixed(1)} м; радиус: 10 % ${q(rs, 0.1).toFixed(1)}, медиана ${q(rs, 0.5).toFixed(1)}, 90 % ${q(rs, 0.9).toFixed(1)}, макс ${q(rs, 1).toFixed(1)} м`);
 }
 else console.log('Деревья: нет плиток sup/, dsm/, ir/, alc/ — запусти download.js (data-trees.js не записан)');
+if (parks) for (const d of parkData) {
+  const st = d.pk.stat, all = st.cells.slice(1).reduce((s, v) => s + v, 0);
+  console.log(`Парк ${d.pk.id}: сетка ${d.nx} × ${d.nz} по ${PARK.step} м, высоты ${st.hMin.toFixed(1)}…${st.hMax.toFixed(1)} м; покрытие ${d.pk.cover.w} × ${d.pk.cover.d} по ${PARK.cell} м, серий ${d.runs.length / 2}; внутри контура ${all} м²:`,
+    PARK_CLS.slice(1).map((c, i) => `${c} ${(100 * st.cells[i + 1] / all).toFixed(1)} %`).join(', '));
+  for (const k of d.decks) {
+    const hs = k.q.map(v => v.deck);
+    console.log(`  мостик ${k.osm}: ${k.len.toFixed(0)} м, полоса настила найдена на ${k.found} станциях из ${k.n}; настил ${Math.min(...hs).toFixed(1)}…${Math.max(...hs).toFixed(1)} м, над землёй до ${Math.max(...k.q.map(v => v.deck - v.ground)).toFixed(1)} м`);
+  }
+}
+else console.log('Парки: нет плиток dtm/, srf/, orto25/, alc/ — запусти download.js (data-parks.js не записан)');
 console.log(`Рельеф: ${TNX} × ${TNZ} узлов по ${CFG.dtmStep} м, высоты ${hMin.toFixed(1)}…${hMax.toFixed(1)} м; в исходнике ${dtm.W} × ${dtm.H}, клеток без данных ${dtm.nodata}`);
 console.log('Файлы:', sizes.map(([n, s]) => `${n} ${(s / 1024).toFixed(0)} КБ`).join(', '), `— всего ${(sizes.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(2)} МБ`);
 
