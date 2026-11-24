@@ -28,6 +28,8 @@
 8. `houses.js` — дома: высоты на рельефе, общие стены, фасады к улице, проезды; `C.houses`. Форма крыш — `roofs.js`
    (вызывается из `houses.js`).
 9. `landmarks.js` — достопримечательности: `SITGES_LM`, `C.landmarks`, у частей домов `h.lm` (план — `stage-5.md`).
+   Парк Can Robert — строение `lm/canrobert.js` (шаг П3, `park-canrobert.md`): `plan()` опускает узлы рельефа под
+   амфитеатром; старый мостик этапа 2 на месте подвесного не строит `roads3d.js` (`lmCanRobertOldDeck`).
 10. `styles.js` — стили фасадов (`sitgesPlanStyles`).
 11. `fences.js` — где забор: линия, решение кусками, цепочки, разрез по участкам, пустые участки без забора →
     `C.fences`, `C.fenceLine`, `C.fenceLots`, `C.fenceStats`; настройки `SITGES_FENCE`.
@@ -59,6 +61,7 @@
   `sitgesBuildTrees()`: ближние модели у камеры, дальние склеены квадратами, растворение на границе в шейдере;
   пороги `QUAL.trees`; все деревья сбиваемые, масса — по объёму ствола (`sitgesTreeBrk`).
 - `landmarks3d.js` — постройка достопримечательностей и помощники `lm*`; модели — `lm/<id>.js`.
+  Сбиваемое строений (заборы, фонари, скамьи парка Can Robert) — `K.lmBrks` → `world.breakables` (`build.js`).
 - `signtex.js` — атлас надписей; `signs3d.js` — постройка вывесок и дверей.
 - `street3d.js` — постройка мелочей улиц (`S.place`, `S.lights`).
 - `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground)`, настройки `SITGES_NET`; строится при
