@@ -17,6 +17,9 @@
    набережная `stPromTerrain` (`st/promenade.js`), бастион `stSlopeTerrain` (`st/slopes.js`), парки
    `sitgesParkTerrain` (`parks.js`: рельеф по лидару 50 см внутри контура со сшивкой, настройки `SITGES_PARK`;
    `C.parks` — контур, сетка высот, покрытие, настил мостика, места объектов для покраски и строения парка).
+   Покрытие парков (шаг П2) — `parkcover.js`: классы растра с зонами полива и красного асфальта (`SITGES_PARK_COVER`,
+   `sitgesParkCover()` — кэш на парк, `C` не меняет), постройка — `sitgesParkGround()` из `ground.js`, мини-карта —
+   `sitgesParkMinimap()` из `sitgesPlanMinimap`.
 3. `roads.js` — улицы и ж/д: склейка, ширина по участкам `C.parcels` и фасадам, тротуары `q.sw`; настройки `SITGES_R`.
 4. `levels.js` — ровное полотно `sitgesEvenRoads()`, мосты от плеч подходов, путепроводы `C.unders`, насыпи и выемки.
 5. `corners.js` — скруглённые углы `C.corners`, `cornersAt()`.
@@ -41,7 +44,9 @@
 
 ## Постройка (`build.js`)
 
-- `ground.js` — текстура земли, чанки рельефа, море, валуны, понтоны.
+- `ground.js` — текстура земли, чанки рельефа, море, валуны, понтоны. Покрытие парков — `sitgesParkGround()`
+  (`parkcover.js`): своя текстура 4 пикс/м в шейдере земли, `K.parkSkip` (дорожки парка без ленты в `roads3d.js`),
+  `K.parkKind` (вид под колёсами для `surfaceKind` в `build.js`).
 - `roads3d.js` — набор `K.rk`, полотно, потом разметка и мосты; меши и `walkAt`. С ним:
   - `walks3d.js` — тротуары и углы, их сетка столкновений, кромка `rk.edges`;
   - `fences3d.js` — заборы по видам, столбы, створки по `C.gates`, столкновения; высота — из `rk.edges`;

@@ -195,6 +195,8 @@ function sitgesBuildRoads(K) {
   K.rk = { MAT, surfOf, buckets, lod, casts: new Set(['stone', 'plaster']), apart: new Set(), quad, gn, UP, wallQuad, cmesh, cquad, walks, addWalk, offs, parapet, cnt, blocks: [] };
 
   /* ---------- полотно улиц ---------- */
+  // дорожки внутри парков нарисованы на земле (сауло, бетон — js/maps/sitges/parkcover.js): там ленты нет
+  const parkSkip = K.parkSkip;
   for (const st of C.streets) {
     const [mat, tint] = surfOf(st), v = st.v;
     const lift = st.drive ? (mat === 'asphalt' ? P.lift.drive : P.lift.paved) : st.cls === 'pedestrian' ? P.lift.ped : P.lift.flat;
@@ -210,8 +212,8 @@ function sitgesBuildRoads(K) {
       const row = q => { const r = []; for (let k = 0; k <= m; k++) { const [x, z] = offs(q, (2 * k / m - 1) * q.hw); r.push([x, (deck ? q.y : g(x, z)) + lift, z]); } return r; };
       let A = row(at(0));
       for (let k = 1; k <= n; k++) {
-        const q = at(k / n), B = row(q), nn = deck ? UP : gn(q.x, q.z);
-        for (let c = 0; c < m; c++) quad(mat, [A[c], B[c], B[c + 1], A[c + 1]], nn, c0);
+        const q = at(k / n), B = row(q), nn = deck ? UP : gn(q.x, q.z), mid = parkSkip && at((k - 0.5) / n);
+        if (!mid || !parkSkip(st, mid.x, mid.z, deck)) for (let c = 0; c < m; c++) quad(mat, [A[c], B[c], B[c + 1], A[c + 1]], nn, c0);
         A = B;
       }
       cnt.ribbon++;

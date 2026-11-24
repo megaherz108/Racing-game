@@ -99,18 +99,20 @@ function sitgesBuildWorld(K) {
   const spawns = [1, -1].map(s => [s0.x - s0.tz * 1.9 * s, s0.z + s0.tx * 1.9 * s, hs]);
 
   // покрытие под колёсами (js/effects.js, js/audio-env.js): море и кромка — мокро; улица — её покрытие, тротуар —
-  // плитка; пляж — песок, гряда — камень и грунт; парки — трава, остальная земля — грунт
+  // плитка; пляж — песок, гряда — камень и грунт; парки — трава, остальная земля — грунт. В парках с растром покрытия
+  // (js/maps/sitges/parkcover.js) — по классу: сауло и хвоя — грунт, газон и сухая трава — трава, бетон — плитка;
+  // их дорожки нарисованы на земле — тоже по растру
   const green = sitgesRaster(C.areas.filter(a => SITGES_GREEN.has(a.kind)).map(a => a.ring), T.X0, T.Z0, T.S, T.NX, T.NZ);
   const surfaceKind = (x, z) => {
     if (!T.inGrid(x, z)) return 'dirt';
     const k = T.cell(x, z);
     if (T.sea[k] || (T.H[k] < 1.5 && T.dSea[k] < 4 && !T.thin[k])) return 'wet';
     const c = C.carriageAt(x, z);
-    if (c) return K.roadSurf(c.st);
+    if (c) return (!c.st.drive && K.parkKind(x, z, c.st)) || K.roadSurf(c.st);
     if (walkAt(x, z) > -Infinity) return 'paving';
     if (T.thin[k]) return 'dirt';
     if (T.beach[k]) return 'sand';
-    return green[k] ? 'grass' : 'dirt';
+    return K.parkKind(x, z) || (green[k] ? 'grass' : 'dirt');
   };
   return {
     id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: [K.treeBrk, ...K.stBrks].filter(Boolean), ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
@@ -127,7 +129,7 @@ function sitgesBuildWorld(K) {
     trafficGraph: () => sitgesTrafficGraph(C, grid, D.ground, walkAt, decks),
     traffic: { types: SITGES_TRAFFIC_TYPES, count: SITGES_TRAFFIC.count, ring: SITGES_TRAFFIC.ring },
     // сводки постройки (tools/sitges/check.js)
-    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats, street: K.stStats }, walkAt, roadLod, treeTune: K.treeTune,
+    stats: { roads: K.roadsStats, bld: K.bldStats, fac: K.facStats, trees: K.treeStats, lm: K.lmStats, signs: K.signStats, street: K.stStats, parks: K.parkCoverStats }, walkAt, roadLod, treeTune: K.treeTune,
     // ближайшая точка улицы; направление — вдоль улицы
     roadPoint(x, z, p) {
       let best = pts[0], bd = Infinity;

@@ -3,7 +3,8 @@
 // Площадные объекты и улицы рисует sitgesPaint() — она же рисует текстуру земли (js/maps/sitges/ground.js).
 // Последний этап раскладки.
 // Определяет: SITGES_MM, SITGES_DRIVE, sitgesPaint, sitgesPlanMinimap.
-// Использует: clamp (js/core.js); mmCanvas (js/world.js); SITGES_GEO (js/maps/sitges/data-geo.js).
+// Использует: clamp (js/core.js); mmCanvas (js/world.js); SITGES_GEO (js/maps/sitges/data-geo.js); sitgesParkMinimap
+//   (js/maps/sitges/parkcover.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -28,7 +29,7 @@ const SITGES_MM = {
 
 // площадные объекты, ж/д и улицы на холсте ctx: X(x), Z(z) — пиксели, sc — пикселей на метр. Общая часть мини-карты
 // и текстуры земли (js/maps/sitges/ground.js). o.sea — цвет моря; o.area — свои цвета площадных объектов;
-// o.thin — линии не тоньше 1 пикс (мини-карта)
+// o.thin — линии не тоньше 1 пикс (мини-карта); o.afterAreas(ctx) — поверх площадных объектов, под ж/д и улицами
 const SITGES_DRIVE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service']);
 function sitgesPaint(ctx, X, Z, sc, C, o) {
   const { areas, rails, roads } = C, M = SITGES_MM, px1 = o.thin === false ? 0 : 1;
@@ -45,6 +46,7 @@ function sitgesPaint(ctx, X, Z, sc, C, o) {
     ctx.fillStyle = kind === 'sea' ? o.sea : (o.area && o.area[kind]) || M.area[kind];
     for (const a of areas) if (a.kind === kind) { path(a.ring, true); ctx.fill(); }
   }
+  if (o.afterAreas) o.afterAreas(ctx);
   // ж/д
   ctx.strokeStyle = '#6b645b'; ctx.lineWidth = Math.max(1.5 * px1, 3 * sc);
   for (const r of rails) if (!r.tunnel) { path(r.pts); ctx.stroke(); }
@@ -78,7 +80,8 @@ function sitgesPlanMinimap(C) {
     }
   }
   ctx.putImageData(img, 0, 0);
-  sitgesPaint(ctx, m.X, m.Z, m.sc, C, { sea: M.sea });
+  // покрытие парков с отмывкой их рельефа (js/maps/sitges/parkcover.js) — под дорожками
+  sitgesPaint(ctx, m.X, m.Z, m.sc, C, { sea: M.sea, afterAreas: cx => sitgesParkMinimap(C, cx, m.X, m.Z) });
   // здания: заливка темнее с этажностью, контур
   ctx.lineWidth = 0.8; ctx.strokeStyle = 'rgba(92,78,62,.85)';
   for (const b of blds) for (const p of b.parts) {
