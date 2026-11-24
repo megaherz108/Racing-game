@@ -1,10 +1,10 @@
 // Интерфейс: меню, гараж, выбор карты, HUD, мини-карта, ввод
 // Определяет: $, screens, setState, showLoading, hideLoading, updateCoins, addCoins, toastT, toast, HUD, notify,
-//   setText, updateHUD, MM_R, PCSS, MM_MARK, drawMarks, drawMinimap, renderGarage, badgeRow, cycleBadge, browseCar,
-//   showCar, pickPaint, stepPaint, buyPaint, buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview, renderMaps,
-//   renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime, renderWeather, setWeather,
-//   renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap, openMaps, setPaused,
-//   raceEndOpen, closeRaceEnd, keys, BLOCK.
+//   setText, updateHUD, MM_CFG, mmXY, PCSS, MM_MARK, drawMarks, drawMinimap, renderGarage, badgeRow, cycleBadge,
+//   browseCar, showCar, pickPaint, stepPaint, buyPaint, buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview,
+//   renderMaps, renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime, renderWeather,
+//   setWeather, renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap,
+//   openMaps, setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
 // Использует: paintView, save, persist, KMH, CARS, browse, derive, STATS, paintOf, paintDef, PAINTS, hasPaint,
 //   time100, HANDLING, fitOf, BADGES, hasBadge, BADGE_SPOTS, fitSet, PAINT_FREE, paintBuy, carIndex, JUMP, KO_REWARD,
 //   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD,
@@ -99,8 +99,12 @@ function updateHUD() {
   }
 }
 
-// мини-карта, повёрнутая по направлению машины
-const MM_R = 173;                        // радиус обзора, м (больше — мельче масштаб)
+// мини-карта: не поворачивается, север карты (+z) всегда сверху, +x — слева (как картинка world.minimap);
+// по направлению машины поворачивается только её стрелка в центре
+// настройки мини-карты, меняются из консоли на ходу: MM_CFG.r = 250
+const MM_CFG = { r: 216 };               // r — радиус обзора, м (больше — мельче масштаб)
+// точка мира (x, z) на мини-карте машины c: смещение в пикселях от центра; k — пикселей на метр
+function mmXY(c, x, z, k) { return [(c.x - x) * k, (c.z - z) * k]; }
 const PCSS = ['#38c8ff', '#ff8a2a'];
 // значки мест (world.mmMarks / data.mmMarks: [{ x, z, icon, name }], пока — достопримечательности «Ситжеса»):
 // эмодзи в белом кружке радиуса r пикселей; дальше края мини-карты, но ближе far м — маленький значок на краю
@@ -134,23 +138,23 @@ function drawMarks(ctx, list) {
 }
 function drawMinimap(p) {
   const { mm, mmx: ctx } = HUD[p], S = mm.width, c = cars[p], o = cars[1 - p];
-  const img = world.minimap, ext = world.mmExt, extZ = world.mmExtZ ?? ext, sc = img.width / (2 * ext), k = S / (2 * MM_R);
+  const img = world.minimap, ext = world.mmExt, extZ = world.mmExtZ ?? ext, sc = img.width / (2 * ext), k = S / (2 * MM_CFG.r);
   ctx.clearRect(0, 0, S, S);
   ctx.save();
   ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - 1, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = world.mmBg; ctx.fillRect(0, 0, S, S);
-  ctx.translate(S / 2, S / 2); ctx.rotate(c.h); ctx.scale(k / sc, k / sc);
+  ctx.translate(S / 2, S / 2); ctx.scale(k / sc, k / sc);
   ctx.translate(-(ext - c.x) * sc, -(extZ - c.z) * sc);
   ctx.drawImage(img, 0, 0);
   const u = sc / k;   // пикселей картинки на пиксель мини-карты
   ctx.fillStyle = '#ffd23a';
   for (const cn of coins) {
-    if (!cn.active || Math.abs(cn.x - c.x) > MM_R * 1.5 || Math.abs(cn.z - c.z) > MM_R * 1.5) continue;
+    if (!cn.active || Math.abs(cn.x - c.x) > MM_CFG.r * 1.5 || Math.abs(cn.z - c.z) > MM_CFG.r * 1.5) continue;
     ctx.beginPath(); ctx.arc((ext - cn.x) * sc, (extZ - cn.z) * sc, 2.6 * u, 0, Math.PI * 2); ctx.fill();
   }
   ctx.fillStyle = '#e9e6dc';
   for (const tc of Traffic.list) {
-    if (tc.dead || Math.abs(tc.x - c.x) > MM_R * 1.5 || Math.abs(tc.z - c.z) > MM_R * 1.5) continue;
+    if (tc.dead || Math.abs(tc.x - c.x) > MM_CFG.r * 1.5 || Math.abs(tc.z - c.z) > MM_CFG.r * 1.5) continue;
     ctx.beginPath(); ctx.arc((ext - tc.x) * sc, (extZ - tc.z) * sc, (tc.L > 6 ? 2.6 : 1.8) * u, 0, Math.PI * 2); ctx.fill();
   }
   if (o) {                                    // соперник (в одиночной езде его нет)
@@ -159,11 +163,11 @@ function drawMinimap(p) {
   }
   ctx.restore();
   ctx.save(); ctx.translate(S / 2, S / 2);
-  if (world.mmMarks) {                        // значки мест: не поворачиваются вместе с картой
-    const cs = Math.cos(c.h), sn = Math.sin(c.h), lim = S / 2 - MM_MARK.rim - 2, list = [];
+  if (world.mmMarks) {                        // значки мест: поверх карты, не в её масштабе
+    const lim = S / 2 - MM_MARK.rim - 2, list = [];
     for (const m of world.mmMarks) {
-      const dx = (c.x - m.x) * k, dz = (c.z - m.z) * k, d = Math.hypot(dx, dz);
-      let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
+      let [x, y] = mmXY(c, m.x, m.z, k);
+      const d = Math.hypot(x, y);
       if (d <= lim - MM_MARK.r + MM_MARK.rim) { list.push({ x, y, r: MM_MARK.r, icon: m.icon }); continue; }
       if (d / k > MM_MARK.far) continue;
       x *= lim / d; y *= lim / d;
@@ -174,6 +178,7 @@ function drawMinimap(p) {
   Race.minimap(ctx, p, S / 2, k);
   Capture.minimap(ctx, p, S / 2, k);
   Bomb.minimap(ctx, p, S / 2, k);
+  ctx.rotate(-c.h);                           // стрелка машины — по её курсу (вперёд — (sin h, cos h) в мире)
   ctx.fillStyle = PCSS[p]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();

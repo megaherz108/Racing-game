@@ -9,7 +9,7 @@
 // Определяет: BOMB_RED, Bomb.
 // Использует: BOMB_CFG, BOMB_ROUND_REWARD, BOMB_REWARD (js/data.js); rand, clamp (js/core.js); world
 //   (js/maps/registry.js); softTex, sparks, smoke (js/effects.js); Sound (js/audio.js); cars, simTime
-//   (js/physics.js); countdown, placeCam, paused (js/match.js); HUD, notify, addCoins, $, keys (js/ui.js);
+//   (js/physics.js); countdown, placeCam, paused (js/match.js); HUD, notify, addCoins, $, keys, mmXY (js/ui.js);
 //   TargetArrow (js/arrow.js); Feel (js/feel.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -253,14 +253,13 @@ const Bomb = (() => {
     if (st.holder === p && st.time - st.passT < 1) return 'БОМБА!';
     return '';
   }
-  // мини-карта (повёрнута по машине p): пульсирующее красное кольцо вокруг того, у кого бомба
+  // мини-карта машины p (север сверху): пульсирующее красное кольцо вокруг того, у кого бомба
   function minimap(ctx, p, R, k) {
     if (!st.on || st.phase !== 'live') return;
     const c = cars[p], h = cars[st.holder], pulse = blink() ? 1 : 0.4;
     let x = 0, y = 0;
     if (h !== c) {
-      const cs = Math.cos(c.h), sn = Math.sin(c.h), dx = (c.x - h.x) * k, dz = (c.z - h.z) * k;
-      x = dx * cs - dz * sn; y = dx * sn + dz * cs;
+      [x, y] = mmXY(c, h.x, h.z, k);
       const d = Math.hypot(x, y), lim = R - 12;
       if (d > lim) { x *= lim / d; y *= lim / d; }
     }
