@@ -115,7 +115,7 @@ function sitgesBuildWorld(K) {
     return K.parkKind(x, z) || (green[k] ? 'grass' : 'dirt');
   };
   return {
-    id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: [K.treeBrk, ...K.stBrks].filter(Boolean), ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
+    id: 'sitges', group, grid, decks, meshColliders, barrels: [], breakables: [K.treeBrk, ...K.stBrks, ...(K.lmBrks || [])].filter(Boolean), ground: D.ground, waterAt: D.waterAt, water: 0, surfaceKind,
     surface: (x, z, y = Infinity) => { const w = walkAt(x, z); return Math.max(D.ground(x, z), decks.surface(x, z, y), w <= y ? w : -Infinity); },
     bounds: Math.max(D.HX, D.HZ), boundsX: D.HX, boundsZ: D.HZ, hfStep: T.S,
     sky: 0xcfdfec, fog: [300, 3200], far: 3200, near: 0.3,
@@ -144,9 +144,9 @@ function sitgesBuildWorld(K) {
     // камера не уходит в стены узких улиц (js/match.js)
     occludes(x, y, z) { return grid.query(x, x, z, z).some(o => o.poly && y < o.y1 && y > o.y0 && inPoly(x, z, o.poly)); },
     minimap: D.minimap, mmExt: D.mmExt, mmExtZ: D.mmExtZ, mmBg: D.mmBg, mmMarks: D.mmMarks,
-    reset() { if (K.treeReset) K.treeReset(); K.stReset(); },
+    reset() { if (K.treeReset) K.treeReset(); K.stReset(); for (const B of K.lmBrks || []) B.reset(); },
     setNight(k) { K.stNight(k); },                       // огни мелочей улиц (js/maps/sitges/street3d.js)
-    update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); K.stUpdate(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
+    update(dt, t) { if (K.treeUpdate) K.treeUpdate(dt); K.stUpdate(dt); for (const B of K.lmBrks || []) B.update(dt); seaMesh.position.y = Math.sin(t * 0.7) * 0.04; WATER_U.uTime.value = t; labels.update(t); },
     // перед отрисовкой каждой половины экрана: подробность земли по расстоянию до камеры, валуны — только вблизи
     cullView(x, z, p) {
       if (K.treeCull) K.treeCull(x, z, p);                 // деревья: ближний набор, дальние квадраты
