@@ -4,7 +4,7 @@
 //   browseCar, showCar, pickPaint, stepPaint, buyPaint, buyCar, syncBrowse, JUMP_DESC, MODE_INFO, drawModePreview,
 //   renderMaps, renderJumps, renderQuality, setQuality, stepQuality, renderTime, setTime, stepTime, renderWeather,
 //   setWeather, renderAddr, setAddr, renderTraffic, setTraffic, stepTraffic, selectMode, selectMap, stepMap,
-//   openMaps, setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK.
+//   openMaps, setPaused, raceEndOpen, closeRaceEnd, keys, BLOCK, syncShift.
 // Использует: paintView, save, persist, KMH, CARS, browse, derive, STATS, paintOf, paintDef, PAINTS, hasPaint,
 //   time100, HANDLING, fitOf, BADGES, hasBadge, BADGE_SPOTS, fitSet, PAINT_FREE, paintBuy, carIndex, JUMP, KO_REWARD,
 //   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD,
@@ -508,8 +508,15 @@ $('reMenu').onclick = () => { closeRaceEnd(); endMatch('menu'); };
    ===================================================================== */
 const keys = new Set();
 const BLOCK = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Slash']);   // «/» в Firefox открывает быстрый поиск
+// Windows не присылает keyup того Shift, который отпустили первым, пока зажат второй (P1 держит левый — нитро,
+// P2 правый — ручник): отпущенный так и оставался «нажатым». Любое событие клавиатуры, где Shift не зажат
+// ни один (в том числе keyup последнего Shift), сбрасывает оба.
+function syncShift(e) {
+  if (!e.shiftKey) { keys.delete('ShiftLeft'); keys.delete('ShiftRight'); }
+}
 addEventListener('keydown', e => {
   if (BLOCK.has(e.code)) e.preventDefault();
+  syncShift(e);
   keys.add(e.code);
   if (e.repeat) return;
   Sound.init();
@@ -555,7 +562,7 @@ addEventListener('keydown', e => {
     if (e.code === 'Enter') openMaps();
   }
 });
-addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('keyup', e => { keys.delete(e.code); syncShift(e); });
 addEventListener('blur', () => keys.clear());
 addEventListener('pointerdown', () => Sound.init());
 
