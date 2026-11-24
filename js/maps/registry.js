@@ -1,9 +1,9 @@
 // Реестр карт: описание, генерация данных, постройка
-// Определяет: MAP_INFO, DATA_GEN, BUILD, mapData, worlds, getData, getWorld, world, activateWorld.
+// Определяет: MAP_INFO, DATA_GEN, BUILD, RACE_CFG, mapData, worlds, getData, getWorld, world, activateWorld.
 // Использует: save (js/data.js); scene (js/world.js); Sky (js/sky.js); arenaData, buildArena (js/maps/arena.js);
 //   cityData (js/maps/city/plan.js); buildCity (js/maps/city/build.js); forestData, buildForest (js/maps/forest.js);
 //   coastData (js/maps/coast/plan.js); buildCoast (js/maps/coast/build.js); sitgesData (js/maps/sitges/plan.js);
-//   buildSitges (js/maps/sitges/build.js).
+//   buildSitges (js/maps/sitges/build.js); SITGES_RACE (js/maps/sitges/race.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -19,6 +19,8 @@ const MAP_INFO = {
 };
 const DATA_GEN = { city: cityData, forest: forestData, arena: arenaData, coast: coastData, sitges: sitgesData };
 const BUILD = { city: buildCity, forest: buildForest, arena: buildArena, coast: buildCoast, sitges: buildSitges };
+// гонка по чекпоинтам (js/race.js): карты, где она есть (MODE_MAPS.race в js/data.js), и их отличия от RACE_DEF
+const RACE_CFG = { city: {}, sitges: SITGES_RACE };
 const mapData = {}, worlds = {};
 const getData = id => mapData[id] || (mapData[id] = DATA_GEN[id]());
 function getWorld(id) {

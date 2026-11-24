@@ -72,6 +72,9 @@
 - `trafficnet.js` — граф трафика (этап 8): `sitgesTrafficGraph(C, grid, ground, walkAt, decks)`, настройки `SITGES_NET`;
   строится при заезде, раскладку не меняет. Число машин и кольцо появления — `SITGES_TRAFFIC` в `build.js`, типы —
   `SITGES_TRAFFIC_TYPES` в `js/traffic/models.js`. Как чинить — `docs/sitges/traffic.md`.
+- `race.js` — настройки гонки по чекпоинтам (этап 9) `SITGES_RACE`: число и размер арок, расстояния, места
+  у достопримечательностей (`spots`: точка `at`, радиус поиска `seek`, вес `w`, `goal` — может быть финишем).
+  Трассу строит общий `js/race.js` из узлов графа трафика и этих мест; карта не меняется.
 - `labels.js` — подписи адресов над домами для отладки (`save.addr`, клавиша L, данные `data-addr.js`).
 
 ## Инструменты `tools/sitges/`

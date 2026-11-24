@@ -8,12 +8,12 @@
 // Использует: paintView, save, persist, KMH, CARS, browse, derive, STATS, paintOf, paintDef, PAINTS, hasPaint,
 //   time100, HANDLING, fitOf, BADGES, hasBadge, BADGE_SPOTS, fitSet, PAINT_FREE, paintBuy, carIndex, JUMP, KO_REWARD,
 //   FLIP_REWARD, CAP_REWARD, CAP_CFG, CAP_BONUS_PER, BOMB_REWARD, BOMB_ROUND_REWARD, BOMB_CFG, RACE_REWARD,
-//   RACE_CP_REWARD, RACE_CPS, playMap, MODES, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
+//   RACE_CP_REWARD, playMap, MODES, MODE_MAPS, PLAY_MAPS, QUALITY, TIMES, TRAFFIC_LEVELS, defaultSave (js/data.js);
 //   lerp, clamp (js/core.js); badgeSVG (js/badges.js); updatePodium (js/showroom.js); smooth01, mulberry32
 //   (js/world.js); world, getData, MAP_INFO (js/maps/registry.js); coins (js/effects.js); Sound (js/audio.js); cars
 //   (js/physics.js); Traffic (js/traffic/traffic.js); state, paused, countdown, startMatch, endMatch, matchMode
-//   (js/match.js); Race (js/race.js); Capture (js/capture.js); jumpTable (js/jumps.js); Bomb (js/bomb.js); Fly
-//   (js/flycam.js); Perf (js/main.js).
+//   (js/match.js); Race, raceCfg (js/race.js); Capture (js/capture.js); jumpTable (js/jumps.js); Bomb (js/bomb.js);
+//   Fly (js/flycam.js); Perf (js/main.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -289,7 +289,7 @@ function buyCar(p) {
 // откатить просмотр к купленным машинам перед выездом
 function syncBrowse() { for (let p = 0; p < 2; p++) if (!save.players[p].owned.includes(CARS[browse[p]].id)) browse[p] = carIndex(save.players[p].sel); }
 
-// Экран выбора режима и карты (PLAY_MAPS в js/data.js). Гонка — только в городе: ей нужен дорожный граф.
+// Экран выбора режима и карты (PLAY_MAPS в js/data.js). У гонки и захвата карты свои (MODE_MAPS в js/data.js).
 const JUMP_DESC = `Прыжок ${JUMP.tiers.map(t => `от ${t[0]} м — +${t[1]}`).join(', ')}; рекорд карты удваивает монеты.`;
 const MODE_INFO = {
   free: { name: 'Свободная езда', tag: `Монеты +1 · нокаут +${KO_REWARD} · переворот +${FLIP_REWARD}`,
@@ -301,7 +301,10 @@ const MODE_INFO = {
   bomb: { name: 'Горячая бомба', tag: `Победителю +${BOMB_REWARD} · раунд +${BOMB_ROUND_REWARD}`,
     get desc() { return `У одного из вас на крыше тикает бомба: фитиль ${BOMB_CFG.fuse} с на раунд. Коснитесь машиной соперника — бомба перейдёт к нему, но ${BOMB_CFG.back} с её нельзя вернуть. У кого она взорвётся, тот проиграл раунд. С бомбой машина быстрее на ${Math.round(BOMB_CFG.speed * 100)}%, копится нитро, стрелка показывает на соперника. Матч — до ${BOMB_CFG.wins} побед, следующий раунд бомба начинает у победителя.`; } },
   race: { name: 'Гонка · чекпоинты', tag: `Победителю +${RACE_REWARD} · чекпоинт +${RACE_CP_REWARD}`,
-    desc: `По городу расставлены ${RACE_CPS} больших светящихся арок. Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. За каждую арку +${RACE_CP_REWARD}, по дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.` },
+    get desc() {
+      const c = raceCfg(playMap('race')), lm = c.spots.length ? ` Часть арок — у достопримечательностей (${c.spots.slice(0, 4).map(s => s.name).join(', ')} и других).` : '';
+      return `По карте расставлены ${c.cps} больших светящихся арок.${lm} Проедьте их по порядку быстрее соперника — путь выбирайте сами. Стрелка вверху экрана показывает на следующую арку. За каждую арку +${RACE_CP_REWARD}, по дороге можно подбирать монеты (+1), за победу +${RACE_REWARD}. Трасса каждый раз новая.`;
+    } },
 };
 function drawModePreview(cv, mode) {
   const ctx = cv.getContext('2d'), D = getData(playMap(mode)), S = cv.width, sc = S / (2 * D.mmExt);
@@ -352,22 +355,20 @@ function drawModePreview(cv, mode) {
       }
       return;
     }
-    // пример трассы: 10 перекрёстков по 320–620 м друг от друга
-    const nodes = D.nodes.filter(n => n.deg >= 2), pts = [];
-    let px = -320, pz = 38;
-    for (let i = 0; i < RACE_CPS; i++) {
-      const pool = nodes.filter(n => { const d = Math.hypot(n.x - px, n.z - pz); return d > 320 && d < 620 && pts.every(q => Math.hypot(q.x - n.x, q.z - n.z) > 220); });
-      const n = (pool.length ? pool : nodes)[Math.floor(rng() * (pool.length || nodes.length))];
-      pts.push(n); px = n.x; pz = n.z;
-    }
+    // пример трассы тем же выбором, что в заезде (Race.plan в js/race.js), но без постройки карты: вместо перекрёстков
+    // графа — узлы раскладки (Город) или середины кусков дорог; места у достопримечательностей — их точки at
+    const cfg = raceCfg(playMap('race'));
+    const nodes = D.nodes ? D.nodes.filter(n => n.deg >= 2) : D.roadSegs.map(s => ({ x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2 }));
+    const start = cfg.start || [-320, 38, 0], { pts } = Race.plan(cfg, nodes, cfg.spots.map(s => ({ x: s.at[0], z: s.at[1], spot: s })), start, rng);
     ctx.strokeStyle = 'rgba(53,255,160,.7)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
-    ctx.beginPath(); ctx.moveTo(...P(-320, 38)); for (const n of pts) ctx.lineTo(...P(n.x, n.z)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.beginPath(); ctx.moveTo(...P(start[0], start[1])); for (const n of pts) ctx.lineTo(...P(n.x, n.z)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     pts.forEach((n, i) => {
       const [x, y] = P(n.x, n.z), fin = i === pts.length - 1;
       ctx.fillStyle = fin ? '#ffd23a' : '#35ffa0'; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#0b1a12'; ctx.fillText(fin ? 'F' : String(i + 1), x, y + 0.5);
+      ctx.font = "bold 11px 'Rubik', sans-serif"; ctx.fillStyle = '#0b1a12'; ctx.fillText(fin ? 'F' : String(i + 1), x, y + 0.5);
+      if (n.spot) { ctx.font = '16px sans-serif'; ctx.fillText(n.spot.icon, x, y - 18); }
     });
   };
   scene();
@@ -380,7 +381,7 @@ function renderMaps() {
       <button class="mapcard" data-mode="${id}">
         <canvas width="240" height="240"></canvas>
         <div class="mname">${MODE_INFO[id].name}</div>
-        <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ` · только: ${MAP_INFO[playMap(id)].name}` : ''}</div>
+        <div class="msize">${MODE_INFO[id].tag}${playMap(id) !== map ? ` · только: ${MODE_MAPS[id].map(m => MAP_INFO[m].name).join(', ')}` : ''}</div>
       </button>`).join('');
     grid.style.setProperty('--n', MODES.length);
     // ошибка в одном превью не должна обрывать renderMaps(): иначе строки настроек ниже остаются пустыми

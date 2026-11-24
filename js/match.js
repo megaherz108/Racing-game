@@ -1,8 +1,8 @@
 // Камеры и запуск заезда
 // Определяет: cams, camYaw, camDist, camOff, camFov, camRoll, speedFrac, placeCam, STREAK_N, streaks, updateStreaks,
 //   state, paused, countdown, matchMode, startMatch, endMatch.
-// Использует: save, playMap, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp (js/core.js);
-//   smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, getData, MAP_INFO, activateWorld
+// Использует: save, playMap, MODE_MAPS, CARS, browse, TRAFFIC_LEVELS, COIN_MUL (js/data.js); lerp, rand, clamp
+//   (js/core.js); smooth01, angLerp, UNIT_BOX, scene, dummy (js/world.js); world, MAP_INFO, activateWorld
 //   (js/maps/registry.js); clearSkids, smoke, sparks, resetCoins (js/effects.js); Sound (js/audio.js); cars, Car,
 //   simTime, accum (js/physics.js); Traffic (js/traffic/traffic.js); showLoading, $, HUD, hideLoading, setState
 //   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Feel (js/feel.js); Stunts (js/stunts.js); Jumps
@@ -106,8 +106,7 @@ let state = 'menu', paused = false, countdown = 0, matchMode = 'free';
 // mode: 'free' — свободная езда, 'race' — гонка по чекпоинтам (js/race.js). mapId — карта, выбранная на экране режима
 // (playMap() в js/data.js); скрытые карты — только для отладки.
 function startMatch(mode = save.mode, mapId = playMap(mode)) {
-  if (mode === 'race' && !getData(mapId).nodes) mode = 'free';     // для гонки нужен дорожный граф (есть только у города)
-  if (mode === 'capture' && !getData(mapId).C?.zones) mode = 'free'; // для захвата нужны зоны (есть только у Побережья)
+  if (MODE_MAPS[mode] && !MODE_MAPS[mode].includes(mapId)) mode = 'free';   // гонка — Город и Ситжес, захват — Побережье
   matchMode = mode;
   showLoading(mode === 'race' ? 'Подготовка гонки…' : mode === 'capture' ? 'Подготовка захвата точек…' : mode === 'bomb' ? 'Подготовка горячей бомбы…' : 'Загрузка карты «' + MAP_INFO[mapId].name + '»…');
   // даём браузеру отрисовать экран загрузки перед тяжёлой генерацией
@@ -124,7 +123,7 @@ function startMatch(mode = save.mode, mapId = playMap(mode)) {
     if (world.reset) world.reset();
     clearSkids(); smoke.clear(); sparks.clear();
     resetCoins(Math.round(world.coinCount * (COIN_MUL[mode] ?? 1)));
-    Race.start(mode === 'race');
+    Race.start(mode === 'race', mapId);
     Capture.start(mode === 'capture');
     Bomb.start(mode === 'bomb');                // ставит машины на старт первого раунда (js/bomb.js)
     Stunts.reset(); Jumps.reset(); Feel.reset();

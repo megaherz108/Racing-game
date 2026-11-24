@@ -2,7 +2,7 @@
 // Определяет: STATS, CARS, accelTime, LIN_DAMP, time100, accelFor, derive, HANDLING, KMH, NITRO, TIMES, cleanTime,
 //   PLAYER_COLORS, PAINTS, PAINT_FREE, paintDef, hasPaint, paintOf, paintBuy, SAVE_KEY, OLD_SAVE_KEY, MAP_IDS,
 //   KO_REWARD, FLIP_REWARD, JUMP, BADGE_FLYER_D, BADGE_RACER_T, badgeChevron, BADGES, BADGE_SPOTS, badgeDef,
-//   hasBadge, badgeGive, fitOf, fitSet, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAP, playMap, RACE_CPS, RACE_REWARD,
+//   hasBadge, badgeGive, fitOf, fitSet, MODES, PLAY_MAPS, PLAY_MAP, MODE_MAPS, playMap, RACE_CPS, RACE_REWARD,
 //   RACE_CP_REWARD, CAP_CFG, CAP_REWARD, CAP_BONUS_PER, CAP_CONTEST, CAP_WARN, BOMB_CFG, BOMB_REWARD,
 //   BOMB_ROUND_REWARD, COIN_MUL, TRAFFIC_LEVELS, cleanTraffic, QUALITY, cleanQuality, defaultPlayer, defaultSave,
 //   cleanJumps, cleanPlayer, badgesFromJumps, loadSave, save, persist, carIndex, browse, paintView.
@@ -267,9 +267,13 @@ const MODES = ['free', 'solo', 'race', 'capture', 'bomb'];
 // карты, которые можно выбрать на экране режима (остальные — для отладки)
 const PLAY_MAPS = ['city', 'coast', 'sitges'];
 const PLAY_MAP = 'city';
-// у некоторых режимов карта своя: гонке нужен дорожный граф (только город), захвату — зоны world.zones (только Побережье)
-const MODE_MAP = { race: 'city', capture: 'coast' };
-const playMap = (mode = save.mode) => MODE_MAP[mode] || (PLAY_MAPS.includes(save.map) ? save.map : PLAY_MAP);
+// у некоторых режимов карты свои: гонке нужен дорожный граф и настройки RACE_CFG (js/maps/registry.js) — Город
+// и Ситжес, захвату — зоны world.zones (только Побережье). Выбранная карта не подходит — первая из списка
+const MODE_MAPS = { race: ['city', 'sitges'], capture: ['coast'] };
+const playMap = (mode = save.mode) => {
+  const m = PLAY_MAPS.includes(save.map) ? save.map : PLAY_MAP, ok = MODE_MAPS[mode];
+  return !ok || ok.includes(m) ? m : ok[0];
+};
 const RACE_CPS = 10, RACE_REWARD = 30, RACE_CP_REWARD = 2;   // чекпоинтов в гонке, награда победителю и за каждый чекпоинт
 // захват точек — настройки, которые можно менять из консоли: CAP_CFG.time = 30 — активное время точки, с
 // (действует со следующей точки или заезда)

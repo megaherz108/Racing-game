@@ -2,11 +2,11 @@
 // В консоли: await __game.selfTest() — отчёт текстом; __game.fingerprint('city') — хеш карты.
 // Определяет: fingerprint, selfTest.
 // Использует: cleanPlayer, save, PAINTS, paintOf, PAINT_FREE, paintBuy, hasPaint, FLIP_REWARD, persist, fitSet,
-//   badgeGive, fitOf, hasBadge, badgesFromJumps, cleanJumps, BADGE_FLYER_D, CARS, BADGE_SPOTS, BADGES, RACE_CPS,
-//   BADGE_RACER_T (js/data.js); buildCarModel, disposeTree (js/car-models.js); badgeAnchors, fitBadges
-//   (js/badges.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime, FRONT_DMG
-//   (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js); updateCoins
-//   (js/ui.js); Race (js/race.js); Capture (js/capture.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
+//   badgeGive, fitOf, hasBadge, badgesFromJumps, cleanJumps, BADGE_FLYER_D, CARS, BADGE_SPOTS, BADGES, BADGE_RACER_T
+//   (js/data.js); buildCarModel, disposeTree (js/car-models.js); badgeAnchors, fitBadges (js/badges.js); SITGES_RACE
+//   (js/maps/sitges/race.js); getData, getWorld, MAP_INFO (js/maps/registry.js); cars, FIXED, stepWorld, simTime,
+//   FRONT_DMG (js/physics.js); Traffic (js/traffic/traffic.js); startMatch, countdown, endMatch (js/match.js);
+//   updateCoins (js/ui.js); Race (js/race.js); Capture (js/capture.js); Jumps (js/jumps.js); Bomb (js/bomb.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -339,12 +339,19 @@ async function selfTest({ maps = Object.keys(MAP_INFO), seconds = 4, mode = 'fre
         for (let i = 0; i < 100 && !cars.length; i++) await wait(20);
         if (!Race.on) throw new Error('гонка не включилась');
         countdown = 0;
-        const st = Race.st, fin = st.cps[RACE_CPS - 1];
-        const finish = (p, t) => { st.prog[p] = RACE_CPS - 1; st.time = t; cars[p].fullReset(fin.x, fin.z, 0); stepWorld(FIXED); Race.update(0, simTime); };
+        const st = Race.st, N = st.cps.length, fin = st.cps[N - 1];
+        const finish = (p, t) => { st.prog[p] = N - 1; st.time = t; cars[p].fullReset(fin.x, fin.z, 0); stepWorld(FIXED); Race.update(0, simTime); };
         finish(0, BADGE_RACER_T - 1); finish(1, BADGE_RACER_T + 10);
         if (st.fin[0] === null || st.fin[1] === null) errors.push('значок «Гонщик»: финиш не засчитан');
         if (!hasBadge(save.players[0], 'racer') || hasBadge(save.players[1], 'racer')) errors.push(`значок «Гонщик»: открыт у ${save.players.map(p => hasBadge(p, 'racer'))}`);
         lines.push(`значки: ${BADGES.length} (${BADGES.map(b => b.name).join(', ')}), места на ${CARS.length} машинах найдены, открываются прыжком и гонкой`);
+        // гонка на Ситжесе: трасса из cps чекпоинтов, у достопримечательностей — не меньше lm[0] (js/maps/sitges/race.js)
+        endMatch('menu'); cars = [];
+        startMatch('race', 'sitges');
+        for (let i = 0; i < 600 && !cars.length; i++) await wait(20);
+        const sc = Race.st.cps, slm = sc.filter(c => c.spot);
+        if (!Race.on || sc.length !== SITGES_RACE.cps || slm.length < SITGES_RACE.lm[0]) errors.push(`гонка на Ситжесе: ${Race.on ? `${sc.length} чекпоинтов, у достопримечательностей ${slm.length}` : 'не включилась'}`);
+        else lines.push(`гонка на Ситжесе: ${sc.length} чекпоинтов, у достопримечательностей ${slm.length} (${slm.map(c => c.spot.name).join(', ')})`);
       } catch (e) {
         errors.push('значки: ' + (e.stack || String(e)).split('\n').slice(0, 3).join(' ← '));
       } finally {
