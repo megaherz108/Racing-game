@@ -30,6 +30,8 @@
 9. `landmarks.js` — достопримечательности: `SITGES_LM`, `C.landmarks`, у частей домов `h.lm` (план — `stage-5.md`).
    Парк Can Robert — строение `lm/canrobert.js` (шаг П3, `park-canrobert.md`): `plan()` опускает узлы рельефа под
    амфитеатром; старый мостик этапа 2 на месте подвесного не строит `roads3d.js` (`lmCanRobertOldDeck`).
+   Площадь Бенапрес — `lm/benapres.js`: `plan()` забирает у стен набережной `C.prom.walls` точки вдоль пандуса (край
+   пандуса) и правит рельеф площади, пандуса и кармана пляжа; группа D строит только оставшиеся стены.
 10. `styles.js` — стили фасадов (`sitgesPlanStyles`).
 11. `fences.js` — где забор: линия, решение кусками, цепочки, разрез по участкам, пустые участки без забора →
     `C.fences`, `C.fenceLine`, `C.fenceLots`, `C.fenceStats`; настройки `SITGES_FENCE`.

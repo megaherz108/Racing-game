@@ -21,7 +21,7 @@
 //   (js/maps/sitges/lm/retiro.js); SITGES_LM_TERRAMAR (js/maps/sitges/lm/terramar.js); SITGES_LM_VINYET
 //   (js/maps/sitges/lm/vinyet.js); SITGES_LM_CLOT (js/maps/sitges/lm/clot.js); SITGES_LM_SEBASTIA
 //   (js/maps/sitges/lm/sebastia.js); SITGES_LM_MARINA (js/maps/sitges/lm/marina.js); SITGES_LM_CANROBERT
-//   (js/maps/sitges/lm/canrobert.js); $ (js/ui.js).
+//   (js/maps/sitges/lm/canrobert.js); SITGES_LM_BENAPRES (js/maps/sitges/lm/benapres.js); $ (js/ui.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -45,6 +45,7 @@ const SITGES_LM = [
   { id: 'sebastia', icon: '🕊️', name: 'Sant Sebastià', bld: /^Sant Sebastià$/, def: SITGES_LM_SEBASTIA },
   { id: 'marina', icon: '⚓', name: "Port d'Aiguadolç", at: [], def: SITGES_LM_MARINA },
   { id: 'canrobert', icon: '🌳', name: 'Parc de Can Robert', at: [], def: SITGES_LM_CANROBERT },
+  { id: 'benapres', icon: '🗿', name: 'Monument al doctor Benaprés', at: [], def: SITGES_LM_BENAPRES },
 ];
 
 function sitgesPlanLandmarks(C) {
