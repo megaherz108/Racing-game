@@ -9,8 +9,9 @@
 // f.style = { base, top, h0, h1, posts, color } у каждого забора C.fences: цоколь — white, cream (штукатурка), rubble
 //   (бутовый камень), brick, tile (бежевая плитка), concrete; верх — heath (вереск), hedge (изгородь), slats (ламели),
 //   mesh (сварная сетка), grille (кованая решётка, у блоков — перила), wall (глухая стена, h0 = h1 = 2–2,5 м), low
-//   (низкая стенка без верха, h0 = h1 ≈ 1 м); h0 — верх цоколя, h1 — верх забора над тротуаром, м; posts — столбы:
-//   none, plaster (в цвет цоколя), stone, brick; color — цвет верха (у wall и low — цоколя), 0xRRGGBB.
+//   (низкая стенка без верха, h0 = h1 ≈ 1 м), lattice (решётка из блоков — только у строений, def.fences);
+//   h0 — верх цоколя, h1 — верх забора над тротуаром, м; posts — столбы: none, plaster (в цвет цоколя), stone, brick;
+//   color — цвет верха (у wall и low — цоколя), 0xRRGGBB.
 // C.fenceLotCls — { [участок]: класс (по корню комплекса) } — для створок ворот (js/maps/sitges/gates.js).
 // Сводка — C.fenceStyleStats: { top: { вид: км }, base: { вид: км }, cls: { класс: км }, zone: { район: км },
 //   lots, clusters, joined }.

@@ -6,7 +6,8 @@
 //   Вид (по фото, docs/sitges/stage-4a.md): цоколь h0 по линии толщиной SITGES_FENCE.t (штукатурка белая / кремовая,
 //   бутовый камень, кирпич, плитка, бетон) с шапкой; верх до h1 — вереск или ламели (две грани по середине цоколя),
 //   сварная сетка, кованая решётка, у блоков перила (плоскость с альфой), изгородь — коробка листвы с неровным верхом
-//   и кромкой листьев; глухая стена и низкая стенка — цоколь на всю высоту. Столбы (кубы с шапкой) — где по стилю
+//   и кромкой листьев; решётка из блоков (только у строений, lm/em30.js) — две грани с альфой и шапка; глухая стена
+//   и низкая стенка — цоколь на всю высоту. Столбы (кубы с шапкой) — где по стилю
 //   (posts), через ≈ SITGES_FENCE3D.postEvery м, и по бокам каждого проёма; общий столб пары калитка + ворота — с
 //   почтовым ящиком и номером дома. Проём: цоколя и верха нет, створка — на inset м глубже лица забора (ламели, доски,
 //   лист, дверь — твёрдые, обе стороны; сетка и кованая — с альфой и рамой); над проёмом в глухой стене — перемычка.
@@ -27,7 +28,7 @@
 
 // отладочный цвет цоколя по виду верха (?fences): вереск — охра, изгородь — зелёный, ламели — синий, сетка — бирюза,
 // решётка — чёрный, глухая стена — белый, низкая стенка — жёлтый
-const SITGES_FENCE_DBG = { heath: 0xb08040, hedge: 0x3f9a3a, slats: 0x4a6ab8, mesh: 0x2ab0b0, grille: 0x303030, wall: 0xffffff, low: 0xe8c838 };
+const SITGES_FENCE_DBG = { lattice: 0xe0a0e0, heath: 0xb08040, hedge: 0x3f9a3a, slats: 0x4a6ab8, mesh: 0x2ab0b0, grille: 0x303030, wall: 0xffffff, low: 0xe8c838 };
 
 const SITGES_FENCE3D = {
   yc: 0.05,               // толщина шапки цоколя, м
@@ -203,7 +204,12 @@ function sitgesBuildFences(K) {
         plinth(pa, pb, sa, sb, nf, nb, -0.05, H0, true);
         if (isWall || top === 'hedge') return;
         const ya = pa.y + H0 + yc, yb = pb.y + H0 + yc, ua = u(sa), ub = u(sb);
-        if (top === 'heath' || top === 'slats') {
+        if (top === 'lattice') {
+          // решётка из блоков: грани с альфой по обеим сторонам цоколя (в просветы видна дальняя), шапка сверху
+          faceTop('lattice', off(pa, 0.02), off(pb, 0.02), ya, pa.y + H1, yb, pb.y + H1, nf, style.color, ua, ub);
+          faceTop('lattice', off(pa, T - 0.02), off(pb, T - 0.02), ya, pa.y + H1, yb, pb.y + H1, nb, style.color, ua, ub);
+          plinth(pa, pb, sa, sb, nf, nb, H1, H1 + 0.06, false);
+        } else if (top === 'heath' || top === 'slats') {
           face(top, off(pa, T / 2 - 0.015), off(pb, T / 2 - 0.015), ya, pa.y + H1, yb, pb.y + H1, nf, style.color, ua, ub);
           face(top, off(pa, T / 2 + 0.015), off(pb, T / 2 + 0.015), ya, pa.y + H1, yb, pb.y + H1, nb, style.color, ua, ub);
         } else {

@@ -4,7 +4,7 @@
 //     band м — штукатурка, бутовый камень, кирпич, бежевая плитка, бетон с опалубкой, вереск, ламели, доски, лист;
 //     полоса misc без повтора — дверь старого города и лицо общего столба (почтовый ящик, домофон, номер дома).
 //   alpha — атлас с альфой (свои мипмапы sitgesAlphaMips), полосы «от верха» (верх картинки — верх грани): сварная
-//     сетка с рамой, кованая решётка с пиками, перила блоков (трубы), кромка листвы над изгородью.
+//     сетка с рамой, кованая решётка с пиками, перила блоков (трубы), кромка листвы над изгородью, решётка из блоков.
 //   hedge — листва изгороди tile × tile м с повтором в обе стороны.
 //   Ширина атласов — rep м (повтор вдоль забора). Полосы разделены полями gutter px (у полос с повтором — продолжение
 //   рисунка) от протекания мипмапов. Светлые серые тона красит цвет вершины (штукатурка, вереск, ламели, доски, лист,
@@ -203,6 +203,18 @@ function sitgesFenceTextures() {
     for (const Y of [32, 58, 84, 110]) x.fillRect(0, Y, w, 4);
     for (let X = 60; X < w; X += 128) x.fillRect(X, 0, 6, h);
   };
+  // решётка из блоков (Enric Morera 28): белые блоки 25 × 25 см с крестообразным просветом, светлый шов
+  const lattice = (x, r, put, h, w) => {
+    const b = 32;
+    x.fillStyle = '#ececec'; x.fillRect(0, 0, w, h);
+    x.globalCompositeOperation = 'destination-out'; x.strokeStyle = '#000'; x.lineWidth = 6; x.lineCap = 'butt';
+    for (let Y = 0; Y < h; Y += b) for (let X = 0; X < w; X += b) {
+      x.beginPath(); x.moveTo(X + 7, Y + 7); x.lineTo(X + b - 7, Y + b - 7); x.moveTo(X + b - 7, Y + 7); x.lineTo(X + 7, Y + b - 7); x.stroke();
+    }
+    x.globalCompositeOperation = 'source-over'; x.fillStyle = '#d2d0cc';
+    for (let Y = 0; Y < h; Y += b) x.fillRect(0, Y, w, 1.5);
+    for (let X = 0; X < w; X += b) x.fillRect(X, 0, 1.5, h);
+  };
   // кромка листвы над изгородью: внизу сплошная, вверх реже
   const LP = Array.from({ length: 32 }, (_, i) => { const s = 160 + i * 95 / 31; return rgb(s, s, s * 0.94); });
   const leaves = (x, r, put, h, w, n, rr, sz = [3, 4]) => {
@@ -246,7 +258,8 @@ function sitgesFenceTextures() {
     { name: 'misc', mode: 'edge', c: tile(MH, '#f3f0ea', misc, 41, false) },
   ]);
   const top = (name, h, paint, seed) => ({ name, mode: 'top', c: tile(h, null, paint, seed, false) });
-  const A = atlas([top('mesh', 288, mesh, 43), top('wrought', 288, wrought, 47), top('rail', 128, rail, 53), top('fringe', 64, fringe, 59)]);
+  const A = atlas([top('mesh', 288, mesh, 43), top('wrought', 288, wrought, 47), top('rail', 128, rail, 53), top('fringe', 64, fringe, 59),
+    top('lattice', 128, lattice, 67)]);
   const HP = 256;   // листва: 256 px на T.hedge м
   const hc = tile(HP, '#5a5b56', hedge, 61, true, HP);
   const tex = cv => { const t = canvasTex(cv); t.generateMipmaps = true; return t; };

@@ -13,6 +13,8 @@
   `L` — запись `C.landmarks`: `parts` (части `C.houses`: `rings`, `y0` низ стен, `y1` верх стен, `top` верх крыши,
   `p.floors`, `roof`), `rings`, `bb`, `cx`, `cz`, `g` (земля в центре), `top`. `plan` — своя раскладка (площадка,
   лестницы), результат — в `L`. `build` кладёт меши в `group`, столкновения — `lmCollide` / `lmCollideBox`.
+  Необязательный `fences(C, L)` — заборы и проёмы своих участков после калиток (помощники `lmFenceAt`, `lmFencePoint`,
+  `lmFenceSplit`, `lmGateSet` — шапка `landmarks.js`; образец — `lm/em30.js`).
 - **Постройка и помощники** — `js/maps/sitges/landmarks3d.js`: `lmMat` (общие материалы с текстурами stone, rubble,
   tile, plaster, brick), `lmBox`, `lmPrism`, `lmCyl`, `lmExtrude` + `lmArch` (полукруглая и стрельчатая арка), `lmFrame`
   (повёрнутая рамка контура), `lmRoof` (gable, hip, pyramid, flat), `lmInset`, `lmAlong`, `lmCollide`, `lmCollideBox`.
@@ -45,6 +47,7 @@
 | sebastia | часовня Сант-Себастья (и кладбище рядом, здание 85) | 88, 2 части | 6, E |
 | marina | марина Айгуадольс: капитания, маяк на молу, причальные мелочи | нет (точки) | 6, E |
 | benapres | площадь с памятником доктору Бенапресу на Passeig Marítim: пандус по дуге к пляжу (вместо стены D) | нет (точки) | 11-24 |
+| em30 | дом C/ Enric Morera 30 (где жил создатель игры): балконы, кирпичный торец, заборы квартала по фото (`lm-em30.md`) | 1 по точке, 2 части | 11-24 |
 
 ## Правила для сессий строений
 
