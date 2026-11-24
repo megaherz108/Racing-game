@@ -9,7 +9,7 @@
 // Определяет: CAP_GOLD, CAP_HOT, CAP_NEXT, Capture.
 // Использует: CAP_WARN, PLAYER_COLORS, CAP_CFG, CAP_BONUS_PER, CAP_CONTEST, CAP_REWARD (js/data.js); clamp
 //   (js/core.js); waterLevel, scene (js/world.js); world (js/maps/registry.js); Sound (js/audio.js); cars
-//   (js/physics.js); countdown, paused (js/match.js); HUD, $, notify, addCoins, keys (js/ui.js); TargetArrow
+//   (js/physics.js); countdown, paused (js/match.js); HUD, $, notify, addCoins, keys, mmXY (js/ui.js); TargetArrow
 //   (js/arrow.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
@@ -249,10 +249,9 @@ const Capture = (() => {
     if (st.over) return st.winner === p ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ';
     return countdown <= 0 && st.time - st.switchT < 2 ? cur().name.toUpperCase() : '';
   }
-  // точка на мини-карте (повёрнутой по машине): круг в масштабе, если далеко — кружок с номером на краю
+  // точка на мини-карте (север сверху): круг в масштабе, если далеко — кружок с номером на краю
   function mark(ctx, c, zn, R, k, fill, stroke, num, dashed) {
-    const cs = Math.cos(c.h), sn = Math.sin(c.h), dx = (c.x - zn.x) * k, dz = (c.z - zn.z) * k;
-    let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
+    let [x, y] = mmXY(c, zn.x, zn.z, k);
     const d = Math.hypot(x, y), r = zn.r * k, lim = R - 9;
     if (d + r > R) {                                     // далеко — значок на краю
       if (d > lim) { x *= lim / d; y *= lim / d; }

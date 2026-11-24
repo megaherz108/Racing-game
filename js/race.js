@@ -5,7 +5,7 @@
 // Определяет: CP_R, CP_COL, CP_FIN, CP_LAYER, Race.
 // Использует: RACE_CPS, RACE_CP_REWARD, BADGE_RACER_T, RACE_REWARD (js/data.js); rand (js/core.js); unlockBadge
 //   (js/badges.js); waterLevel, scene (js/world.js); world (js/maps/registry.js); sparks (js/effects.js); Sound
-//   (js/audio.js); cars (js/physics.js); countdown, cams, paused (js/match.js); $, HUD, addCoins, notify, keys
+//   (js/audio.js); cars (js/physics.js); countdown, cams, paused (js/match.js); $, HUD, addCoins, notify, keys, mmXY
 //   (js/ui.js); TargetArrow (js/arrow.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 
@@ -204,11 +204,9 @@ const Race = (() => {
   // мини-карта: только следующая арка (на краю круга, если далеко)
   function minimap(ctx, p, R, k) {
     if (!st.on || st.fin[p] !== null) return;
-    const c = cars[p], cs = Math.cos(c.h), sn = Math.sin(c.h);
-    const i = st.prog[p], cp = st.cps[i];
+    const c = cars[p], i = st.prog[p], cp = st.cps[i];
     if (!cp) return;
-    const dx = (c.x - cp.x) * k, dz = (c.z - cp.z) * k;
-    let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
+    let [x, y] = mmXY(c, cp.x, cp.z, k);
     const d = Math.hypot(x, y), lim = R - 9;
     if (d > lim) { x *= lim / d; y *= lim / d; }
     ctx.fillStyle = i === RACE_CPS - 1 ? '#ffd23a' : '#35ffa0'; ctx.strokeStyle = '#0b1a12'; ctx.lineWidth = 2;
