@@ -57,6 +57,7 @@ function buildSitges(D) {
   sitgesBuildLandmarks(K);
   sitgesBuildTrees(K);
   sitgesBuildStreet(K);
+  for (const f of K.lmAfterStreet || []) f(K.st);   // строениям — помощники этапа 7 (огни фонарей парка Can Robert)
   return sitgesBuildWorld(K);
 }
 

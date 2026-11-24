@@ -1,4 +1,4 @@
-// Ситжес — достопримечательность: парк Can Robert (шаг П3 плана парка, docs/sitges/park-canrobert.md, «Итоги П3»).
+// Ситжес — достопримечательность: парк Can Robert (шаги П3–П4 плана парка, docs/sitges/park-canrobert.md, «Итоги П3, П4»).
 // Зданий в SITGES_LM нет (at: []) — plan() ставит рамку L.bb и центр L.cx, L.cz по контуру парка (C.parks): отсюда
 // значок 🌳 на мини-карте (mmMarks). Места объектов — C.parks[].spots (П0, data-parks.js), вид — по кадрам Street View
 // (tools/sitges/raw/photos/street/park-canrobert/, номера кадров — в комментариях).
@@ -11,16 +11,22 @@
 //     (клетка из сетки, борта, ворота, щиты), калистеника, буквы «SITGES», фонари и скамьи вдоль дорожек парка (от
 //     этапа 7 внутри парка их нет). «Бронзовой фигуры» (П0, spots.figure) нет: на кадре 10 — чугунный фонтанчик на
 //     бетонном кубе у точки OSM (73, 589), там уже стоит фонтанчик этапа 7.
+//     Ночью стекло фонарей светится, ореол и пятно света — помощниками этапа 7 (S.glow, S.lights, как столбы группы A;
+//     источников света нет): они появляются позже строений — K.lmAfterStreet (зовёт js/maps/sitges/build.js).
+//   lmCanRobertTrees(C) — из sitgesData (plan.js) сразу после деревьев 4б: деревья, чьи кроны заходят в настил мостика
+//     (у оси лидар принимает за крону сам настил), сдвигаются от оси или убираются; стволы на бетоне амфитеатра — за край.
 //   Сбиваемое (Breakables → K.lmBrks → world.breakables, js/maps/sitges/build.js): секции заборов собачьей и детских
-//     площадок, фонари, скамьи. Секция — экземпляр: панель (масштаб по длине — локальная матрица loc) и столб посередине;
-//     в сетке столкновений — ряд кругов вдоль секции (все указывают на неё; сбитая — все круги датчики, onBreak).
+//     площадок, фонари, скамьи. Секция — экземпляр: панель (масштаб по длине — локальная матрица loc) и столб посередине
+//     (у сетки ещё труба поверху); в сетке столкновений — ряд кругов вдоль секции (все указывают на неё; сбитая — все
+//     круги датчики, onBreak).
 //   Материалы (≤ 6): белый бетон (lmMat), окраска и дерево (цвет вершин), оцинковка (цвет вершин, металл), атлас
 //     (canvas: прутья перил, сварная сетка, штакетник, доски настила, табличка, «корова»; alphaTest).
 // Старый мостик этапа 2 на месте подвесного не строит roads3d.js (lmCanRobertOldDeck).
-// Определяет: SITGES_LM_CANROBERT, lmCanRobertAmphi, lmCanRobertDrape, lmCanRobertMats, LM_CR_ATLAS,
-//   lmCanRobertAtlas, lmCanRobertGeo, lmCanRobertBatch, lmCanRobertOldDeck.
-// Использует: Breakables (js/world.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js); lmCollideBox, lmFrame,
-//   lmPrism, lmBox, LMK, lmMat (js/maps/sitges/landmarks3d.js); brkSolid (js/physics.js).
+// Определяет: SITGES_LM_CANROBERT, lmCanRobertAmphi, lmCanRobertDeck, lmCanRobertTrees, lmCanRobertDrape,
+//   lmCanRobertMats, LM_CR_ATLAS, lmCanRobertAtlas, lmCanRobertGeo, lmCanRobertBatch, lmCanRobertOldDeck.
+// Использует: clamp (js/core.js); Breakables (js/world.js); sitgesInPoly, sitgesSeg (js/maps/sitges/geom.js);
+//   sitgesTreeKit (js/maps/sitges/trees3d.js); lmCollideBox, lmFrame, lmPrism, lmBox, LMK, lmMat
+//   (js/maps/sitges/landmarks3d.js); brkSolid (js/physics.js).
 // Обычный (не модульный) скрипт: все файлы делят общую глобальную область видимости.
 // Порядок загрузки задаётся в index.html.
 
@@ -38,6 +44,10 @@ const SITGES_LM_CANROBERT = {
   // фонари и скамьи вдоль дорожек парка: шаг, отступ от края дорожки
   lamps: { step: 34, off: 1.1, min: 14 },
   benches: { step: 42, off: 0.9 },
+  // деревья 4б у мостика и амфитеатра (lmCanRobertTrees): крона не должна заходить в настил — полоса от низа настила
+  // − down до верха + up (машина, перила); сдвиг от оси не дальше deckShift м, иначе убрать (у оси лидар принимает
+  // настил за крону); ствол на бетоне амфитеатра — за край (зазор pad м), не дальше amphiShift м, иначе убрать
+  trees: { up: 2.3, down: 0.9, deckShift: 2.5, pad: 0.4, amphiShift: 3 },
 
   plan(C, L) {
     const pk = (C.parks || []).find(p => p.id === this.park) || (C.parks || [])[0];
@@ -128,15 +138,22 @@ const SITGES_LM_CANROBERT = {
       // панель — атлас (сетка или штакетник), столб — посередине секции
       const panel = G.quad(S0, o.h, kind === 'mesh' ? AT.mesh : AT.picket, kind === 'mesh' ? 0.05 : 0, 1, 1);
       const pcol = kind === 'mesh' ? 0xb9c0c4 : 0xa9784c;
-      const post = kind === 'mesh' ? G.cyl(0.03, o.h + 0.4, 6).translate(0, -0.3, 0) : G.box(0.09, o.h + 0.35, 0.09).translate(0, -0.3, 0);
-      G.color(panel, pcol); G.color(post, kind === 'mesh' ? 0x8f989e : 0x8a5f38);
+      // сетка: столбы потолще и темнее и труба поверху (рамка секции) — издали прутья атласа пропадают (alphaTest), а
+      // столбы с трубой держат линию забора
+      const post = kind === 'mesh' ? G.cyl(0.042, o.h + 0.4, 6).translate(0, -0.3, 0) : G.box(0.09, o.h + 0.35, 0.09).translate(0, -0.3, 0);
+      G.color(panel, pcol); G.color(post, kind === 'mesh' ? 0x6f787e : 0x8a5f38);
       const mP = new THREE.InstancedMesh(panel, M.atlas, all.length), mS = new THREE.InstancedMesh(post, kind === 'mesh' ? M.met : M.col, all.length);
       mP.castShadow = false; mS.castShadow = true; mP.receiveShadow = mS.receiveShadow = true;
-      const Bk = new Breakables([mP, mS], Object.assign({ onBreak: it => { if (typeof brkSolid === 'function') for (const c of it.extra) if (c.col) brkSolid(c.col, false); } }, brkO));
+      const meshes = [mP, mS];
+      if (kind === 'mesh') {
+        const mR = new THREE.InstancedMesh(G.color(G.box(S0, 0.045, 0.045, true).translate(0, o.h, 0), 0x7d868c), M.met, all.length);
+        mR.castShadow = true; mR.receiveShadow = true; meshes.push(mR);
+      }
+      const Bk = new Breakables(meshes, Object.assign({ onBreak: it => { if (typeof brkSolid === 'function') for (const c of it.extra) if (c.col) brkSolid(c.col, false); } }, brkO));
       const hh = o.h + 0.1;
       for (const s of all) {
         const loc = new THREE.Matrix4().makeScale(s.l / S0, 1, 1);
-        const it = Bk.add(grid, s.x, s.y, s.z, s.ry, 0.16, hh, { loc: [loc], rz: s.rz });
+        const it = Bk.add(grid, s.x, s.y, s.z, s.ry, 0.16, hh, { loc: [loc, null, loc], rz: s.rz });
         it.extra = [];
         // круги вдоль секции (кроме середины — её круг уже поставил add)
         for (let q = 0.4; q < s.l / 2 - 0.05; q += 0.4) for (const sg of [-1, 1]) {
@@ -144,7 +161,7 @@ const SITGES_LM_CANROBERT = {
         }
         s.it = it;
       }
-      for (const m of [mP, mS]) { m.computeBoundingSphere(); m.boundingSphere.radius += 6; dyn.add(m); }
+      for (const m of meshes) { m.computeBoundingSphere(); m.boundingSphere.radius += 6; dyn.add(m); }
       for (const E of Bk.meshes) E.pad = 6;
       brks.push(Bk);
       stats[kind + 'Sections'] = all.length;
@@ -294,22 +311,9 @@ const SITGES_LM_CANROBERT = {
     /* ---------- подвесной мостик (кадры 04, 05, 07): доски поперёк, серые перила, белые борта и V-стойки ---------- */
     const dk = pk.decks[0];
     if (dk) {
-      // ось П0 (полоса лидара через 2 м) идёт зигзагом ± 1 м — на фото мостик прямой: скользящее среднее по ± 3 точки
-      // дважды, концы на месте
       const D = P.deck, n = dk.p.length, hw = D.w / 2;
-      let p = dk.p.map(q => q.slice());
-      for (let pass = 0; pass < 2; pass++) p = p.map((q, i) => {
-        if (i === 0 || i === n - 1) return q;
-        const k = Math.min(3, i, n - 1 - i); let x = 0, z = 0;
-        for (let j = i - k; j <= i + k; j++) { x += p[j][0]; z += p[j][1]; }
-        return [x / (2 * k + 1), z / (2 * k + 1)];
-      });
-      // высота настила: лидар; не ниже земли (концы — на земле: въезд без ступеньки), сглажено по трём точкам
-      let y = p.map(([x, z], i) => Math.max(dk.h[i], gr(x, z) + 0.02));
-      y = y.map((v, i) => i === 0 || i === n - 1 ? v : Math.max(gr(p[i][0], p[i][1]) + 0.02, (y[i - 1] + 2 * v + y[i + 1]) / 4));
-      const tan = p.map((q, i) => { const a = p[Math.max(0, i - 1)], b = p[Math.min(n - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]); return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; });
+      const { p, y, tan, s } = lmCanRobertDeck(dk, gr);
       const off = (i, d) => [p[i][0] - tan[i][1] * d, p[i][1] + tan[i][0] * d];
-      const s = [0]; for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
       // верх: доски (атлас), бока — белая балка, низ — тёмный
       const W = { pos: [], uv: [], col: [] }, Wc = { pos: [], col: [] };
       // четырёхугольник A B C D; hint — куда смотреть лицом (обход переворачивается)
@@ -421,6 +425,8 @@ const SITGES_LM_CANROBERT = {
         for (const [r0, r1] of runs) {
           const A = [a[0] + dx * r0, a[1] + dz * r0], Bp = [a[0] + dx * r1, a[1] + dz * r1], L2 = r1 - r0, nseg = Math.max(1, Math.round(L2 / 3));
           for (let k = 0; k <= nseg; k++) { const x = A[0] + (Bp[0] - A[0]) * k / nseg, z = A[1] + (Bp[1] - A[1]) * k / nseg; box(M.met, 0x24479a, 0.08, HC + 0.3, 0.08, x, top - 0.3, z); }
+          // трубы поверху и посередине сетки — издали прутья атласа пропадают, рамка держит клетку
+          for (const yy of [HC, 2.5]) beam(M.met, 0x24479a, [A[0], top + yy, A[1]], [Bp[0], top + yy, Bp[1]], 0.06, 0.06);
           const cx = (A[0] + Bp[0]) / 2, cz = (A[1] + Bp[1]) / 2, ry = Math.atan2(-dz, dx);
           box(M.col, 0x1f4fa0, L2, 1.0, 0.05, cx, top, cz, ry);
           box(M.col, 0xc8322a, L2, 0.06, 0.08, cx, top + 1.0, cz, ry);
@@ -542,14 +548,26 @@ const SITGES_LM_CANROBERT = {
       const headG = G.color(mergeGeometries([G.box(0.05, 0.05, 0.75, true).translate(0, 5.5, 0.32), G.box(0.28, 0.1, 0.45).translate(0, 5.42, 0.75)]), 0x40454a);
       const benchG = G.color(mergeGeometries([G.box(1.8, 0.06, 0.45).translate(0, 0.42, 0), G.box(1.8, 0.35, 0.05).translate(0, 0.55, -0.22),
         G.box(0.08, 0.45, 0.45).translate(-0.75, 0, 0), G.box(0.08, 0.45, 0.45).translate(0.75, 0, 0)]), 0x7a5a3c);
+      // стекло под головой; ночью светится, как столбы кварталов этапа 7 (группа A: S.glow — стекло, S.lights — ореол
+      // и пятно света на земле, без источников света; у сбитого гаснут) — помощники этапа 7 появляются позже строений,
+      // поэтому огни ставит K.lmAfterStreet (js/maps/sitges/build.js, после sitgesBuildStreet)
+      const glassG = G.box(0.24, 0.03, 0.4).translate(0, 5.395, 0.75);
       const inst = (geo, mat, list) => { const m = new THREE.InstancedMesh(geo, mat, list.length); m.castShadow = m.receiveShadow = true; return m; };
       if (lamps.length) {
-        const mP = inst(poleG, M.met, lamps), mH = inst(headG, M.col, lamps);
-        const Bk = new Breakables([mP, mH], { mass: 120, anchor: 4, minSpeed: 5, dmg: 0.25, cy: 2.6, lie: 1.5, kind: 'post' });
-        for (const q of lamps) Bk.add(grid, q.x, gr(q.x, q.z), q.z, q.ry, 0.12, 5.6);
-        for (const m of [mP, mH]) { m.computeBoundingSphere(); m.boundingSphere.radius += 6; dyn.add(m); }
+        const mP = inst(poleG, M.met, lamps), mH = inst(headG, M.col, lamps), mG = inst(glassG, M.col, lamps);
+        mG.castShadow = false;
+        const Bk = new Breakables([mP, mH, mG], { mass: 120, anchor: 4, minSpeed: 5, dmg: 0.25, cy: 2.6, lie: 1.5, kind: 'post' });
+        for (const q of lamps) q.it = Bk.add(grid, q.x, gr(q.x, q.z), q.z, q.ry, 0.12, 5.6);
+        for (const m of [mP, mH, mG]) { m.computeBoundingSphere(); m.boundingSphere.radius += 6; dyn.add(m); }
         for (const E of Bk.meshes) E.pad = 6;
         brks.push(Bk);
+        (K.lmAfterStreet || (K.lmAfterStreet = [])).push(S => {
+          mG.material = S.glow(0xc8ccd0, 0xfff4e0);
+          const c = q => [Math.cos(q.ry), Math.sin(q.ry)];
+          S.cur = 'park';
+          S.lights(lamps.map(q => { const [cc, ss] = c(q), y = gr(q.x, q.z); return { x: q.x + 0.75 * ss, y: y + 5.38, z: q.z + 0.75 * cc, gx: q.x + 1.75 * ss, gz: q.z + 1.75 * cc, r: 5, it: q.it }; }), { size: 2.8 });
+          S.cur = null;
+        });
       }
       if (benches.length) {
         const mB = inst(benchG, M.col, benches);
@@ -600,6 +618,98 @@ function lmCanRobertAmphi(ring, A) {
     parts.push({ ring: led, top, cut: 0.12, quads: [led], ledge: true });
   }
   return parts;
+}
+
+/* ---------- ось и высоты настила мостика ---------- */
+// dk — настил П0 (C.parks[].decks: p — ось через 2 м, h — высота), gr — высота земли. Ось П0 (полоса лидара) идёт
+// зигзагом ± 1 м — на фото мостик прямой: скользящее среднее по ± 3 точки дважды, концы на месте. Высота — лидар, не
+// ниже земли (концы — на земле: въезд без ступеньки), сглажена по трём точкам. → { p, y, tan (единичные), s (путь, м) }
+function lmCanRobertDeck(dk, gr) {
+  const n = dk.p.length;
+  let p = dk.p.map(q => q.slice());
+  for (let pass = 0; pass < 2; pass++) p = p.map((q, i) => {
+    if (i === 0 || i === n - 1) return q;
+    const k = Math.min(3, i, n - 1 - i); let x = 0, z = 0;
+    for (let j = i - k; j <= i + k; j++) { x += p[j][0]; z += p[j][1]; }
+    return [x / (2 * k + 1), z / (2 * k + 1)];
+  });
+  let y = p.map(([x, z], i) => Math.max(dk.h[i], gr(x, z) + 0.02));
+  y = y.map((v, i) => i === 0 || i === n - 1 ? v : Math.max(gr(p[i][0], p[i][1]) + 0.02, (y[i - 1] + 2 * v + y[i + 1]) / 4));
+  const tan = p.map((q, i) => { const a = p[Math.max(0, i - 1)], b = p[Math.min(n - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]); return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; });
+  const s = [0]; for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
+  return { p, y, tan, s };
+}
+
+/* ---------- деревья 4б у мостика и амфитеатра ---------- */
+// Из sitgesData (js/maps/sitges/plan.js) сразу после sitgesPlanTrees: деревья — по кронам лидара, ствол — в центре
+// кроны. У мостика лидар видит и сам настил (в 4–6 м над низиной) — «деревья» вдоль оси с верхом на высоте настила;
+// живые кроны у края свисают на настил ниже перил. Над амфитеатром кроны сосен — стволы попадают на сцену и ступени.
+// Правило (числа — SITGES_LM_CANROBERT.trees): крона (центр и радиус, низ и верх — как у модели, sitgesTreeMats)
+// заходит в полосу настила (по высоте от низа − down до верха + up, вбок — до края с перилами) — дерево сдвигается от
+// оси, пока крона не выйдет за край; дальше deckShift — убирается. Ствол на бетоне амфитеатра — за ближний край
+// его частей (зазор pad), дальше amphiShift — убирается. Меняет C.trees; сводка — C.parkTreeFix.
+function lmCanRobertTrees(C) {
+  const L = (C.landmarks || []).find(l => l.id === 'canrobert'), pk = L && L.park;
+  if (!pk || !C.trees) return;
+  const T = SITGES_LM_CANROBERT.trees, gr = C.ground, forms = sitgesTreeKit().forms, hw = SITGES_LM_CANROBERT.deck.w / 2 + 0.15;
+  const dk = pk.decks[0] && lmCanRobertDeck(pk.decks[0], gr), parts = L.amphi || [];
+  const bb = L.bb, fix = { moved: [], removed: [] };
+  // ближняя точка оси настила: расстояние, высота настила, нормаль от оси к точке
+  const axis = (x, z) => {
+    let best = { d: Infinity };
+    for (let i = 1; i < dk.p.length; i++) {
+      const [ax, az] = dk.p[i - 1], [bx, bz] = dk.p[i], ex = bx - ax, ez = bz - az, l2 = ex * ex + ez * ez;
+      const t = clamp(((x - ax) * ex + (z - az) * ez) / l2, 0, 1), px = ax + ex * t, pz = az + ez * t, d = Math.hypot(x - px, z - pz);
+      if (d < best.d) { const l = Math.sqrt(l2); best = { d, y: dk.y[i - 1] + (dk.y[i] - dk.y[i - 1]) * t, nx: d > 1e-3 ? (x - px) / d : -ez / l, nz: d > 1e-3 ? (z - pz) / d : ex / l, end: t === 0 && i === 1 || t === 1 && i === dk.p.length - 1 }; }
+    }
+    return best;
+  };
+  const crown = t => {
+    const f = forms[t.f], d = Math.min(f.dmax * t.h, Math.max(f.dmin * t.h, f.cd * t.r)), c = Math.cos(t.ry), s = Math.sin(t.ry);
+    const lx = f.top[0] * t.h, lz = f.top[1] * t.h;
+    return { x: t.x + lx * c + lz * s, z: t.z - lx * s + lz * c, bot: t.y + t.h - d, top: t.y + t.h, tr: f.tr * t.h };
+  };
+  const edgeD = (x, z, r) => { let m = Infinity; for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; m = Math.min(m, sitgesSeg(x, z, a[0], a[1], b[0], b[1])); } return m; };
+  const onAmphi = (x, z, m) => parts.some(p => sitgesInPoly(x, z, p.ring) || edgeD(x, z, p.ring) < m);
+  const out = [];
+  for (const t of C.trees) {
+    if (t.x < bb[0] - 10 || t.x > bb[1] + 10 || t.z < bb[2] - 10 || t.z > bb[3] + 10) { out.push(t); continue; }
+    let { x, z } = t, why = null;
+    // мостик
+    if (dk) {
+      const c = crown(t), a = axis(c.x, c.z);
+      if (!a.end && a.d < t.r + hw && c.top > a.y - 0.45 - T.down && c.bot < a.y + T.up) {
+        const need = t.r + hw - a.d + 0.05;
+        if (need > T.deckShift) why = 'deck';
+        else { x += a.nx * need; z += a.nz * need; }
+      }
+    }
+    // амфитеатр
+    if (!why && parts.length) {
+      const m = crown(t).tr + T.pad;
+      if (onAmphi(x, z, m)) {
+        let best = null;
+        for (const p of parts) for (let i = 0; i < p.ring.length; i++) {
+          const a = p.ring[i], b = p.ring[(i + 1) % p.ring.length], ex = b[0] - a[0], ez = b[1] - a[1], l2 = ex * ex + ez * ez;
+          const u = clamp(((x - a[0]) * ex + (z - a[1]) * ez) / l2, 0, 1), px = a[0] + ex * u, pz = a[1] + ez * u, l = Math.sqrt(l2);
+          for (const sg of [1, -1]) {
+            const qx = px - ez / l * (m + 0.05) * sg, qz = pz + ex / l * (m + 0.05) * sg, d = Math.hypot(qx - x, qz - z);
+            if ((!best || d < best.d) && !onAmphi(qx, qz, m)) best = { x: qx, z: qz, d };
+          }
+        }
+        if (!best || best.d > T.amphiShift) why = 'amphi';
+        else { x = best.x; z = best.z; }
+      }
+    }
+    const r2 = v => Math.round(v * 10) / 10;
+    if (why) { fix.removed.push([r2(t.x), r2(t.z), why]); continue; }
+    if (x !== t.x || z !== t.z) {
+      fix.moved.push([r2(t.x), r2(t.z), r2(Math.hypot(x - t.x, z - t.z))]);
+      out.push(Object.assign({}, t, { x, z, y: gr(x, z) }));
+    } else out.push(t);
+  }
+  C.trees = out;
+  C.parkTreeFix = fix;
 }
 
 /* ---------- плита по рельефу ---------- */
